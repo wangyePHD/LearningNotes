@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { withBase } from 'vitepress'
 
 const quote = ref('生活不可能像你想象得那么好，但也不会像你想象得那么糟。人的脆弱和坚强都超乎自己的想象。')
 const quoteFrom = ref('莫泊桑《一生》')
@@ -50,7 +51,9 @@ onMounted(() => {
     <!-- 1. 个人学术与研习画像 -->
     <div class="profile-header-card">
       <div class="profile-main">
-        <div class="avatar-badge">🧠</div>
+        <div class="avatar-box">
+          <img :src="withBase('/avatar.jpeg')" alt="Ye Wang (王冶)" class="avatar-img" />
+        </div>
         <div class="profile-info">
           <div class="profile-name-row">
             <h1 class="user-name">Ye Wang (王冶)</h1>
@@ -296,17 +299,22 @@ onMounted(() => {
   gap: 1.5rem;
 }
 
-.avatar-badge {
-  font-size: 3.2rem;
-  background: var(--vp-c-bg-mute);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 16px;
-  width: 76px;
-  height: 76px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.avatar-box {
+  width: 82px;
+  height: 82px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 2px solid var(--vp-c-divider);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+  background: var(--vp-c-bg-mute);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .profile-name-row {
