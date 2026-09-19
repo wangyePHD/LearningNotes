@@ -57,6 +57,8 @@ export default defineConfig({
       { text: '📐 通用基石', link: '/foundations/' },
       { text: '⚡ 算力与工程', link: '/infra/' },
       { text: '🚀 实战项目', link: '/projects/' },
+      { text: '🏷️ 知识标签', link: '/tags/' },
+      { text: '💡 Idea 池', link: '/ideas/' },
       { text: '📖 使用指南', link: '/guide/' }
     ],
 
@@ -73,6 +75,16 @@ export default defineConfig({
           items: [
             { text: '系统使用与协作总览', link: '/guide/' },
             { text: 'Agent 自动化协作规范', link: '/agent-guide' }
+          ]
+        }
+      ],
+
+      // 0.5 科研 Idea 灵感池
+      '/ideas/': [
+        {
+          text: '💡 科研灵感空间',
+          items: [
+            { text: '科研 Idea 灵感池', link: '/ideas/' }
           ]
         }
       ],

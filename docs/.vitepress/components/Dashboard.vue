@@ -17,7 +17,9 @@
             <a class="chip-link" href="https://github.com/wangyephd" target="_blank" rel="noopener">💻 GitHub (@wangyephd)</a>
             <a class="chip-link" href="https://github.com/StyleX-Research" target="_blank" rel="noopener">🔬 StyleX-Research</a>
             <a class="chip-link" href="https://space.bilibili.com/1127990326" target="_blank" rel="noopener">📺 PaperABC</a>
-            <a class="chip-link highlight" href="/guide/">📖 系统使用指南</a>
+            <a class="chip-link highlight" href="/tags/">🏷️ 标签穿透矩阵</a>
+            <a class="chip-link highlight" href="/ideas/">💡 Idea 灵感池</a>
+            <a class="chip-link" href="/guide/">📖 使用指南</a>
           </div>
         </div>
       </div>
@@ -102,11 +104,27 @@
           </div>
         </a>
 
-        <a href="/projects/" class="nav-card full-span">
+        <a href="/projects/" class="nav-card">
           <div class="card-icon">🚀</div>
           <div class="card-body">
-            <h4>实战项目与复现 (Projects & Benchmarks)</h4>
+            <h4>实战项目与复现 (Projects)</h4>
             <p>开源视频生成模型（Wan2.1）8 卡集群本地复现报告、LLM 7B 模型 LoRA 微调显存与吞吐实测。</p>
+          </div>
+        </a>
+
+        <a href="/tags/" class="nav-card">
+          <div class="card-icon">🏷️</div>
+          <div class="card-body">
+            <h4>标签穿透矩阵 (Tag Matrix)</h4>
+            <p>打破目录隔离，通过 #DiT、#Diffusion、#Attention 等多维技术标签穿透全库聚合联想。</p>
+          </div>
+        </a>
+
+        <a href="/ideas/" class="nav-card full-span">
+          <div class="card-icon">💡</div>
+          <div class="card-body">
+            <h4>科研 Idea 灵感池 (Idea Sandbox)</h4>
+            <p>专属脑洞自留地，记录关于跨模态生成、RL 视频时序平滑度、Flow Matching 速度场曲率等奇思妙想。</p>
           </div>
         </a>
       </div>
