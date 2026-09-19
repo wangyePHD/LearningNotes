@@ -6,6 +6,66 @@
 
 ---
 
+## 0. 先补基石：究竟什么是 Softmax？（标量与注意力展开）
+
+在理解结合律为什么失效之前，我们必须先彻底看清 $\text{Softmax}$ 的每一行标量公式。
+
+### ① 基础定义：从任意实数到概率分布
+
+给定一个包含 $K$ 个任意实数的输入向量 $z = [z_1, z_2, \dots, z_K]^T \in \mathbb{R}^K$（例如模型打出的相关度原始分数）：
+$\text{Softmax}$ 函数对第 $i$ 个元素的定义为：
+
+$$
+\text{Softmax}(z)_i = \frac{\exp(z_i)}{\sum_{j=1}^K \exp(z_j)}
+$$
+
+这个公式只做了两件极其纯粹的事：
+1. **分子取指数 $\exp(z_i) = e^{z_i}$**：
+   - 保证所有输出恒为正数（$>0$）；
+   - **极度拉大差距（强者愈强）**：比如 $z_1 = 3, z_2 = 1$。取指数后 $e^3 \approx 20.08$，$e^1 \approx 2.72$，差距瞬间从 3 倍放大到了 7.4 倍！
+2. **分母除以总和 $\sum_{j=1}^K \exp(z_j)$**：
+   - 归一化，使得所有元素的和**恒等于 1**（$\sum_i \text{Softmax}(z)_i = 1$），成为一个合法的概率/权重分布。
+
+---
+
+### ② Softmax 在 Transformer 注意力中的“逐个 Token”展开式
+
+当我们写矩阵形式 $\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d}}\right)V$ 时，它内部真实的标量运算如下：
+
+假设我们要计算**第 $i$ 个 Token（Query 向量 $q_i$）** 对全视频所有 Token 的注意力：
+
+1. **计算打分（点积相似度）**：
+   第 $i$ 个 Token 和第 $j$ 个 Token 的相似度分数为：
+   $$
+   a_{ij} = \frac{q_i \cdot k_j}{\sqrt{d}} = \frac{1}{\sqrt{d}} \sum_{c=1}^d q_{i, c} k_{j, c}
+   $$
+
+2. **经过 Softmax 计算出归一化权重 $\alpha_{ij}$**：
+   $$
+   \alpha_{ij} = \frac{\exp(a_{ij})}{\sum_{m=1}^N \exp(a_{im})} = \frac{\exp\left(\frac{q_i \cdot k_j}{\sqrt{d}}\right)}{\mathbf{\sum_{m=1}^N \exp\left(\frac{q_i \cdot k_m}{\sqrt{d}}\right)}}
+   $$
+
+3. **对 Value 向量 $v_j$ 加权求和，得到最终输出 $\text{Output}_i$**：
+   $$
+   \text{Output}_i = \sum_{j=1}^N \alpha_{ij} v_j = \sum_{j=1}^N \left( \frac{\exp\left(\frac{q_i \cdot k_j}{\sqrt{d}}\right)}{\mathbf{\sum_{m=1}^N \exp\left(\frac{q_i \cdot k_m}{\sqrt{d}}\right)}} \right) v_j
+   $$
+
+---
+
+### ③ 罪魁祸首：为什么这个公式破坏了“结合律”？
+
+仔细观察上面式子中加粗的分母：
+$$
+\mathbf{\text{分母}(q_i) = \sum_{m=1}^N \exp\left(\frac{q_i \cdot k_m}{\sqrt{d}}\right)}
+$$
+
+- **这个分母不仅带了指数 $\exp$，而且每个不同的 Query $q_i$，其分母都是完全不一样的！**
+- 分母强行把 $q_i$ 与**全视频所有的 $N$ 个 Key（$k_1, k_2, \dots, k_N$）死死绑定并包裹在了求和与指数内部**；
+- 因为除法和指数的存在，你**绝对不可能把 $q_i$ 从这个分母里拆分提出来**，更不可能让 $k$ 和 $v$ 提前单独相乘！
+- 这就是为什么传统注意力**被迫**必须先算完一整张 $N \times N$ 的大矩阵，无法利用结合律 $(QK^T)V = Q(K^T V)$ 的根本数学死结。
+
+---
+
 ## 1. 核心矛盾：结合律的“奇迹”与“诅咒”
 
 在标准 Transformer 的自注意力机制中，计算瓶颈源于一个看似简单的非线性函数 $\text{Softmax}(\cdot)$：
