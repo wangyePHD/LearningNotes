@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'AlgoNotes',
-  description: '算法工程师的数字花园与全模态研究笔记系统',
+  description: 'Ye Wang (王冶) 的全模态算法研究与工程知识库',
   lang: 'zh-CN',
   base: process.env.BASE_PATH || '/',
 
@@ -14,7 +14,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '🧠',
-    siteTitle: 'AlgoNotes 算法知识库',
+    siteTitle: 'AlgoNotes | Ye Wang',
 
     // 全局本地离线毫秒级搜索
     search: {
@@ -42,9 +42,9 @@ export default defineConfig({
       }
     },
 
-    // 顶部导航栏：下拉收纳研究领域，保持顶部精简
+    // 顶部导航栏
     nav: [
-      { text: '首页', link: '/' },
+      { text: '仪表盘', link: '/' },
       {
         text: '📚 研究领域',
         items: [
@@ -57,11 +57,26 @@ export default defineConfig({
       { text: '📐 通用基石', link: '/foundations/' },
       { text: '⚡ 算力与工程', link: '/infra/' },
       { text: '🚀 实战项目', link: '/projects/' },
-      { text: '🤖 Agent 协作', link: '/agent-guide' }
+      { text: '📖 使用指南', link: '/guide/' }
     ],
 
-    // 侧边栏联动：根据当前浏览的模块动态切换
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/wangyephd' }
+    ],
+
+    // 侧边栏联动
     sidebar: {
+      // 0. 使用指南
+      '/guide/': [
+        {
+          text: '📖 知识库使用与维护',
+          items: [
+            { text: '系统使用与协作总览', link: '/guide/' },
+            { text: 'Agent 自动化协作规范', link: '/agent-guide' }
+          ]
+        }
+      ],
+
       // 1. 视频模型专属侧边栏
       '/domains/video/': [
         {
