@@ -1,49 +1,60 @@
-# 🤖 Agent 自动化协作指南
+# 🤖 Agent 细粒度规则与自动维护规范
 
-本指南定义了 AI 智能体（如 Claude Code、DeepSeek、Codex 等）如何在本项目中安全、规范地**检索、新建、更新笔记与维护全局索引**。
-
----
-
-## 1. 知识库目录结构规范
-
-系统按「**垂直研究领域**」与「**底层基石工程**」双重解耦：
-
-- `docs/domains/video/`: 视频生成与理解、时空注意力、Video DiT、SVD/Wan/Sora 等。
-- `docs/domains/vision/`: 图像生成、ControlNet、分类检测分割、底层视觉。
-- `docs/domains/llm/`: 语言模型预训练、SFT、GRPO/RLHF、推理涌现、Agent 机制。
-- `docs/domains/multimodal/`: 多模态表征对齐 (CLIP)、VLM、语音与音视频统一模型。
-- `docs/foundations/`: 通用理论与架构基石（数学推导、Flow Matching/Diffusion 方程、Transformer/Mamba 通用骨干）。
-- `docs/infra/`: 算力与系统工程（CUDA 算子优化、Triton、显存分级、vLLM 推理加速、NCCL 分布式通信）。
-- `docs/projects/`: 个人代码复现、Benchmark 评测与工业踩坑经验。
+知识库内置了完善的 **Agent 细粒度领域规范体系（Agent Specifications）**。无论是 Claude Code、DeepSeek、Codex 还是 Cursor，进入仓库后都会自动读取并遵守各领域的写作要求，实现全自动建档与索引挂载。
 
 ---
 
-## 2. 智能体工作流 (Agent Workflow)
+## 1. 领域细粒度规范索引 (.agent/specs/)
 
-当收到用户的学习总结、论文精读或实验记录任务时，Agent 应执行以下步骤：
+针对算法研究的不同模态，在根目录 `.agent/specs/` 下均预置了严格的写作规范与结构契约：
+
+| 领域模块 | 规范文件 | 强制包含核心内容 |
+| :--- | :--- | :--- |
+| **🎬 视频生成与理解** | `.agent/specs/video-generation.md` | 3D VAE 压缩比、潜空间张量维度映射、时空解耦注意力推导、浮点复杂度 $O(T \cdot S^2)$、Einsum 算子代码、VBench 评测指标 |
+| **🖼️ 图像与风格定制** | `.agent/specs/vision-customization.md` | 冻结主干 vs 训练分支比例、零卷积/交叉注意力特征注入机理、前向恒等性与梯度推导、保真度 vs 风格化博弈曲线 |
+| **💬 语言模型与推理** | `.agent/specs/llm-reasoning.md` | GRPO 组相对策略优化数学目标、无 Critic 显存削减公式、抗作弊奖励工程（Reward Hacking）、慢思考顿悟现象分析 |
+| **🎙️ 多模态与特征对齐** | `.agent/specs/multimodal-alignment.md` | 模态间隙 (Modality Gap) 分析、超球面特征映射、对称 InfoNCE 损失数学推导、特征崩塌防范与零样本迁移 |
+| **📐 通用理论基石** | `.agent/specs/math-foundations.md` | 严格假设前提、步步有据的代数/微积分推导、反向传播梯度稳定性、Softmax 饱和证明、数值 Monte-Carlo 验证代码 |
+| **⚡ 算力与系统工程** | `.agent/specs/system-infra.md` | Roofline 算术强度定量判定（Memory-Bound vs Compute-Bound）、显存分级带宽延迟、Triton/CUDA 优化实现、实测吞吐提升表 |
+| **💡 科研灵感池** | `.agent/specs/idea-pool.md` | 疑问句反直觉假说、灵感触发点、核心科学假设 (Hypothesis)、审稿人视角潜在坑点与最小证伪实验 |
+
+---
+
+## 2. 自动化 4 步闭环维护机制 (Autonomous Loop)
+
+当用户告诉 Agent 一段知识后，Agent 会全自动执行完整的 4 步流水线，**彻底免除人工维护工作**：
 
 ```text
-接收输入 (论文/公式/代码/对话) 
-   ──> 确定对应目录 (例如视频相关放入 docs/domains/video/)
-   ──> 提取核心 LaTeX 公式与结构化内容
-   ──> 创建小写 kebab-case 命名的 Markdown 文件
-   ──> 自动更新对应目录下的 index.md 索引表格
-   ──> 自动将新文章追加到 docs/.vitepress/config.mts 的对应 sidebar 数组中
+               用户输入："今天推了下 Wan2.1 里的时序因果注意力，核心是..."
+                                      │
+                                      ▼
+                        ┌───────────────────────────┐
+                        │ ① 读取对应领域的 spec 规范  │
+                        └─────────────┬─────────────┘
+                                      │
+                                      ▼
+                        ┌───────────────────────────┐
+                        │ ② 撰写高密度 Markdown + LaTeX │
+                        │   (严格按 6 节大纲与容器组织) │
+                        └─────────────┬─────────────┘
+                                      │
+                                      ▼
+                        ┌───────────────────────────┐
+                        │ ③ 自动完成系统三处协同挂载 │
+                        │   ├── 更新目录 index.md   │
+                        │   ├── 注册侧边栏 config.mts│
+                        │   └── 注入 TagMatrix 标签池│
+                        └─────────────┬─────────────┘
+                                      │
+                                      ▼
+               Agent 汇报："已按照视频领域规范完成撰写，已同步挂载至侧边栏与标签池。"
 ```
 
 ---
 
-## 3. 数学公式与容器排版规范
+## 3. 多 Agent 入口自动适配
 
-- **行内公式**：使用单个美元符号 `$E = mc^2$`。
-- **独立公式块**：使用双美元符号包裹：
-  ```markdown
-  $$
-  \mathcal{L}_{\text{CFM}}(\theta) = \mathbb{E}_{t, x_0, x_1}\left[ \| v_\theta(x_t, t) - (x_1 - x_0) \|^2 \right]
-  $$
-  ```
-- **推导提示块**：善用 VitePress 的容器语法：
-  - `::: tip 核心结论`
-  - `::: info 推导细节`
-  - `::: warning 注意事项`
-  - `::: danger 避坑指南`
+系统在根目录下同时预置了各大主流 Agent 的入口配置文件：
+- `CLAUDE.md`：适配 **Claude Code CLI**，进入工作区自动注入系统提示词；
+- `.cursorrules`：适配 **Cursor / Windsurf / Copilot**，打开项目自动遵守规范；
+- `AGENT_GUIDE.md`：通用规范入口，兼容 **DeepSeek、OpenAI Codex、OpenCode** 等。

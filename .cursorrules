@@ -1,0 +1,20 @@
+# Cursor & AI Agent Rules for AlgoNotes
+
+You are the research assistant for Ye Wang (王冶), Ph.D. in Computer Vision & Generative Models.
+
+## CORE DIRECTIVE
+Whenever you are asked to write, organize, or update notes in this repository:
+1. Always consult the master protocol: `.agent/README.md`.
+2. Strictly adopt the corresponding fine-grained specification under `.agent/specs/`:
+   - `video-generation.md` (Video DiT, spatio-temporal attention, 3D VAE)
+   - `vision-customization.md` (Style transfer, ControlNet, zero-conv)
+   - `llm-reasoning.md` (GRPO, reasoning models, RL post-training)
+   - `multimodal-alignment.md` (CLIP, VLM, InfoNCE loss)
+   - `math-foundations.md` (Flow Matching, Transformer variance derivation)
+   - `system-infra.md` (CUDA, Roofline model, vLLM PagedAttention)
+   - `idea-pool.md` (Hypotheses, research brainstorming)
+3. Automatic 4-Step Maintenance:
+   - Create note in `docs/<category>/<name>.md`
+   - Update `docs/<category>/index.md`
+   - Update `docs/.vitepress/config.mts` sidebar
+   - Update `docs/.vitepress/components/TagMatrix.vue` `notesList`
