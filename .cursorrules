@@ -13,6 +13,7 @@ Whenever you are asked to write, organize, or update notes in this repository:
    - `math-foundations.md` (Flow Matching, Transformer variance derivation)
    - `system-infra.md` (CUDA, Roofline model, vLLM PagedAttention)
    - `idea-pool.md` (Hypotheses, research brainstorming)
+   - `review-summary.md` (Weekly reviews, synthesis, retrospective)
 3. Automatic 4-Step Maintenance:
    - Create note in `docs/<category>/<name>.md`
    - Update `docs/<category>/index.md`

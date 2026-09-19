@@ -59,6 +59,7 @@ export default defineConfig({
       { text: '🚀 实战项目', link: '/projects/' },
       { text: '🏷️ 知识标签', link: '/tags/' },
       { text: '💡 Idea 池', link: '/ideas/' },
+      { text: '📅 研习复盘', link: '/reviews/' },
       { text: '📖 使用指南', link: '/guide/' }
     ],
 
@@ -75,6 +76,17 @@ export default defineConfig({
           items: [
             { text: '系统使用与协作总览', link: '/guide/' },
             { text: 'Agent 自动化协作规范', link: '/agent-guide' }
+          ]
+        }
+      ],
+
+      // 0.2 研习复盘与周报
+      '/reviews/': [
+        {
+          text: '📅 研习复盘与时光机',
+          items: [
+            { text: '周报时光机总览', link: '/reviews/' },
+            { text: '2026年第38周复盘 (视频/算力)', link: '/reviews/2026-W38' }
           ]
         }
       ],

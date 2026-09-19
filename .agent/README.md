@@ -27,6 +27,7 @@
 | **数学原理与通用基石** | `docs/foundations/` | `.agent/specs/math-foundations.md` |
 | **算力基建与系统优化** | `docs/infra/` | `.agent/specs/system-infra.md` |
 | **奇思妙想与科研灵感** | `docs/ideas/` | `.agent/specs/idea-pool.md` |
+| **研习复盘与周报综述** | `docs/reviews/` | `.agent/specs/review-summary.md` |
 
 ---
 

@@ -14,6 +14,7 @@ When Ye Wang gives you a knowledge point, paper insight, experiment finding, or 
    - Foundations & Math: read `.agent/specs/math-foundations.md`
    - Infra & CUDA: read `.agent/specs/system-infra.md`
    - Ideas & Sandbox: read `.agent/specs/idea-pool.md`
+   - Weekly/Daily Review: read `.agent/specs/review-summary.md`
 4. **Autonomous 4-Step Maintenance Loop (MUST COMPLETE ALL 4)**:
    - Create the `.md` file with rigorous LaTeX formulas and callout containers.
    - Update `docs/<domain>/index.md` table.

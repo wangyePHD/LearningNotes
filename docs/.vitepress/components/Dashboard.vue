@@ -70,6 +70,7 @@ onMounted(() => {
             <a class="chip-link" href="https://space.bilibili.com/1127990326" target="_blank" rel="noopener">📺 PaperABC</a>
             <a class="chip-link highlight" href="/tags/">🏷️ 标签穿透矩阵</a>
             <a class="chip-link highlight" href="/ideas/">💡 Idea 灵感池</a>
+            <a class="chip-link highlight" href="/reviews/">📅 研习复盘周报</a>
             <a class="chip-link" href="/guide/">📖 使用指南</a>
           </div>
         </div>
@@ -179,11 +180,19 @@ onMounted(() => {
           </div>
         </a>
 
-        <a href="/ideas/" class="nav-card full-span">
+        <a href="/ideas/" class="nav-card">
           <div class="card-icon">💡</div>
           <div class="card-body">
             <h4>科研 Idea 灵感池 (Idea Sandbox)</h4>
             <p>专属脑洞自留地，记录关于跨模态生成、RL 视频时序平滑度、Flow Matching 速度场曲率等奇思妙想。</p>
+          </div>
+        </a>
+
+        <a href="/reviews/" class="nav-card">
+          <div class="card-icon">📅</div>
+          <div class="card-body">
+            <h4>研习复盘时光机 (Weekly Reviews)</h4>
+            <p>由 AI Agent 自动提炼归纳的每周/阶段性学术综述，串联跨模态公式推导与实验深度复盘。</p>
           </div>
         </a>
       </div>

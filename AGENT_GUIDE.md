@@ -13,6 +13,7 @@
 - 📐 **数学理论与基石推导**：`.agent/specs/math-foundations.md`
 - ⚡ **算力基建与系统优化**：`.agent/specs/system-infra.md`
 - 💡 **科研灵感池记录**：`.agent/specs/idea-pool.md`
+- 📅 **研习复盘与周报**：`.agent/specs/review-summary.md`
 
 ## 自动闭环维护铁律 (4 步)
 Agent 必须一次性完成全链路维护，无需用户二次操作：

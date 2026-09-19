@@ -179,6 +179,15 @@ const notesList = ref([
     date: '2026-09-19',
     summary: '单卡 A100 下对比 Full SFT 与 LoRA 的可训练参数、显存峰值（节约 63.7%）与吞吐量提升实测。',
     tags: ['LLM', 'LoRA', 'Benchmark']
+  },
+  {
+    title: '2026 年第 38 周研习周报：视频时空生成与算力工程闭环',
+    link: '/reviews/2026-W38',
+    domain: '📅 研习复盘',
+    domainClass: 'domain-multi',
+    date: '2026-09-19',
+    summary: '高维学术复盘：总结时空因子分解注意力降维证明、Wan2.1 8卡序列并行优化、及纯 RL 视频平滑度假说。',
+    tags: ['Video Gen', 'Attention', 'CUDA', 'Flow Matching', 'GRPO', 'Weekly Review']
   }
 ])
 
