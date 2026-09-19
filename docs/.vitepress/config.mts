@@ -60,6 +60,7 @@ export default defineConfig({
       { text: '🏷️ 知识标签', link: '/tags/' },
       { text: '💡 Idea 池', link: '/ideas/' },
       { text: '📅 研习复盘', link: '/reviews/' },
+      { text: '🧪 研习白板', link: '/whiteboard/' },
       { text: '📖 使用指南', link: '/guide/' }
     ],
 
@@ -69,7 +70,17 @@ export default defineConfig({
 
     // 侧边栏联动
     sidebar: {
-      // 0. 使用指南
+      // 0. 研习白板
+      '/whiteboard/': [
+        {
+          text: '🧪 实时研习攻坚区',
+          items: [
+            { text: 'VideoDeltaNet (VDN-H3) 实时课堂', link: '/whiteboard/' }
+          ]
+        }
+      ],
+
+      // 0.1 使用指南
       '/guide/': [
         {
           text: '📖 知识库使用与维护',
