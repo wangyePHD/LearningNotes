@@ -1,3 +1,50 @@
+<script setup>
+import { ref, onMounted } from 'vue'
+
+const quote = ref('生活不可能像你想象得那么好，但也不会像你想象得那么糟。人的脆弱和坚强都超乎自己的想象。')
+const quoteFrom = ref('莫泊桑《一生》')
+const isLoadingQuote = ref(false)
+
+const fallbackQuotes = [
+  { text: '生活不可能像你想象得那么好，但也不会像你想象得那么糟。人的脆弱和坚强都超乎自己的想象。', from: '莫泊桑《一生》' },
+  { text: '流水不争先，争的是滔滔不绝。', from: '老子' },
+  { text: '真正重要的东西，用眼睛是看不见的，必须用心去感受。', from: '圣埃克苏佩里《小王子》' },
+  { text: '没有礁石，就没有美丽的浪花；没有挫折，就没有壮丽的人生。', from: '罗曼·罗兰' },
+  { text: '我们都在阴沟里，但仍有人仰望星空。', from: '王尔德' },
+  { text: '凡是过往，皆为序章；凡是未来，皆有可期。', from: '莎士比亚' },
+  { text: '不积跬步，无以至千里；不积小流，无以成江海。', from: '荀子《劝学》' },
+  { text: '追光的人，终会万丈光芒。', from: '研习札记' },
+  { text: '慢一点没关系，只要你一直在向前走。', from: '日常自勉' }
+]
+
+const fetchDailyQuote = async () => {
+  isLoadingQuote.value = true
+  try {
+    const res = await fetch('https://v1.hitokoto.cn/?c=d&c=e&c=k&c=i', {
+      headers: { 'Accept': 'application/json' }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      quote.value = data.hitokoto
+      const author = data.from_who ? `${data.from_who} · ` : ''
+      quoteFrom.value = `${author}《${data.from}》`
+    } else {
+      throw new Error('API failed')
+    }
+  } catch (e) {
+    const pick = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)]
+    quote.value = pick.text
+    quoteFrom.value = pick.from
+  } finally {
+    isLoadingQuote.value = false
+  }
+}
+
+onMounted(() => {
+  fetchDailyQuote()
+})
+</script>
+
 <template>
   <div class="dashboard-container">
     <!-- 1. 个人学术与研习画像 -->
@@ -23,6 +70,29 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 1.5 每日一句·心灵鸡汤与研习自勉 (单独一行，楷体/宋体典雅设计) -->
+    <div class="daily-quote-card">
+      <div class="quote-symbol left">“</div>
+      <div class="quote-main">
+        <p class="quote-text" :class="{ fading: isLoadingQuote }">
+          {{ quote }}
+        </p>
+        <div class="quote-meta">
+          <span class="quote-source">—— {{ quoteFrom }}</span>
+          <button 
+            class="refresh-quote-btn" 
+            title="点击换一句灵感" 
+            :disabled="isLoadingQuote"
+            @click="fetchDailyQuote"
+          >
+            <span class="refresh-icon" :class="{ spin: isLoadingQuote }">↻</span>
+            <span class="refresh-text">换一句</span>
+          </button>
+        </div>
+      </div>
+      <div class="quote-symbol right">”</div>
     </div>
 
     <!-- 2. GitHub 研习与代码提交热力图 (纯粹展示代码与笔记活跃度) -->
@@ -300,6 +370,124 @@
   color: var(--vp-c-brand-1);
   border-color: var(--vp-c-brand-2);
   font-weight: 600;
+}
+
+/* 每日一句心灵鸡汤卡片 (典雅楷体/宋体排版) */
+.daily-quote-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-left: 4px solid var(--vp-c-brand-1);
+  border-radius: 12px;
+  padding: 1.1rem 1.6rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.02);
+  position: relative;
+  overflow: hidden;
+}
+
+.quote-symbol {
+  font-family: "Georgia", "Songti SC", "SimSun", serif;
+  font-size: 2.8rem;
+  line-height: 1;
+  color: var(--vp-c-brand-1);
+  opacity: 0.25;
+  user-select: none;
+  font-weight: bold;
+}
+
+.quote-symbol.left {
+  margin-right: 1.2rem;
+  align-self: flex-start;
+}
+
+.quote-symbol.right {
+  margin-left: 1.2rem;
+  align-self: flex-end;
+}
+
+.quote-main {
+  flex-grow: 1;
+  text-align: center;
+  padding: 0.2rem 0;
+}
+
+.quote-text {
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "Songti SC", "SimSun", "Noto Serif SC", serif;
+  font-size: 1.15rem;
+  line-height: 1.8;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-1);
+  margin: 0 0 0.5rem 0;
+  transition: opacity 0.3s ease;
+  font-weight: 500;
+}
+
+.quote-text.fading {
+  opacity: 0.3;
+}
+
+.quote-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+}
+
+.quote-source {
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "Songti SC", serif;
+  font-size: 0.88rem;
+  color: var(--vp-c-text-2);
+  font-style: italic;
+}
+
+.refresh-quote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-bg-mute);
+  border: 1px solid var(--vp-c-divider);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refresh-quote-btn:hover:not(:disabled) {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  transform: scale(1.03);
+}
+
+.refresh-icon {
+  font-size: 0.95rem;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.refresh-icon.spin {
+  animation: quote-spin 0.8s linear infinite;
+}
+
+@keyframes quote-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .quote-symbol {
+    display: none;
+  }
+  .quote-text {
+    font-size: 1.05rem;
+  }
+  .daily-quote-card {
+    padding: 1rem;
+  }
 }
 
 /* 分区通用标题 */
