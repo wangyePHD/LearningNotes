@@ -169,39 +169,52 @@ $$
 - $K \in \mathbb{R}^{N \times d} \implies K^T \in \mathbb{R}^{d \times N} \quad (64 \times 100,000)$
 - $V \in \mathbb{R}^{N \times d} \quad (100,000 \times 64)$
 
-```text
-【第 1 步】：算 A = Q × K^T
-  维度变换：(N × d) × (d × N)  ──>  生成注意力打分大矩阵 A ∈ R^{N × N}
-  真实数值：(100,000 × 64) × (64 × 100,000)  ──>  (100,000 × 100,000)
-  计算次数：N × d × N = N^2 · d = 100,000 × 64 × 100,000 = 6,400 亿次！
+1. **【第 1 步】算打分矩阵 $A = Q \times K^T$**：
+   $$
+   (N \times d) \times (d \times N) \implies A \in \mathbb{R}^{N \times N}
+   $$
+   代入数值：$(100,000 \times 64) \times (64 \times 100,000) \implies (100,000 \times 100,000)$  
+   标量乘法次数：$N \times d \times N = N^2 \cdot d = 100,000 \times 64 \times 100,000 = \mathbf{6,400\ \text{亿次！}}$
 
-【第 2 步】：算 Output = A × V
-  维度变换：(N × N) × (N × d)  ──>  最终输出矩阵 Output ∈ R^{N × d}
-  真实数值：(100,000 × 100,000) × (100,000 × 64)  ──>  (100,000 × 64)
-  计算次数：N × N × d = N^2 · d = 6,400 亿次！
+2. **【第 2 步】算最终输出 $\text{Output} = A \times V$**：
+   $$
+   (N \times N) \times (N \times d) \implies \text{Output} \in \mathbb{R}^{N \times d}
+   $$
+   代入数值：$(100,000 \times 100,000) \times (100,000 \times 64) \implies (100,000 \times 64)$  
+   标量乘法次数：$N \times N \times d = N^2 \cdot d = \mathbf{6,400\ \text{亿次！}}$
 
-【路线 A 累计计算量】：
-  总计算量 = N^2 · d + N^2 · d = 2 · N^2 · d = 12,800 亿次浮点运算！
-```
+- **路线 A 累计计算量**：
+  $$
+  \text{FLOPs}_{\text{传统}} = N^2 d + N^2 d = \mathbf{2 N^2 d} = \mathbf{12,800\ \text{亿次浮点运算！}}
+  $$
+
+---
 
 #### 路线 B：线性注意力先算后两项 $Q (K^T V)$
 
 同样的三个矩阵，同样的输入维度！我们利用结合律，**优先让 $K^T$ 和 $V$ 结合**：
 
-```text
-【第 1 步】：先算记忆状态 S = K^T × V
-  维度变换：(d × N) × (N × d)  ──>  生成记忆矩阵 S ∈ R^{d × d}  (注意：N 在内侧被压缩抵消了！)
-  真实数值：(64 × 100,000) × (100,000 × 64)  ──>  (64 × 64)
-  计算次数：d × N × d = N · d^2 = 100,000 × 64 × 64 = 4.1 亿次！
+1. **【第 1 步】先算记忆状态矩阵 $S = K^T \times V$**：
+   $$
+   (d \times N) \times (N \times d) \implies S \in \mathbb{R}^{d \times d}
+   $$
+   代入数值：$(64 \times 100,000) \times (100,000 \times 64) \implies (64 \times 64)$  
+   ::: info 注意内侧的维度对消
+   $N=100,000$ 处于相乘内侧，求和后直接被压缩对消，中间只留下了微小的 $d \times d$ 记忆海绵！
+   :::
+   标量乘法次数：$d \times N \times d = N \cdot d^2 = 100,000 \times 64 \times 64 = \mathbf{4.1\ \text{亿次！}}$
 
-【第 2 步】：再算 Output = Q × S
-  维度变换：(N × d) × (d × d)  ──>  最终输出矩阵 Output ∈ R^{N × d}
-  真实数值：(100,000 × 64) × (64 × 64)  ──>  (100,000 × 64)
-  计算次数：N × d × d = N · d^2 = 100,000 × 64 × 64 = 4.1 亿次！
+2. **【第 2 步】再算最终输出 $\text{Output} = Q \times S$**：
+   $$
+   (N \times d) \times (d \times d) \implies \text{Output} \in \mathbb{R}^{N \times d}
+   $$
+   代入数值：$(100,000 \times 64) \times (64 \times 64) \implies (100,000 \times 64)$  
+   标量乘法次数：$N \times d \times d = N \cdot d^2 = 100,000 \times 64 \times 64 = \mathbf{4.1\ \text{亿次！}}$
 
-【路线 B 累计计算量】：
-  总计算量 = N · d^2 + N · d^2 = 2 · N · d^2 = 8.2 亿次浮点运算！
-```
+- **路线 B 累计计算量**：
+  $$
+  \text{FLOPs}_{\text{线性}} = N d^2 + N d^2 = \mathbf{2 N d^2} = \mathbf{8.2\ \text{亿次浮点运算！}}
+  $$
 
 ---
 
@@ -232,21 +245,25 @@ $$
 天下没有免费的午餐。带来 $\mathcal{O}(N)$ 线性速度的代价，就是**容量的毁灭性降维压缩**。
 
 ### ① 矩阵维度的物理现实
-我们对比两种注意力最终在内部维护的“记忆载体”：
 
-```text
-【Softmax 注意力】
- 维护未压缩的完整样本库：K ∈ R^{N × d}, V ∈ R^{N × d}
- 实际记忆容量随序列长度 N 无限动态增长！
- N = 1,000      ──> 记忆规模包含 1,000 个独立特征
- N = 350,000    ──> 记忆规模包含 350,000 个独立特征 (无损存储)
+我们用严格的数学符号，对比两种注意力在生成过程中最终维护的“记忆载体”：
 
-【线性注意力】
- 无论序列长度 N 有多长（哪怕 N 达到 100 万），
- 所有历史 Token 全被累加压缩进单个状态矩阵：
- S = \sum_{j=1}^N \phi(k_j)^T v_j  ∈  R^{d × d}
- 记忆矩阵尺寸恒定为 d × d，与 N 完全无关！
-```
+#### 1. 传统 Softmax 注意力（动态无限记忆库）
+它保留了未压缩的全部输入样本库：
+$$
+K \in \mathbb{R}^{N \times d}, \quad V \in \mathbb{R}^{N \times d}
+$$
+- 它的实际记忆容量是**随着序列长度 $N$ 无限动态增长的**；
+- 当 $N = 1,000$ 时，模型内部保留了 $1,000$ 个独立的特征向量；
+- 当 $N = 350,000$ 时，模型内部保留了 $350,000$ 个独立的特征向量（无损存储，每个 Token 原汁原味保留）。
+
+#### 2. 线性注意力（固定有限记忆盒）
+无论序列长度 $N$ 有多长（哪怕 $N$ 达到 100 万个 Token），所有历史信息都被强行累加压缩进单个状态矩阵：
+$$
+S = \sum_{j=1}^N \phi(k_j)^T v_j \quad \in \mathbb{R}^{d \times d}
+$$
+- **致命瓶颈**：记忆矩阵 $S$ 的尺寸恒定为 $d \times d$，**其维度与序列长度 $N$ 毫无关系！**
+- 无论你看过多少内容，所有记忆都只能挤在这个固定为 $d \times d$ 的小盒子里。
 
 ### ② 矩阵秩的硬上限 (Rank Bottleneck)
 矩阵 $S = \phi(K)^T V \in \mathbb{R}^{d \times d}$ 的代数秩满足：
