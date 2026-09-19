@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { withBase } from 'vitepress'
+import RepoHeatmap from './RepoHeatmap.vue'
 
 const quote = ref('生活不可能像你想象得那么好，但也不会像你想象得那么糟。人的脆弱和坚强都超乎自己的想象。')
 const quoteFrom = ref('莫泊桑《一生》')
@@ -98,24 +99,9 @@ onMounted(() => {
       <div class="quote-symbol right">”</div>
     </div>
 
-    <!-- 2. GitHub 研习与代码提交热力图 (纯粹展示代码与笔记活跃度) -->
+    <!-- 2. 本地研习与代码提交热力图 (统计当前知识库真实投入度，自研非绿色配色) -->
     <div class="dashboard-section">
-      <div class="section-title-row">
-        <div class="title-with-icon">
-          <span class="icon">📈</span>
-          <h3>研习打卡与代码提交热力图</h3>
-        </div>
-        <a class="sub-link" href="https://github.com/wangyephd" target="_blank" rel="noopener">GitHub: @wangyephd ↗</a>
-      </div>
-      <div class="heatmap-wrapper">
-        <div class="heatmap-img-box">
-          <img 
-            src="https://ghchart.rshah.org/2da44e/wangyephd" 
-            alt="Ye Wang's GitHub Commit Heatmap" 
-            loading="lazy"
-          />
-        </div>
-      </div>
+      <RepoHeatmap />
     </div>
 
     <!-- 3. 研究模态与知识库看板 (Quick Navigation) -->
@@ -547,40 +533,6 @@ onMounted(() => {
   color: var(--vp-c-brand-1);
   text-decoration: none;
   font-weight: 500;
-}
-
-/* 热力图卡片：纯净独立 */
-.heatmap-wrapper {
-  background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 14px;
-  padding: 1.2rem;
-}
-
-.heatmap-img-box {
-  overflow-x: auto;
-  padding: 1rem 0.5rem;
-  display: flex;
-  justify-content: center;
-  background: #ffffff;
-  border-radius: 8px;
-  border: 1px solid var(--vp-c-divider);
-}
-
-.heatmap-img-box img {
-  max-width: 100%;
-  height: auto;
-  min-width: 680px;
-  border-radius: 4px;
-}
-
-:root.dark .heatmap-img-box {
-  background: #0d1117;
-  border-color: #30363d;
-}
-
-:root.dark .heatmap-img-box img {
-  filter: invert(0.87) hue-rotate(180deg) brightness(0.95) contrast(1.15);
 }
 
 /* 研究模态导航网格卡片 */
