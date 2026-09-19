@@ -136,6 +136,15 @@ const notesList = ref([
     tags: ['Attention', 'Transformer', 'Math Derivation']
   },
   {
+    title: 'Softmax 注意力 vs 线性注意力：联想记忆容量极限对比',
+    link: '/foundations/linear-attention-capacity',
+    domain: '📐 理论基石',
+    domainClass: 'domain-foundations',
+    date: '2026-09-19',
+    summary: '从矩阵结合律移位推导 O(N) 线性加速，基于连续 Hopfield 理论证明 exp(d) 与 d 的容量代数鸿沟及混合架构必然性。',
+    tags: ['Attention', 'Linear Attention', 'Math Derivation', 'Complexity']
+  },
+  {
     title: 'Flow Matching 与连续流生成动力学推导',
     link: '/foundations/flow-matching-derivation',
     domain: '📐 理论基石',

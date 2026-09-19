@@ -164,6 +164,7 @@ export default defineConfig({
           items: [
             { text: '基石模块概览', link: '/foundations/' },
             { text: 'Transformer 缩放点积注意力与方差推导', link: '/foundations/transformer-attention' },
+            { text: 'Softmax vs 线性注意力：记忆容量极限对比', link: '/foundations/linear-attention-capacity' },
             { text: 'Flow Matching 与连续生成动力学', link: '/foundations/flow-matching-derivation' }
           ]
         }
