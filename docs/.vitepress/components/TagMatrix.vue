@@ -82,6 +82,15 @@ const selectedTag = ref('')
 // 知识库全局全模态笔记池
 const notesList = ref([
   {
+    title: 'VideoDeltaNet on MiniMax H3 (VDN-H3)：实时视频生成架构',
+    link: '/domains/video/video-deltanet-h3',
+    domain: '🎬 视频模型',
+    domainClass: 'domain-video',
+    date: '2026-09-19',
+    summary: '精炼解构 5 大核心机制：双轨混合注意力、自适应正规方程更新、三阶段微创训练法、DMD2 8步蒸馏与 5:3 异构多卡切分。',
+    tags: ['Video Gen', 'DiT', 'Hybrid Attention', 'Linear Attention', 'DMD2', 'Real-Time']
+  },
+  {
     title: '时空注意力机制 (Spatio-Temporal Attention) 数学推导',
     link: '/domains/video/spatio-temporal-attention',
     domain: '🎬 视频模型',

@@ -6,6 +6,7 @@
 
 | 篇目 | 主题 / 核心机制 | 关联模型 / 论文 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- | :--- |
+| **VideoDeltaNet on H3 (VDN)** | 双轨混合注意力、自适应正规方程与 8 卡 6.9 秒实时视频生成 | MiniMax H3, SGLang | 🟢 已完结 | [阅读精简笔记 →](./video-deltanet-h3.md) |
 | **时空注意力机制** | 分解时空注意力 (Spatial-Temporal Factorized Attention) | TimeSformer, Video-DiT | 🟢 已完结 | [阅读笔记 →](./spatio-temporal-attention.md) |
 | **Video DiT 架构演进** | 3D VAE 压缩 + 连续流匹配 + 运动一致性约束 | Sora, Wan2.1, CogVideoX | 🟢 已完结 | [阅读笔记 →](./video-diffusion-dit.md) |
 

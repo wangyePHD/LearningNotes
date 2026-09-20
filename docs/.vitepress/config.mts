@@ -118,6 +118,7 @@ export default defineConfig({
           text: '🎬 视频生成与理解',
           items: [
             { text: '领域概览与路线图', link: '/domains/video/' },
+            { text: 'VideoDeltaNet 实时架构精简剖析', link: '/domains/video/video-deltanet-h3' },
             { text: '时空注意力 (3D/Spatio-Temporal Attention)', link: '/domains/video/spatio-temporal-attention' },
             { text: 'Video DiT 架构与时空一致性', link: '/domains/video/video-diffusion-dit' }
           ]
