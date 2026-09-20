@@ -13,7 +13,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: '🧠',
+    logo: '/avatar.jpeg',
     siteTitle: 'AlgoNotes | Ye Wang',
 
     // 全局本地离线毫秒级搜索

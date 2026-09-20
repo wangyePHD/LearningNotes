@@ -59,6 +59,7 @@ onMounted(() => {
           <div class="profile-name-row">
             <h1 class="user-name">Ye Wang (王冶)</h1>
             <span class="status-tag">🟢 在研 · Ph.D. Candidate</span>
+            <span class="sync-tag">⚡ GitHub Pages 已同步上线</span>
           </div>
           <p class="profile-bio">
             聚焦<strong>可控视觉内容生成与编辑 (Controllable Visual Synthesis)</strong>、<strong>视频生成 (Video DiT)</strong>、<strong>统一理解与生成</strong>及<strong>大模型推理与算力优化</strong>。
@@ -334,6 +335,16 @@ onMounted(() => {
   background: rgba(46, 160, 67, 0.15);
   color: #2ea043;
   font-weight: 600;
+}
+
+.sync-tag {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  font-weight: 600;
+  border: 1px solid rgba(99, 102, 241, 0.25);
 }
 
 .profile-bio {
