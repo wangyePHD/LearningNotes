@@ -95,7 +95,7 @@ Output strict JSON only:
 - *Part2 20M 结构排版*：多 block、多角色版式，长宽比 1:1 / 4:3 / 16:9 / 3:4 / 9:16（约 1024² 像素），随机槽位、颜色、字号、字体，中 8M、英 8M、中英混合 4M。prompt 描述文字内容 + 位置 + 颜色 + 相对大小。
 - *质检*：字符级图文对齐校验、溢出与 bbox 检查。
 
-![SeFi Fig.3：两档合成字图示例。左上 Part1 dense EN，右上 Part1 short ZH，左下 Part2 structured layout，右下 Part2 mixed layout](/sefi-fig3-text-render.png)
+![SeFi Fig.3：两档合成字图示例（从左至右：Part 1 dense English、Part 1 short Chinese、Part 2 structured layout、Part 2 mixed layout）](/sefi-fig3-text-render.png)
 
 ::: tip 为什么这么设计
 与 Z/Qwen 搞复杂场景合成不同，SeFi 认为写字本质是严格一对一映射，预训练先把映射学牢，逼真排版留给 CT/SFT 迁移。这就是 CVTG-2K 能反超的根因。
