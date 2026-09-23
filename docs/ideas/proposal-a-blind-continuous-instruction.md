@@ -1,70 +1,90 @@
-# Proposal A：能否用图像衍生连续指令替代文本提示，实现盲复原与盲编辑的单Adapter统一？
+# 盲复原统一指令：用退化图自身代替文本提示 (Blind Continuous Instruction)
 
-> **标签**：`Image Editing` `All-in-One Restoration` `Qwen-Image-Edit` `LoRA`
-> **记录时间**：2026-09-23
-> **状态**：🧪 [值得单卡跑个玩具 Demo]
-> **目标期刊**：IEEE TMM / Pattern Recognition / Expert Systems with Applications（中科院一区）
-> **算力预算**：1x 4090/A100，约3~10小时训练 + 1周评测
+> **标签**：`Vision` `Image Editing` `All-in-One Restoration` `LoRA`  
+> **更新时间**：2026-09-23  
+> **参考来源**：ImIR 2609.25267 · AcFlow 2609.10723 · Qwen-Image-Edit
 
 ---
 
-## 1. 灵感触发与背景
+## 1. 问题定义与控制目标
 
-过去一个月arXiv高度收敛到一个结论：冻住大编辑模型，只训小模块。
+任务：一张模型同时处理去雨、去雾、去噪、去模糊、低光、JPEG六种退化，推理时不给退化标签。
 
-* `2609.25267 ImIR`：冻住Qwen-Image-Edit，只训一个LoRA + 轻量token mapper，把降质图VLM embedding矫正为干净指令，6任务单卡3h，task-agnostic不掉点，低光21.3 vs 16.3dB碾压文本prompt。
-* `2609.10723 AcFlow`：冻住DiT，学concept条件速度场做风格强度连续控制。
-* `Edit2Restore / RealRestorer`：文本prompt做复原，需要手写prompt、离散、不可调。
+现有做法的问题很具体：用文本做条件，比如`“remove rain”`，三个毛病：
+1. 要给每种退化手写prompt，换个数据就得重调；
+2. 文本是离散的，给不出“雨有多大、图有多暗”；
+3. 盲测时直接崩，ImIR里报道文本版去雨从32.5dB掉到17.5dB。
 
-矛盾点：文本是粗糙、离散、全局的，无法表达“这张图到底有多脏、要修多强”。而降质图本身就是最精准的指令。
+要攻的点：保布局不难，难的是让模型知道修什么、修多强，且不知道退化类型时也不崩。
 
-## 2. 核心猜想 Hypothesis
+## 2. 架构拓扑与特征注入机理
 
-若 $y$ 为降质图，$x$ 为干净目标，$E_{vl}(\cdot) \in \mathbb{R}^{d}$ 为Qwen2.5-VL编码器，则存在轻量映射 $M_{\phi}$ 使得：
+只动两处，其余全冻。
 
-$$c = M_{\phi}(E_{vl}(y), \tau) \approx E_{vl}(x)$$
+* **Locked Backbone**：Qwen-Image-Edit整体冻结，含Qwen2.5-VL编码器 $E_{vl}$ 和MMDiT去噪器，参数占比约99%。
+* **Trainable**：LoRA rank=16/64 + 一个2层MLP映射器 $M_{\phi}$，<5M参数，占比<1%。
 
-其中 $\tau$ 为可选任务槽（FiLM调制），$c$ 直接作为Qwen-Image-Edit的指令条件（text prompt留空）。缩放 $c(\alpha) = (1-\alpha)E_{vl}(y) + \alpha c$ 可得连续家族解，$\alpha \in [0,1]$ 控制修复强度。
+走法分两路：
 
-形式化：若A（mapper能闭合降质-干净embedding gap）成立，通过引入B（连续插值+单LoRA共享），则C（6任务PSNR/SSIM超文本基线，且盲任务不崩）在不破坏D（原编辑能力）前提下成立。
+1. 结构路：退化图 $y$ 走VAE进DiT，保证位置、边缘不动。
+2. 指令路：不走文本，text prompt留空，直接用图算指令：
+$$c = M_{\phi}(E_{vl}(y)) \in \mathbb{R}^{d}$$
 
-::: tip 为什么是一区故事
-文本vs图像指令的matched comparison + 盲任务 + 可控族解，三个卖点都是期刊喜欢的“机制解释+实用价值”。
+训练时拿干净图的 $E_{vl}(x)$ 当老师，推理时只有 $y$。任务标签 $\tau$ 可选，用FiLM做偏置；盲版本直接把 $\tau$ 合成一个，不输入标签。
+
+强度控制很直接，做线性插值：
+$$c(\alpha) = (1-\alpha)E_{vl}(y) + \alpha c, \quad \alpha \in [0,1]$$
+
+$\alpha=0$约等于不修，$\alpha=1$全力度修。低光这种目标不唯一的任务，扫一遍 $\alpha$ 就出一族结果。
+
+## 3. 损失函数与数学稳定性推导
+
+总损失两项：
+
+$$ \mathcal{L}_{total} = \mathcal{L}_{FM}(x, y, c) + \lambda \|c - E_{vl}(x)\|_2^2 $$
+
+* $\mathcal{L}_{FM}$：标准flow matching去噪损失，学 $y \to x$；
+* 第二项：指令对齐，把预测的 $c$ 往干净 embedding 拉，$\lambda$ 取0.1量级先跑。
+
+::: info 为什么第二项必要
+没有它，$M_{\phi}$ 会偷懒输出全零向量，全靠LoRA硬记，盲测必崩。加了它，mapper必须闭合退化-干净的embedding差，消融时把这一项去掉看PSNR掉多少即可验证。
 :::
 
-## 3. 方法设计
+## 4. 保真度与修复强度权衡
 
-**双通道输入：**
-* 结构通道：$y$ 经VAE进DiT保布局。
-* 语义通道：$c = M_{\phi}(E_{vl}(y))$，2层MLP + FiLM，参数<5M。
+核心就一条曲线：$\alpha$ 从0扫到1。
 
-**训练：**
-$$ \mathcal{L} = \mathcal{L}_{FM}(x, y, c) + \lambda \|c - E_{vl}(x)\|_2^2 $$
+* $\alpha$ 小：PSNR高、LPIPS低，但低光看起来还是暗；
+* $\alpha$ 大：视觉变亮干净，但可能过曝、细节 hallucination。
 
-第一项为flow matching去噪损失，第二项为指令对齐损失。主干冻结，只训LoRA rank=16/64 + mapper。
+低光、去雾重点报这条曲线，去雨、去噪报单点即可。盲版本和带标签版本PSNR差应<0.5dB，文本基线差是15dB，这是关键对比。
 
-**盲版本：** 将 $\tau$ 收缩为单一共享槽，全局上下文分支保留退化线索，推理时无需退化标签。
+## 5. 核心控制层代码实现
 
-**可控版本：** 推理时 $c(\alpha)$ 插值，低光/去雾等非唯一目标任务可扫 $\alpha$ 出多解。
+```python
+# E_vl: frozen Qwen2.5-VL, M: 2-layer MLP + FiLM
+with torch.no_grad():
+    e_deg = E_vl(y)          # [B, L, d], 退化图特征
+    e_clean = E_vl(x)        # [B, L, d], 仅训练用
+c = M(e_deg, tau=None)       # [B, L, d], 预测的干净指令
+alpha = 1.0
+c_run = (1-alpha)*e_deg + alpha*c
+loss_fm = flow_matching_loss(dit(y, c_run), x)
+loss_align = F.mse_loss(c, e_clean.detach())
+loss = loss_fm + 0.1 * loss_align
+loss.backward()  # 只更新 M + LoRA
+```
 
-## 4. 实验计划
+推理时把`E_vl(x)`那行删掉，调`alpha`即可。
 
-数据集：去雨Rain100L、去雾RESIDE、去噪BSD68、去模糊GoPro、低光LOL、JPEG LIVE1 + MagicBrush子集测编辑保持。
+## 6. 避坑指南与评测基准
 
-基线：Text-LoRA同 backbone、Edit2Restore、专有小模型、ImIR复现。
+先跑两个任务验证，别一次铺六个：去雨Rain100L + 低光LOL，单卡<5h。如果这两项超文本LoRA 1dB以上，再铺RESIDE、BSD68、GoPro、LIVE1。
 
-指标：PSNR/SSIM/LPIPS/DINO-I/CLIP-T + GPT-4o/人评自然度。必须报：task-aware vs task-agnostic落差表（文本版会崩17.5dB，图像版应<0.5dB），$\alpha$ 扫描曲线。
+基线：同backbone的Text-LoRA、Edit2Restore、ImIR复现。指标：PSNR/SSIM/LPIPS为主，CLIP-T/DINO-I看编辑保持，加20张人评。
 
-::: info 最小验证集
-先跑去雨+低光两任务，单卡<5h，若PSNR超文本1dB以上即证伪通过，全量再铺开。
+::: warning 避坑要点
+1. VLM本身怕噪声，mapper易学shortcut，必须做oracle实验：直接喂 $E_{vl}(x)$ 看上限，mapper应达到上限的90%以上；
+2. 和ImIR撞车风险：差异点放在连续 $\alpha$ 族解和盲编辑统一上，不要只报平均PSNR；
+3. 低光插值可能非单调，先画 $\alpha$ 曲线确认再写论文。
 :::
-
-## 5. 潜在坑点与证伪路径
-
-* VLM embedding本身对噪声敏感，mapper可能学到shortcut：加oracle clean embedding上界消融。
-* 缩放插值可能线性外推失效：先在低光上验证单调性，再推广。
-* 审稿人会问与ImIR区别：差异化在连续族解+盲编辑统一+多任务权重分析，标题避重。
-
-## 6. 参考
-
-* ImIR 2609.25267， AcFlow 2609.10723， Edit2Restore， RealRestorer， Qwen-Image-Edit
