@@ -18,7 +18,28 @@
 
 ## 2. 架构拓扑与特征注入机理
 
-TODO：双潜构造、SemVAE / Texture VAE、双 timestep DiT、前向调度。
+### 2.1 VFM：只看懂、不动手的提纲手
+
+VFM = Vision Foundation Model，本篇固定为冻结的 `DINOv2-Large`，全程不训练。
+
+::: info 直观分工
+VFM 定方向，SemVAE 减肥，Texture VAE 保细节，DiT 照着提纲画画。
+:::
+
+```
+输入图像 x: R^{3 x 1024 x 1024}
+  │
+  ├─→ [语义路] Phi(x) = f_s in R^{L x C_in}，如 1369 x 1024
+  │     每个 token 讲物体身份与布局，不记噪点颜色
+  │     ↓ SemVAE Encoder 压成 s_1 in R^{L x C_s}，如 1369 x 16
+  │
+  └─→ [纹理路] E_z(x) = z_1，如 R^{32 x 128 x 128}
+        记高频细节，可几乎无损解回像素
+```
+
+- **冻结参数**：`Phi` = DINOv2-Large、SemVAE 训好后冻结、Texture VAE 微调后冻结；冻结保证语义锚稳定，异步去噪才有意义。
+- **可训练参数**：双流 DiT 主干（1B / 2B / 5B）+ 双 timestep embedding + 输入输出投影；文本侧用 Qwen3-VL LLM hidden states 拼接。
+- **为什么还要 SemVAE**：DINO 特征太肥（1369 x 1024）直接扩散太贵。SemVAE 做 `f_s → mu, sigma → 采样 s_1 → 解回 f_hat_s`，目标为 MSE + 余弦 + KL，出图时语义潜直接扔掉，只解码纹理潜 `z_1`，语义只在中间当拐杖。
 
 ## 3. 损失函数与数学稳定性推导
 
