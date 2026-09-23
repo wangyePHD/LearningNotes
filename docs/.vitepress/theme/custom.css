@@ -1,0 +1,87 @@
+/* VitePress 全局主题与正文宽度优化样式 */
+
+:root {
+  /* 扩大整体站点的最大布局宽度（默认 1440px 太窄，导致现代屏幕两侧大量留白） */
+  --vp-layout-max-width: 1680px;
+}
+
+/* 1. 无侧边栏页面正文容器拓宽 */
+@media (min-width: 960px) {
+  .VPDoc:not(.has-sidebar) .container {
+    max-width: 1100px;
+  }
+  .VPDoc:not(.has-sidebar) .content {
+    max-width: 920px;
+  }
+}
+
+/* 2. 文档页面（有侧边栏）阶梯式拓宽中间阅读与内容区域 */
+@media (min-width: 1280px) {
+  /* 放开整个主体 container 上限（默认被 1104px 扼死） */
+  .VPDoc.has-sidebar .container {
+    max-width: 1240px;
+  }
+
+  /* 有右侧大纲导航 (has-aside) 时：原默认仅 688px，拓宽到 780px */
+  .VPDoc.has-aside .content-container {
+    max-width: 780px;
+  }
+
+  /* 无右侧大纲导航时：拓宽到 900px */
+  .VPDoc:not(.has-aside) .content-container {
+    max-width: 900px;
+  }
+}
+
+@media (min-width: 1440px) {
+  /* 1440px 及以上常见屏幕（MacBook Air / 常用显示器）：正文区进一步舒展到 880px */
+  .VPDoc.has-sidebar .container {
+    max-width: calc(var(--vp-layout-max-width) - 64px);
+  }
+
+  .VPDoc.has-aside .content-container {
+    max-width: 880px;
+  }
+
+  .VPDoc:not(.has-aside) .content-container {
+    max-width: 1020px;
+  }
+}
+
+@media (min-width: 1600px) {
+  /* 2K / 宽屏显示器下：提供充足的学术排版空间（公式、大表、代码、多联架构图） */
+  .VPDoc.has-aside .content-container {
+    max-width: 960px;
+  }
+
+  .VPDoc:not(.has-aside) .content-container {
+    max-width: 1120px;
+  }
+}
+
+@media (min-width: 1920px) {
+  /* 超宽屏体验 */
+  .VPDoc.has-aside .content-container {
+    max-width: 1020px;
+  }
+
+  .VPDoc:not(.has-aside) .content-container {
+    max-width: 1200px;
+  }
+}
+
+/* 3. 增强大表格展示舒适度（填满可用空间并支持横向平滑滚动） */
+.vp-doc table {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+/* 4. 图片自适应与居中 */
+.vp-doc p > img {
+  margin: 1.2rem auto;
+  display: block;
+  max-width: 100%;
+  border-radius: 8px;
+}
