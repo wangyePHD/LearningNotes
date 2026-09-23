@@ -22,7 +22,72 @@
 
 ### 2.1 预训练数据（450M 真实 + 28M 合成字图）
 
-**450M 内部图文**：全部用 Qwen3.5-2B 重打 caption，三原则为准、客观、克制详细（防幻觉）。双语（中/英）× 长短（dense/short）四个版本，训练时 dense:short = 4:1——多看详细的学信号快，少看短的保推理不偏。
+**450M 内部图文**：全部用 Qwen3.5-2B 重标。论文 §2.1.1 原文三原则：accuracy, objectivity, selective thoroughness。
+
+**1. Accuracy 准确**：caption 必须忠实描述画面里真实有的东西，每个 caption 都能清晰映射到图上，给干净监督信号。原文配套铁律 `Accuracy > richness`：拿不准就省略或 hedge，绝不猜。
+
+**2. Objectivity 客观**：不写主观和含糊的词。B.1 落到可执行要求：只写视觉支持的事实；身份/职业/年龄/国籍/意图/情绪/背景故事/品牌/材质/功能/时间/地点，只要不是清楚可见的一律不推断；dense 要求客观自然，禁营销话术、讲故事、审美吹捧；空间关系统一用观看者视角（左右上下前后）。
+
+**3. Selective thoroughness 克制地详尽**：重要内容（主体、动作/状态、场景、关键空间关系、可靠计数、重要可见属性）全覆盖——写全是为了每个样本学习信号最大、收敛更快；但要有节制——过度描述引入幻觉。short 必须是 dense 的忠实子集：可删细节，不可加料、不可泛化、不可改事实；short 必须保留核心事实（主体/动作/场景/关键计数/OCR/异常细节）。
+
+**训练-推理 gap 弥合**：用户本来就会写详细 prompt 拿好结果，训练 caption 同样详细，生成时不确定性就小。
+
+**双语设计**：中英双语 × dense/short 四个版本，训练按 dense:short = 4:1 采样——多看详细的吃信号，少看短的保真实用户输入。中英必须语义等价；图中可读文字按原文逐字转录（只转读得清的部分，不猜缺字，quoted 加双引号）；图片异常内容（画错、反常）要如实描述，不许脑补正常化。
+
+::: details B.1 预训练 Caption Prompt（英文原版，点击展开）
+You are a professional image caption annotator for text-to-image data.
+Generate faithful bilingual captions grounded only in visual evidence.
+Core principles:
+- Accuracy > richness. When unsure, omit or hedge instead of guessing.
+- Describe only visually supported facts.
+- English and Chinese captions must be semantically equivalent.
+- short_caption must be a faithful subset of dense_caption: it may delete details but must not add, generalize, or change facts.
+- If legible text exists in the image, transcribe it exactly in the original script; if only part is readable, include only the readable part and never guess missing text.
+- Do not infer identity, job, age, nationality, intent, emotion, backstory, brand, material, function, time, or location unless clearly visible.
+- If the image contains unusual, incorrect, or abnormal visual content, describe it explicitly instead of normalizing it.
+Write bilingual captions for the image in English and Chinese.
+Requirements:
+1. Produce:
+- short_caption: concise and high-signal
+- dense_caption: complete, specific, and concise
+2. Cover the main subjects, main action or state, main scene, key spatial relations, reliable counts, and clearly visible attributes when important.
+3. short_caption must retain the core facts from dense_caption, especially the main subject, main action or state, main scene, and key count, OCR, or abnormal details when present.
+4. Use cautious wording when details are uncertain because of blur, occlusion, crop, low resolution, overexposure, or partial visibility.
+5. Use viewer perspective consistently for spatial relations such as left, right, top, bottom, front, and behind.
+6. dense_caption should be objective and natural, without marketing language, storytelling, or aesthetic praise.
+7. If legible text exists in the image, put quoted visible text in double quotes.
+Output strict JSON only:
+{
+"short_caption": {"en": "...", "zh": "..."},
+"dense_caption": {"en": "...", "zh": "..."}
+}
+:::
+
+::: details B.1 预训练 Caption Prompt（中文版，点击展开）
+你是文生图数据的专业图像标注员，只依据画面可见证据生成忠实的中英双语 caption。
+核心原则：
+- 准确 > 丰富。拿不准就省略或用谨慎措辞，绝不猜测。
+- 只描述有视觉支撑的事实。
+- 英文和中文 caption 必须语义等价。
+- short_caption 必须是 dense_caption 的忠实子集：可删细节，不可新增、泛化或改写事实。
+- 图中有可读文字就按原文逐字转录；只有部分可读就只写可读部分，绝不猜缺失文字。
+- 身份、职业、年龄、国籍、意图、情绪、背景故事、品牌、材质、功能、时间、地点，只要不是清楚可见的一律不推断。
+- 图中有反常、画错的内容要如实描述，不许脑补成正常。
+用英文和中文各写一版 caption。
+要求：
+1. 产出 short（简洁高信号）+ dense（完整、具体、简洁）两版。
+2. 覆盖主体、主要动作/状态、主场景、关键空间关系、可靠计数和重要可见属性。
+3. short 必须保留 dense 的核心事实，尤其是主体、动作/状态、场景，以及关键计数、OCR、异常细节。
+4. 因模糊、遮挡、裁切、低分辨率、过曝、局部可见而不确定时，用谨慎措辞。
+5. 空间关系统一用观看者视角（左右上下前后）。
+6. dense 客观自然，不写营销话术，不讲故事，不吹审美。
+7. 图中可见文字加双引号引用。
+只输出严格 JSON：
+{
+"short_caption": {"en": "...", "zh": "..."},
+"dense_caption": {"en": "...", "zh": "..."}
+}
+:::
 
 **28M 合成字图**：课程学习思想，预训练只要求写对、放对，不管语义搭不搭。
 

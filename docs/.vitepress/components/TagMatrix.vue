@@ -132,7 +132,7 @@ const notesList = ref([
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
     date: '2026-09-23',
-    summary: '合成描述 caption 治 prompt following，混合比例越高越好；收录 SeFi 三原则原文级展开与 B.1 提示词中英可折叠版。',
+    summary: '合成描述 caption 治 prompt following，混合比例越高越好；范式演进指向 SeFi 笔记 §2.1 的三原则原文级展开。',
     tags: ['Vision', 'Diffusion', 'Caption', 'Recaption', 'Prompt Following']
   },
   {
