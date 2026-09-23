@@ -133,6 +133,21 @@ export default defineConfig({
             { text: '领域概览与路线图', link: '/domains/vision/' },
             { text: 'ControlNet 空间结构可控生成原理解析', link: '/domains/vision/diffusion-controlnet' }
           ]
+        },
+        {
+          text: '🧪 图像基模 RL 后训练 (2026)',
+          items: [
+            { text: '专题索引', link: '/domains/vision/image-rl-posttraining/' },
+            { text: 'Flow-GRPO 综述精读', link: '/domains/vision/image-rl-posttraining/flow-grpo-survey-2026' },
+            { text: 'GDRO 组级直接奖励优化', link: '/domains/vision/image-rl-posttraining/gdro-group-reward-2026' },
+            { text: 'FireRed-Image-Edit RL 全链路', link: '/domains/vision/image-rl-posttraining/firered-image-edit-rl' },
+            { text: 'Qwen-Image-2.0 RLHF 统一对齐', link: '/domains/vision/image-rl-posttraining/qwen-image-2-rl' },
+            { text: 'LLaDA-Image 全开源配方', link: '/domains/vision/image-rl-posttraining/llada-image-recipe' },
+            { text: 'Swift-Image 并行专家 RL', link: '/domains/vision/image-rl-posttraining/swift-image-rl' },
+            { text: 'ERNIE-Image 轻量 DPO', link: '/domains/vision/image-rl-posttraining/ernie-image-dpo' },
+            { text: 'SeFi-Image 在线 RL', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' },
+            { text: '对比总表与演进主线', link: '/domains/vision/image-rl-posttraining/rl-comparison-2026' }
+          ]
         }
       ],
 
