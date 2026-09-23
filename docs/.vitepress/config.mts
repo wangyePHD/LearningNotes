@@ -107,7 +107,11 @@ export default defineConfig({
         {
           text: '💡 科研灵感空间',
           items: [
-            { text: '科研 Idea 灵感池', link: '/ideas/' }
+            { text: '科研 Idea 灵感池', link: '/ideas/' },
+            { text: 'A. 盲连续指令统一复原编辑', link: '/ideas/proposal-a-blind-continuous-instruction' },
+            { text: 'B. 非对称保持高保真编辑', link: '/ideas/proposal-b-asymmetric-preservation-editing' },
+            { text: 'C. 尺度保真小物体试穿', link: '/ideas/proposal-c-scale-aware-tryon' },
+            { text: 'D. 检测诊断修复闭环', link: '/ideas/proposal-d-diagnose-repair-forensics' }
           ]
         }
       ],

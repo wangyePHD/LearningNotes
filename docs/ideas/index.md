@@ -47,6 +47,54 @@
 
 ---
 
+### 4. 能否用图像衍生连续指令替代文本提示，从而省去盲复原的任务标签与强度手调？ [详见 Proposal A →](./proposal-a-blind-continuous-instruction.md)
+- **记录时间**：2026-09-23
+- **状态**：🧪 [值得单卡跑个玩具 Demo] · **标签**：`#Image Editing` `#All-in-One Restoration` `#Hypothesis`
+- **灵感触发**：
+  受ImIR 2609.25267单卡3h六任务与AcFlow连续强度控制启发，文本prompt离散粗糙，降质图本身才是最精准指令。
+- **核心猜想 (Hypothesis)**：
+  若轻量mapper能闭合降质-干净VLM embedding gap，通过引入连续插值$c(\alpha)$与单LoRA共享，则盲复原PSNR可超文本基线且强度可调。
+- **潜在坑点与证伪路径**：
+  VLM对噪声敏感易学shortcut；先跑去雨+低光两任务超1dB再铺开，详见Proposal A第5节。
+
+---
+
+### 5. 能否阻断条件分支看噪声的反向流，从而在不损指令遵循下保住高频细节？ [详见 Proposal B →](./proposal-b-asymmetric-preservation-editing.md)
+- **记录时间**：2026-09-23
+- **状态**：🧪 [值得单卡跑个玩具 Demo] · **标签**：`#Image Editing` `#Attention` `#Hypothesis`
+- **灵感触发**：
+  受RealFit非对称流、SR-Edit自提纯、IABEdit VLM残差梯度启发，对称joint-attention是保真崩坏主因。
+- **核心猜想 (Hypothesis)**：
+  若阻断$C\to N$并固定条件调制$t^{\star}$，通过引入VLM残差loss+动力学对齐矫正，则PIE-Bench背景与CLIP双优。
+- **潜在坑点与证伪路径**：
+  过保守致CLIP-T掉>2%则只在早步阻断；阈值敏感需扫$t^{\star}$曲线，详见Proposal B第5节。
+
+---
+
+### 6. 小物体试穿能否用scale token一次解决大小错位，再用维度奖励治住刷分？ [详见 Proposal C →](./proposal-c-scale-aware-tryon.md)
+- **记录时间**：2026-09-23
+- **状态**：🧪 [值得单卡跑个玩具 Demo] · **标签**：`#Virtual Try-On` `#Fashion` `#Hypothesis`
+- **灵感触发**：
+  受JewelTry scale adapter、DAT 7维评价、TryOnReward foveated RFT启发，FID测不出尺度错，通用reward走捷径。
+- **核心猜想 (Hypothesis)**：
+  若真实尺寸编码为scale token做in-context学习，通过引入7维自适应加权RFT，则保真+尺度+背景三优且保持mask-free。
+- **潜在坑点与证伪路径**：
+  尺寸标注贵先用合成warm-start；小物体<2%像素需foveated加权，先跑戒指500对降20%误差再扩，详见Proposal C。
+
+---
+
+### 7. 多轮AI编辑的ripple能否用检测-诊断-修复闭环统一治愈而不误伤干净图？ [详见 Proposal D →](./proposal-d-diagnose-repair-forensics.md)
+- **记录时间**：2026-09-23
+- **状态**：🔬 [理论猜想] · **标签**：`#Forensics` `#AIGC Detection` `#Hypothesis`
+- **灵感触发**：
+  受FUSED检测定位统一、GLARE训练-free重构差、Mi-Ripple频域修复、GenShield VCoT启发，检测不修、修复不解释。
+- **核心猜想 (Hypothesis)**：
+  若global-local重构差+ VLM缺陷描述成立，通过引入指令预热+VCoT自纠+STOP学习，则检测与修复双SOTA且干净图零改动。
+- **潜在坑点与证伪路径**：
+  合成gap大需半真半合成；误检>15%回退监督头；过编辑靠STOP阈值约束，详见Proposal D。
+
+---
+
 ## ✍️ 新增 Idea 极简模板 (复制即用)
 
 ```markdown

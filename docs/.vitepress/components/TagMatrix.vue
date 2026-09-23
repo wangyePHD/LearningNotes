@@ -287,6 +287,42 @@ const notesList = ref([
     date: '2026-09-19',
     summary: '高维学术复盘：总结时空因子分解注意力降维证明、Wan2.1 8卡序列并行优化、及纯 RL 视频平滑度假说。',
     tags: ['Video Gen', 'Attention', 'CUDA', 'Flow Matching', 'GRPO', 'Weekly Review']
+  },
+  {
+    title: 'Proposal A：图像衍生连续指令盲统一复原编辑',
+    link: '/ideas/proposal-a-blind-continuous-instruction',
+    domain: '💡 Idea',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: '冻住Qwen-Image-Edit，轻量mapper预测干净指令，单LoRA六任务盲复原+alpha连续可控。',
+    tags: ['Image Editing', 'All-in-One Restoration', 'Qwen-Image-Edit', 'Hypothesis']
+  },
+  {
+    title: 'Proposal B：非对称保持高保真指令编辑',
+    link: '/ideas/proposal-b-asymmetric-preservation-editing',
+    domain: '💡 Idea',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: '阻断C-to-N单向流+解耦调制+VLM残差梯度，PIE-Bench背景与CLIP双优。',
+    tags: ['Image Editing', 'Attention', 'FLUX', 'Hypothesis']
+  },
+  {
+    title: 'Proposal C：尺度保真小物体虚拟试穿',
+    link: '/ideas/proposal-c-scale-aware-tryon',
+    domain: '💡 Idea',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: 'scale token编码真实尺寸+单向注意力+7维foveated reward，珠宝多件2K尺度不飘。',
+    tags: ['Virtual Try-On', 'Fashion', 'Reward', 'Hypothesis']
+  },
+  {
+    title: 'Proposal D：多轮编辑检测诊断修复闭环',
+    link: '/ideas/proposal-d-diagnose-repair-forensics',
+    domain: '💡 Idea',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: 'GLARE定位+VLM缺陷描述+VCoT自纠+STOP准则，检测修复统一跨生成器泛化。',
+    tags: ['Forensics', 'AIGC Detection', 'Hypothesis']
   }
 ])
 
