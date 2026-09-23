@@ -135,7 +135,9 @@ export default defineConfig({
           text: '🖼️ 图像与计算机视觉',
           items: [
             { text: '领域概览与路线图', link: '/domains/vision/' },
-            { text: 'ControlNet 空间结构可控生成原理解析', link: '/domains/vision/diffusion-controlnet' }
+            { text: 'ControlNet 空间结构可控生成原理解析', link: '/domains/vision/diffusion-controlnet' },
+            { text: 'Lens 训练效率重思考 (3.8B)', link: '/domains/vision/lens-efficiency-2026' },
+            { text: 'DALL-E 3 Recaption 范式', link: '/domains/vision/dalle3-recaption' }
           ]
         },
         {

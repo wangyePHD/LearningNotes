@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="500" viewBox="0 0 920 500" font-family="sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#666"/>
+    </marker>
+  </defs>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#333">Recaption 与效率演进 Lineage：DALL-E 3 → Lens → SeFi-Image</text>
+
+  <!-- Node 1 -->
+  <rect x="20" y="60" width="270" height="220" rx="10" fill="#eef4ff" stroke="#4a7ddb" stroke-width="2"/>
+  <text x="34" y="90" font-size="15" font-weight="bold" fill="#1f3a8a">2023 · DALL-E 3 (OpenAI)</text>
+  <text x="34" y="114" font-size="12.5" fill="#333">captioner = LM + CLIP 条件</text>
+  <text x="34" y="134" font-size="12.5" fill="#333">SSC(主体) → DSC(长详尽)</text>
+  <text x="34" y="154" font-size="12.5" fill="#333">95% 合成 caption 训练最优</text>
+  <text x="34" y="174" font-size="12.5" fill="#333">GPT-4 upsampling 消解歧义</text>
+  <text x="34" y="194" font-size="12.5" fill="#333">CLIP 更高 = 绑定更紧</text>
+  <text x="34" y="222" font-size="12" fill="#4a7ddb">范式开山：recaption</text>
+  <text x="34" y="244" font-size="12" fill="#4a7ddb">reasoner 的祖师爷</text>
+  <text x="34" y="266" font-size="12" fill="#4a7ddb">Betker et al. 2023</text>
+
+  <!-- Node 2 -->
+  <rect x="325" y="60" width="270" height="220" rx="10" fill="#eefbf0" stroke="#2e9e5b" stroke-width="2"/>
+  <text x="339" y="90" font-size="15" font-weight="bold" fill="#14532d">2026.5 · Lens (微软)</text>
+  <text x="339" y="114" font-size="12.5" fill="#333">GPT-4.1 × 800M，平均 109 词</text>
+  <text x="339" y="134" font-size="12.5" fill="#333">dense-only 训练最优(实测)</text>
+  <text x="339" y="154" font-size="12.5" fill="#333">混分辨率 batch，泛化 1440²</text>
+  <text x="339" y="174" font-size="12.5" fill="#333">FLUX.2 VAE + GPT-OSS 编码器</text>
+  <text x="339" y="194" font-size="12.5" fill="#333">3.8B，Z-Image 约 19.3% 算力</text>
+  <text x="339" y="222" font-size="12" fill="#2e9e5b">效率三因素：大小/密度/收敛</text>
+  <text x="339" y="244" font-size="12" fill="#2e9e5b">arXiv:2605.21573 · MIT 开源</text>
+  <text x="339" y="266" font-size="12" fill="#2e9e5b">Lens-RL-8K + Turbo 4 步</text>
+
+  <!-- Node 3 -->
+  <rect x="630" y="60" width="270" height="220" rx="10" fill="#fff7ec" stroke="#d97b1e" stroke-width="2"/>
+  <text x="644" y="90" font-size="15" font-weight="bold" fill="#7c3f0c">2026.6 · SeFi-Image</text>
+  <text x="644" y="114" font-size="12.5" fill="#333">Qwen3.5-2B × 450M 重标</text>
+  <text x="644" y="134" font-size="12.5" fill="#333">三原则：准确/客观/克制详尽</text>
+  <text x="644" y="154" font-size="12.5" fill="#333">dense:short = 4:1，中英双语</text>
+  <text x="644" y="174" font-size="12.5" fill="#333">SFD 语义隐变量先行去噪</text>
+  <text x="644" y="194" font-size="12.5" fill="#333">5B，Z-Image 约 10–20% 算力</text>
+  <text x="644" y="222" font-size="12" fill="#d97b1e">arXiv:2606.22568 · 全开源</text>
+  <text x="644" y="244" font-size="12" fill="#d97b1e">1B/2B/5B + Turbo</text>
+  <text x="644" y="266" font-size="12" fill="#d97b1e">28M 合成字图课程学习</text>
+
+  <!-- Arrows between eras -->
+  <line x1="290" y1="150" x2="322" y2="150" stroke="#666" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="272" y="138" font-size="11" fill="#666">演进</text>
+  <line x1="595" y1="150" x2="627" y2="150" stroke="#666" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="577" y="138" font-size="11" fill="#666">演进</text>
+
+  <!-- Efficiency baseline -->
+  <rect x="20" y="310" width="880" height="80" rx="10" fill="#f6f6f8" stroke="#999" stroke-width="1.5"/>
+  <text x="34" y="336" font-size="14" font-weight="bold" fill="#333">效率基线：Z-Image 6B ≈ 314K H800 hours = 100%</text>
+  <text x="34" y="360" font-size="12.5" fill="#333">Lens 3.8B ≈ 19.3%（192K A100 hours，按峰值 TFLOPS 归一化，recaption 成本不计）→ SeFi 5B ≈ 10–20%（125K A800 hours）</text>
+  <text x="34" y="379" font-size="12" fill="#888">注意：H800(989.5 TFLOPS) 本就强于 A800/A100(312 TFLOPS)，归一化后 SeFi 的差距比名义更大</text>
+
+  <!-- People line -->
+  <rect x="20" y="410" width="880" height="70" rx="10" fill="#f6f6f8" stroke="#999" stroke-width="1.5"/>
+  <text x="34" y="436" font-size="14" font-weight="bold" fill="#333">人物线（MSRA）：Chong Luo 同时出现在 SFD 基础工作与 Lens 作者表</text>
+  <text x="34" y="460" font-size="12.5" fill="#333">Semantics Lead the Way (SFD) → SeFi-Image（语义先行放大到 foundation）∥ Lens（信息密度放大到 foundation）—— 同一拨人从两个方向打效率</text>
+</svg>

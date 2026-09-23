@@ -118,6 +118,24 @@ const notesList = ref([
     tags: ['Vision', 'Diffusion', 'ControlNet', 'Zero-Conv']
   },
   {
+    title: 'Lens 训练效率重思考与 3.8B 小模型的越级',
+    link: '/domains/vision/lens-efficiency-2026',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: '效率三因素：模型大小、每 batch 数据信息密度、收敛速度；GPT-4.1 长 caption 平均 109 词，约 Z-Image 19.3% 算力。',
+    tags: ['Vision', 'Diffusion', 'Efficiency', 'Dense Caption', 'Lens']
+  },
+  {
+    title: 'DALL-E 3 Recaption 范式与 SeFi 三原则',
+    link: '/domains/vision/dalle3-recaption',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: '合成描述 caption 治 prompt following，混合比例越高越好；收录 SeFi 三原则原文级展开与 B.1 提示词中英可折叠版。',
+    tags: ['Vision', 'Diffusion', 'Caption', 'Recaption', 'Prompt Following']
+  },
+  {
     title: 'Flow-GRPO 综述：生成模型 GRPO 对齐全景',
     link: '/domains/vision/image-rl-posttraining/flow-grpo-survey-2026',
     domain: '🖼️ 图像视觉',
