@@ -1,76 +1,52 @@
 /* VitePress 全局主题与正文宽度优化样式 */
 
 :root {
-  /* 扩大整体站点的最大布局宽度（默认 1440px 太窄，导致现代屏幕两侧大量留白） */
-  --vp-layout-max-width: 1680px;
+  /* 全站最大版心放宽至 1600px（兼顾大屏阅读与高分辨率视网膜屏） */
+  --vp-layout-max-width: 1600px;
 }
 
-/* 1. 无侧边栏页面正文容器拓宽 */
+/* 1. 核心关键：突破 VitePress 官方对正文区域 688px (43rem) 的硬编码上限 */
+/* 注意：VPDoc.vue 内部采用了 scoped style，具有 [data-v-xxxx] 属性特异性，必须使用 !important 才能有效生效 */
+.VPDoc.has-aside .content-container,
+.VPDoc .content-container {
+  max-width: 100% !important;
+}
+
+/* 2. 修复 VitePress 在 1440px ~ 1600px（如 MacBook Air 常见视口）期间的断点边距负值问题 */
+@media (min-width: 1440px) and (max-width: 1599px) {
+  .VPContent.has-sidebar {
+    padding-inline-start: var(--vp-sidebar-width) !important;
+    padding-inline-end: 0 !important;
+  }
+  .VPSidebar {
+    padding-inline-start: 2rem !important;
+    width: var(--vp-sidebar-width) !important;
+  }
+}
+
+/* 3. 在 1600px 及以上超宽大屏下优雅居中 */
+@media (min-width: 1600px) {
+  .VPContent.has-sidebar {
+    padding-inline-start: calc((100% - var(--vp-layout-max-width)) / 2 + var(--vp-sidebar-width)) !important;
+    padding-inline-end: calc((100% - var(--vp-layout-max-width)) / 2) !important;
+  }
+  .VPSidebar {
+    padding-inline-start: max(2rem, calc((100% - (var(--vp-layout-max-width) - 4rem)) / 2)) !important;
+    width: calc((100% - (var(--vp-layout-max-width) - 4rem)) / 2 + var(--vp-sidebar-width) - 2rem) !important;
+  }
+}
+
+/* 4. 无侧边栏页面（单页文档）自适应拓宽 */
 @media (min-width: 960px) {
   .VPDoc:not(.has-sidebar) .container {
-    max-width: 1100px;
+    max-width: 1200px !important;
   }
   .VPDoc:not(.has-sidebar) .content {
-    max-width: 920px;
+    max-width: 1000px !important;
   }
 }
 
-/* 2. 文档页面（有侧边栏）阶梯式拓宽中间阅读与内容区域 */
-@media (min-width: 1280px) {
-  /* 放开整个主体 container 上限（默认被 1104px 扼死） */
-  .VPDoc.has-sidebar .container {
-    max-width: 1240px;
-  }
-
-  /* 有右侧大纲导航 (has-aside) 时：原默认仅 688px，拓宽到 780px */
-  .VPDoc.has-aside .content-container {
-    max-width: 780px;
-  }
-
-  /* 无右侧大纲导航时：拓宽到 900px */
-  .VPDoc:not(.has-aside) .content-container {
-    max-width: 900px;
-  }
-}
-
-@media (min-width: 1440px) {
-  /* 1440px 及以上常见屏幕（MacBook Air / 常用显示器）：正文区进一步舒展到 880px */
-  .VPDoc.has-sidebar .container {
-    max-width: calc(var(--vp-layout-max-width) - 64px);
-  }
-
-  .VPDoc.has-aside .content-container {
-    max-width: 880px;
-  }
-
-  .VPDoc:not(.has-aside) .content-container {
-    max-width: 1020px;
-  }
-}
-
-@media (min-width: 1600px) {
-  /* 2K / 宽屏显示器下：提供充足的学术排版空间（公式、大表、代码、多联架构图） */
-  .VPDoc.has-aside .content-container {
-    max-width: 960px;
-  }
-
-  .VPDoc:not(.has-aside) .content-container {
-    max-width: 1120px;
-  }
-}
-
-@media (min-width: 1920px) {
-  /* 超宽屏体验 */
-  .VPDoc.has-aside .content-container {
-    max-width: 1020px;
-  }
-
-  .VPDoc:not(.has-aside) .content-container {
-    max-width: 1200px;
-  }
-}
-
-/* 3. 增强大表格展示舒适度（填满可用空间并支持横向平滑滚动） */
+/* 5. 增强大表格展示舒适度（填满可用空间并支持横向平滑滚动） */
 .vp-doc table {
   width: 100%;
   display: block;
@@ -78,7 +54,7 @@
   margin: 1.5rem 0;
 }
 
-/* 4. 图片自适应与居中 */
+/* 6. 图片自适应与居中 */
 .vp-doc p > img {
   margin: 1.2rem auto;
   display: block;
