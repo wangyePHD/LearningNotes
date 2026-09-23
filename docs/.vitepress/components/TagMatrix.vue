@@ -137,6 +137,15 @@ const notesList = ref([
     summary: 'SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力；B.1 提示词中英可折叠。',
     tags: ['Vision', 'Diffusion', 'SeFi', 'SFD', 'Caption']
   },
+  {
+    title: 'Fine-T2I：6M 开源全维度文生图精调数据集与过滤工程',
+    link: '/domains/vision/datasets/fine-t2i',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-23',
+    summary: '600万规模、2TB容量的T2I开源精调集；44.8M到6M的95%淘汰率过滤管线，合成(Z-Image/FLUX2)+真实摄影(Pexels/Pixabay/Unsplash)，被SeFi 9M持续训练采纳。',
+    tags: ['Vision', 'Diffusion', 'Dataset', 'Fine-T2I', 'SFT', 'Data Engineering']
+  },
   // 续：RL 对比总表隐藏
   {
     title: 'DeepSeek-R1 推理涌现与强化学习机制',

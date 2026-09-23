@@ -145,6 +145,13 @@ export default defineConfig({
             { text: 'Lens 训练效率重思考 (3.8B)', link: '/domains/vision/caption-efficiency/lens-efficiency-2026' },
             { text: 'DALL-E 3 Recaption 范式', link: '/domains/vision/caption-efficiency/dalle3-recaption' }
           ]
+        },
+        {
+          text: '🗂️ AIGC 数据集专题',
+          items: [
+            { text: '数据集总览与知识库', link: '/domains/vision/datasets/' },
+            { text: 'Fine-T2I (6M 开源精调集)', link: '/domains/vision/datasets/fine-t2i' }
+          ]
         }
       ],
 
