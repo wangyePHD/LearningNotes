@@ -129,30 +129,21 @@ export default defineConfig({
         }
       ],
 
-      // 2. 图像与视觉专属侧边栏
+      // 2. 图像与视觉专属侧边栏（2026-09-23 起仅保留 SeFi + Caption 效率专题，其余摘入口）
       '/domains/vision/': [
         {
           text: '🖼️ 图像与计算机视觉',
           items: [
             { text: '领域概览与路线图', link: '/domains/vision/' },
-            { text: 'ControlNet 空间结构可控生成原理解析', link: '/domains/vision/diffusion-controlnet' },
-            { text: 'Lens 训练效率重思考 (3.8B)', link: '/domains/vision/lens-efficiency-2026' },
-            { text: 'DALL-E 3 Recaption 范式', link: '/domains/vision/dalle3-recaption' }
+            { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' }
           ]
         },
         {
-          text: '🧪 图像基模 RL 后训练 (2026)',
+          text: '📝 Caption 与效率专题',
           items: [
-            { text: '专题索引', link: '/domains/vision/image-rl-posttraining/' },
-            { text: 'Flow-GRPO 综述精读', link: '/domains/vision/image-rl-posttraining/flow-grpo-survey-2026' },
-            { text: 'GDRO 组级直接奖励优化', link: '/domains/vision/image-rl-posttraining/gdro-group-reward-2026' },
-            { text: 'FireRed-Image-Edit RL 全链路', link: '/domains/vision/image-rl-posttraining/firered-image-edit-rl' },
-            { text: 'Qwen-Image-2.0 RLHF 统一对齐', link: '/domains/vision/image-rl-posttraining/qwen-image-2-rl' },
-            { text: 'LLaDA-Image 全开源配方', link: '/domains/vision/image-rl-posttraining/llada-image-recipe' },
-            { text: 'Swift-Image 并行专家 RL', link: '/domains/vision/image-rl-posttraining/swift-image-rl' },
-            { text: 'ERNIE-Image 轻量 DPO', link: '/domains/vision/image-rl-posttraining/ernie-image-dpo' },
-            { text: 'SeFi-Image 在线 RL', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' },
-            { text: '对比总表与演进主线', link: '/domains/vision/image-rl-posttraining/rl-comparison-2026' }
+            { text: '专题索引', link: '/domains/vision/caption-efficiency/' },
+            { text: 'Lens 训练效率重思考 (3.8B)', link: '/domains/vision/caption-efficiency/lens-efficiency-2026' },
+            { text: 'DALL-E 3 Recaption 范式', link: '/domains/vision/caption-efficiency/dalle3-recaption' }
           ]
         }
       ],

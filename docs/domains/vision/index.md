@@ -6,7 +6,5 @@
 
 | 篇目 | 主题 / 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
-| **ControlNet 空间结构可控生成** | 零卷积 (Zero Convolution) 与可锁定权重复制 | 🟢 已完结 | [阅读笔记 →](./diffusion-controlnet.md) |
-| **Lens 训练效率重思考 (3.8B)** | 数据信息密度 + 收敛速度，Z-Image 19.3% 算力 | 🟢 已完结 | [阅读笔记 →](./lens-efficiency-2026.md) |
-| **DALL-E 3 Recaption 范式** | 合成描述 caption + 混合比例，SeFi 三原则原文级 | 🟢 已完结 | [阅读笔记 →](./dalle3-recaption.md) |
-| **图像基模 RL 后训练 (2026)** | GRPO / DPO / DiffusionNFT 十篇精读：综述、算法与 6 家模型 RL | 🟢 已完结 | [进入专题 →](./image-rl-posttraining/) |
+| **语义先行文生图基模 (SeFi-Image)** | SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力 | 🟢 精读中 | [阅读笔记 →](./image-rl-posttraining/sefi-image-rl.md) |
+| **Caption 与效率专题** | DALL-E 3 recaption 范式与 Lens 效率方法论，两篇精读 | 🟢 已完结 | [进入专题 →](./caption-efficiency/) |

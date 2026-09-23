@@ -108,18 +108,10 @@ const notesList = ref([
     summary: '从 2D UNet 级联到 3D Causal VAE 与 DiT 主干的演变，解析连续潜空间压缩与物理一致性建模。',
     tags: ['Video Gen', 'DiT', 'Diffusion', '3D VAE']
   },
-  {
-    title: 'ControlNet 空间结构可控生成原理解析',
-    link: '/domains/vision/diffusion-controlnet',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-19',
-    summary: '锁定主干与零卷积 (Zero Convolution) 结构，从数学上推导权重初始为 0 时前向恒等性与梯度传递有效性。',
-    tags: ['Vision', 'Diffusion', 'ControlNet', 'Zero-Conv']
-  },
+  // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
     title: 'Lens 训练效率重思考与 3.8B 小模型的越级',
-    link: '/domains/vision/lens-efficiency-2026',
+    link: '/domains/vision/caption-efficiency/lens-efficiency-2026',
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
     date: '2026-09-23',
@@ -128,94 +120,24 @@ const notesList = ref([
   },
   {
     title: 'DALL-E 3 Recaption 范式与 SeFi 三原则',
-    link: '/domains/vision/dalle3-recaption',
+    link: '/domains/vision/caption-efficiency/dalle3-recaption',
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
     date: '2026-09-23',
     summary: '合成描述 caption 治 prompt following，混合比例越高越好；范式演进指向 SeFi 笔记 §2.1 的三原则原文级展开。',
     tags: ['Vision', 'Diffusion', 'Caption', 'Recaption', 'Prompt Following']
   },
+  // 续：RL 专题其余 7 篇隐藏，保留 SeFi 条目
   {
-    title: 'Flow-GRPO 综述：生成模型 GRPO 对齐全景',
-    link: '/domains/vision/image-rl-posttraining/flow-grpo-survey-2026',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '稀疏奖励稠密化、树状信用分配、采样效率三主线，覆盖 DenseGRPO、TreeGRPO、DiffusionNFT 等 20+ 方法。',
-    tags: ['Vision', 'RL', 'GRPO', 'Flow Matching', 'Survey']
-  },
-  {
-    title: 'GDRO 组级直接奖励优化',
-    link: '/domains/vision/image-rl-posttraining/gdro-group-reward-2026',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '全离线组级优化、sampler 无关，退化到 DPO；提出 corrected score 量化 reward hacking，同分 2–3.7× 效率。',
-    tags: ['Vision', 'RL', 'GDRO', 'Reward Hacking', 'Offline']
-  },
-  {
-    title: 'FireRed-Image-Edit RL 落地全链路',
-    link: '/domains/vision/image-rl-posttraining/firered-image-edit-rl',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '非对称 DPO 接在线 DiffusionNFT，Layout-Aware OCR 奖励治大字刷分，可微一致性损失保人像身份。',
-    tags: ['Vision', 'RL', 'DPO', 'DiffusionNFT', 'Image Editing']
-  },
-  {
-    title: 'Qwen-Image-2.0 RLHF 统一对齐',
-    link: '/domains/vision/image-rl-posttraining/qwen-image-2-rl',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '五任务专用奖励动态权重 GRPO，CFG 杂交采样训练分离，Prompt Enhancer 用成图奖励做 GRPO。',
-    tags: ['Vision', 'RL', 'GRPO', 'Image Editing', 'Prompt Enhancer']
-  },
-  {
-    title: 'LLaDA-Image 全开源配方：无 RLHF 也 SOTA',
-    link: '/domains/vision/image-rl-posttraining/llada-image-recipe',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '真实数据 SFT 加 TwinFlow signed-time 蒸馏替代对齐，2–4 步 Turbo，阴性证据：RL 非必选项。',
-    tags: ['Vision', 'Distillation', 'TwinFlow', 'Open Recipe']
-  },
-  {
-    title: 'Swift-Image 并行专家 RL 与多教师蒸馏',
-    link: '/domains/vision/image-rl-posttraining/swift-image-rl',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '异构目标分专家 DiffusionNFT 到天花板再 OPD 统一，6B 243K GPU-h，Turbo 反超 teacher。',
-    tags: ['Vision', 'RL', 'DiffusionNFT', 'Distillation']
-  },
-  {
-    title: 'ERNIE-Image 轻量 DPO 与多教师蒸馏',
-    link: '/domains/vision/image-rl-posttraining/ernie-image-dpo',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: 'Flow Matching DPO 配双 anchor（0.35/0.15）防 collapse，MT-DMD 动态路由蒸馏，自研美学模型治奖励偏置。',
-    tags: ['Vision', 'RL', 'DPO', 'Distillation', 'Aesthetics']
-  },
-  {
-    title: 'SeFi-Image 在线 RL：双潜适配与能力标签',
+    title: '语义先行文生图基模 (SeFi-Image)',
     link: '/domains/vision/image-rl-posttraining/sefi-image-rl',
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
     date: '2026-09-23',
-    summary: '在线 NFT 适配 SFD 双潜空间，低离散度组丢弃加能力标签 prompt，RL 主改文字渲染构图不动。',
-    tags: ['Vision', 'RL', 'DiffusionNFT', 'SeFi', 'Text Rendering']
+    summary: 'SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力；B.1 提示词中英可折叠。',
+    tags: ['Vision', 'Diffusion', 'SeFi', 'SFD', 'Caption']
   },
-  {
-    title: '图像基模 RL 对比总表与演进主线',
-    link: '/domains/vision/image-rl-posttraining/rl-comparison-2026',
-    domain: '🖼️ 图像视觉',
-    domainClass: 'domain-vision',
-    date: '2026-09-23',
-    summary: '算法×奖励×基模一页总表，六条主线：DPO 必配锚、在线收敛 NFT、防 hack 两铁律、分专家再统一。',
-    tags: ['Vision', 'RL', 'Survey', 'Comparison']
-  },
+  // 续：RL 对比总表隐藏
   {
     title: 'DeepSeek-R1 推理涌现与强化学习机制',
     link: '/domains/llm/deepseek-r1-reasoning',
