@@ -1,6 +1,6 @@
 # 语义先行文生图基模 (SeFi-Image)
 
-> **标签**：`Vision` `Diffusion` `SeFi` `SFD` `Text-to-Image`
+> **标签**：`Vision` `Diffusion` `SeFi` `SFD` `VAE` `Text-to-Image`
 > **更新时间**：2026-09-26
 > **参考来源**：[SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](https://arxiv.org/abs/2606.22568) · [GitHub](https://github.com/jmliu206/SeFi-Image)
 
@@ -281,6 +281,88 @@ VFM 定方向，SemVAE 减肥，Texture VAE 保细节，DiT 照着提纲画画�
 - **可训练参数**：双流 DiT 主干（1B / 2B / 5B）+ 双 timestep embedding + 输入输出投影；文本侧用 Qwen3-VL LLM hidden states 拼接。
 - **为什么还要 SemVAE**：DINO 特征太肥（1369 x 1024）直接扩散太贵。SemVAE 做 `f_s → mu, sigma → 采样 s_1 → 解回 f_hat_s`，目标为 MSE + 余弦 + KL，出图时语义隐变量直接扔掉，只解码纹理隐变量 `z_1`，语义只在中间当拐杖。
 
+### 3.2 Texture VAE：把 KL 几乎关掉，换重建
+
+#### 为什么还要再微调一次
+
+Texture VAE **不是从头训**，而是在 **FLUX.2 VAE** 上继续 fine-tune。选它的理由：
+
+- 32 个 latent channel，容量是 FLUX.1 的两倍，原则上支持更强重建；
+- 原版已较好对齐语义结构，对生成模型友好（learnability 好）。
+
+但作者观察到一个问题：
+
+::: warning FLUX.2 VAE 的 posterior variance 偏大
+原文原话是「posterior distribution exhibits relatively large variance, unlike earlier VAE designs that more directly prioritize reconstruction fidelity」。作者**推测**（hypothesize，原文用词）这源于 FLUX.2 VAE 更强的 KL 正则——KL 平滑了 latent 分布，让 texture latent 空间更易被 diffusion 学习。
+:::
+
+这就是普通 LDM 里躲不掉的trade-off：
+
+| 推重建 | 推 KL |
+| :--- | :--- |
+| latent 存更多细节 | latent 更接近 $\mathcal N(0,I)$、更规整 |
+| 分布更复杂 | diffusion 更好学 |
+| **diffusion 更难收敛** | **重建细节损失** |
+
+**SFD 的破局点**：Texture latent 不再独自承担全部生成任务——「这是什么、在哪、结构如何」已由**更干净、更领先的 Semantic latent 兜底**，建模负担大幅下降。于是 Texture latent 就算变得更复杂、纯为高保真重建优化，整体仍学得动。
+
+$$
+\boxed{\ \text{语义旁路降低纹理建模难度} \;\Longrightarrow\; \text{可以牺牲 latent 的「好学性」换重建能力}\ }
+$$
+
+#### 训练目标与配置
+
+$$
+\mathcal L_{\text{TexVAE}}=\mathcal L_{\text{MSE}}+0.1\,\mathcal L_{\text{LPIPS}}+10^{-12}\,\mathcal L_{\text{KL}}
+$$
+
+- **$\lambda_{\text{KL}}=10^{-12}$ 是全篇最关键的超参**：几乎等于把 KL 关掉，让 Texture VAE 退化成一个「高保真压缩器」。
+- MSE 管像素级保真，LPIPS 管感知上的纹理与结构相似。
+- **不加 GAN loss**：作者认为该 autoencoder 已接近 lossless compression，没必要再让 GAN「脑补」视觉细节。
+
+| 配置项 | 值 |
+| :--- | :--- |
+| 数据 | pre-training images |
+| 增广 | $256\times256$ random crop（重建是局部低层任务，对最终训练分辨率不敏感） |
+| 学习率 | $5\times10^{-5}$ |
+| Global batch size | 32 |
+| 硬件 | 单节点 8×A800 |
+| 迭代 | 150K steps，约 **12 小时** |
+
+#### 为什么 posterior variance 大会伤害重建
+
+Encoder 输出的不是确定的 $z$，而是 $q(z\mid x)=\mathcal N(\mu,\sigma^2)$，真正送进 decoder 的是重参数化样本 $z=\mu+\sigma\epsilon$。**关键全在这个 $\sigma$。**
+
+| | $\sigma$ 很小时（如 0.01） | $\sigma$ 接近 1 时 |
+| :--- | :--- | :--- |
+| 实际送入 decoder 的 $z$ | $z\approx\mu$，同一图**几乎不变** | $z=\mu+\epsilon$，**明显波动** |
+| encoder 能否精确保存细节 | 能（纹理、边缘、小字都编码进精确数值） | 不能（细节被 sampling noise 淹没） |
+| decoder 学到什么 | 全部信息 | 只能学对 latent 波动**鲁棒**的部分（大结构、颜色、语义） |
+| 重建保真度 | 高 | 低 |
+
+那为什么还要让 $\sigma$ 偏大？因为 KL 项在把后验往先验推：
+
+$$
+D_{\text{KL}}\big(q(z\mid x)\,\Vert\,\mathcal N(0,I)\big)\quad\Longrightarrow\quad \mu\to 0,\quad \sigma\to 1
+$$
+
+::: danger 不要记反因果链
+**错误记法**：$\text{variance 大}\Rightarrow\text{latent 更规整}$
+
+**正确因果链**：
+
+$$
+\text{更强 KL}\;\longrightarrow\;q(z\mid x)\text{ 更接近 }\mathcal N(0,I)\;\longrightarrow\;\sigma\text{ 不会塌得很小}
+$$
+
+$\sigma$ 偏大本身**不是**「规整」的证据，而是「KL 太强、压不动 $\sigma$」的**症状**。它是一枚硬币的两面：
+
+- 正面：latent 分布更规则 $\to$ **diffusion 更容易学**
+- 背面：$\sigma\uparrow\to$ 采样随机性增加 $\to$ 精确信息难保存 $\to$ **重建保真度下降**
+:::
+
+SeFi 正是因为有 Semantic latent 帮 Texture latent 兜底，才**敢把 KL 几乎关掉**（$10^{-12}$），让 Texture VAE 专心做高保真压缩。这与 §5.3 的 Kodak PSNR $33.18\to36.40$、OmniDoc NED $0.9648$ 是同一件事的两面。
+
 ## 4. 损失函数与数学稳定性推导
 
 三阶段总目标（论文 Eq.6–8）：
@@ -362,7 +444,7 @@ $$
 
 ### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
 
-高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**：
+高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（机制与 $\sigma$/KL 分析见 [§3.2](#32-texture-vae把-kl-几乎关掉换重建)）：
 
 $$
 \text{更丰富的条件} \;\Longrightarrow\; \text{纹理隐变量待建模分布更窄} \;\Longrightarrow\; \text{更易生成}
