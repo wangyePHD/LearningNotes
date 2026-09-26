@@ -378,6 +378,7 @@ Image → Texture VAE          → Texture latent    颜色 / 纹理 / 细节 / 
 ```
 
 Semantic latent 只是生成过程中的**语义脚手架**，不是输出通道。扩散学到的是两者的联合生成，语义领先 $\Delta t$ 步帮纹理降难度（§5.1）。
+:::
 
 ### 3.3 Texture VAE：把 KL 几乎关掉，换重建
 
@@ -591,33 +592,91 @@ $$
 
 ### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
 
-高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（语义支路见 [§3.2](#_3-2-semantic-vae-压的是语义特征-不是图像)，$\sigma$/KL 分析见 [§3.3](#_3-3-texture-vae-把-kl-几乎关掉-换重建)）：
+#### 硬权衡：两个方向只能选一个
+
+| 路线 | 后果 |
+| :--- | :--- |
+| latent 保留更多图像细节 | latent 分布更复杂 $\to$ diffusion 要学更多、需更大容量、**收敛更慢** |
+| latent 压得很狠、只留语义 | 分布更平滑 $\to$ **diffusion 好学**，但还原成像素时细节/纹理/**小字损失** |
+
+这就是所谓 reconstruction–generation trade-off。**纯语义表征路线（RAE 等）之所以收敛快，正是因为它们走了第二条路**——但这条路有硬上限。
+
+::: danger 纯语义 latent 的死穴：VFM 前向是 Markov 过程
+「语义抽象」必然伴随**显著信息损失**（signal fidelity 差）。原文的致命推论是：
+
+> Purely modeling on such representations would **constrain the upper bound of consistency in fine-grained editing tasks and degrade the rendering of small text**.
+
+即：会**同时**压低细粒度编辑的一致性上限**和**小字渲染质量。Table 3 里 RAE 的 NED = 0.0392 就是这个死穴的数字形态。
+:::
+
+#### SFD 的破局：拆职责，而不是二选一
+
+SFD 不在两个方向里选边，而是**额外引入一个容量很小的 semantic latent**：
+
+- 它**故意丢掉**高密度、语义冗余的纹理细节；
+- **只保留**高层语义：物体、结构、布局、类别。
+
+于是 texture branch 不再需要从噪声里**同时**判断「画什么」和「怎么画细节」——语义 latent 已提前告知「画什么、结构在哪」，它只需在此条件下补细节。
 
 $$
-\text{更丰富的条件} \;\Longrightarrow\; \text{纹理隐变量待建模分布更窄} \;\Longrightarrow\; \text{更易生成}
+\underbrace{\text{更丰富的条件}}_{\text{semantic latent}}\;\Longrightarrow\;
+\underbrace{\text{同一条件下 texture 的可能性范围收窄}}_{\text{论文原句: the distribution the model must capture becomes narrower}}
+\;\Longrightarrow\; \text{更易生成}
 $$
 
-所以纹理 VAE 可以直接往重建质量上堆（本篇用微调 FLUX.2 VAE）：
+::: tip 关键在「职责分离」而非「压缩」
+普通 LDM 里，语义与纹理**共享同一个隐空间**，所以保细节与易建模直接冲突。SFD 把它们**劈成两个隐变量**，语义那份又小又规整（好学），纹理那份可以很大很精细（保真）——因为纹理不再独自承担语义负担。**纹理 latent 本身「变难了」，但整体生成难度没同比例上升。**
+:::
 
-| VAE (Kodak) | PSNR↑ | SSIM↑ | LPIPS↓ |
+这正是「Towards better reconstruction performance」标题的真正含义：**不是说「我们 VAE 训得更好了」，而是说 SFD 的结构自由度允许你把 VAE 往高保真方向推，而不会严重牺牲生成能力。** 有了这个授权，才敢对 FLUX.2 VAE 做 reconstruction-oriented 的激进微调（$\lambda_{KL}=10^{-12}$，见 [§3.3](#_3-3-texture-vae-把-kl-几乎关掉-换重建)）。
+
+#### Table 2 验证：普通图像重建（Kodak）
+
+| VAE | PSNR↑ | SSIM↑ | LPIPS↓ |
 | :--- | :--- | :--- | :--- |
 | SD1.5 | 26.66 | 0.7294 | 0.1452 |
 | FLUX.1 | 32.37 | 0.9063 | 0.0554 |
 | FLUX.2 | 33.18 | 0.9194 | 0.0442 |
 | **FLUX.2-finetuned (本篇)** | **36.40** | **0.9565** | **0.0235** |
 
-| VAE (OmniDoc-TokenBench, 3042 样本) | PSNR↑ | SSIM↑ | LPIPS↓ | FID↓ | NED↑ |
+三个指标**同时**改善（PSNR/SSIM 越高越好，LPIPS 越低越好）→ 不是单指标刷分，而是像素级与感知级重建一起推进。
+
+#### Table 3 验证：文字密集图像（OmniDoc-TokenBench，3042 样本）
+
+这张更关键——它专测**小字与文字布局**，正是 VAE 最容易压坏的场景。
+
+| VAE | PSNR↑ | SSIM↑ | LPIPS↓ | FID↓ | NED↑ |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | RAE-DINOv2-B | 14.32 | 0.3261 | 0.2290 | 18.21 | 0.0392 |
 | VAVAE | 17.50 | 0.6905 | 0.0974 | 4.45 | 0.3488 |
 | HunyuanImage-3.0 | 22.66 | 0.8672 | 0.0650 | 3.49 | 0.7753 |
 | Wan2.2 | 21.67 | 0.8577 | 0.0525 | 3.05 | 0.8310 |
+| FLUX.2 | 27.72 | 0.9544 | 0.0216 | 0.73 | 0.9535 |
 | Qwen-Image-VAE-2.0-f16c128 | 30.45 | 0.9706 | 0.0167 | 0.79 | 0.9617 |
 | **FLUX.2-finetuned (本篇)** | **30.91** | **0.9718** | **0.0133** | **0.46** | **0.9648** |
 
-::: warning 这张表就是「重建-生成权衡」的全部证据
-纯 VFM 表征路线（RAE）PSNR 仅 14.32、NED 0.0392——小字直接崩；语义增强但纠缠（VA-VAE）NED 只 0.3488。**只有「独立语义旁路 + 高保真纹理 VAE」才能同时拿下 0.9648 NED 和 0.46 FID。** SeFi 全部字号渲染收益（CVTG-2K / LongTextBench 第一）都建立在这张表上。
+- **NED** 可理解为**文字重建一致性**（越高越好）；LPIPS、FID 越低越好。
+- 本篇在 PSNR / SSIM / LPIPS / FID / NED 五项**全部第一**。
+
+::: tip 原文一个容易被忽略的加分项
+论文明确说这是 **without any specialized training on text-rich data**——即没有针对性加过文字数据，仅靠把 KL 压低就拿到 NED 0.9648。
 :::
+
+::: warning 三行读出三种失败模式
+- **RAE（纯 VFM 表征）**：NED 0.0392，PSNR 14.32 → 本节开头那个 Markov 死穴。
+- **VA-VAE（语义增强但纠缠）**：NED 0.3488 → 语义与纹理纠缠，压缩比与保真两头不讨好。
+- **FLUX.2（原版，KL 偏强）**：NED 0.9535 → 能用，但被本篇 0.9648 反超。
+
+**只有「独立语义旁路 + 高保真纹理 VAE」才能同时拿下 0.9648 NED 和 0.46 FID。** SeFi 全部字号渲染收益（CVTG-2K / LongTextBench 第一，§7.1）都建立在这张表上。
+:::
+
+#### 一句话压缩
+
+$$
+\boxed{\ \text{SFD 用一个易建模的 semantic latent 给 texture generation 提供强条件，因此允许 Texture VAE 保留更多细节、变得「更难」，但 diffusion 整体仍学得动——从而突破了普通 LDM 里重建质量与生成难度之间的硬权衡。}\ }
+$$
+
+Table 2 / Table 3 就是这句话的实证：这种架构自由度确实换来了更强的 VAE 重建能力，而且**在文字这种最难的高频细粒度结构上尤其明显**。
 
 ## 6. 核心控制层代码实现
 
