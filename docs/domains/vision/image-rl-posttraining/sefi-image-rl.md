@@ -739,7 +739,62 @@ def sfd_sample(v_theta, s_shape, z_shape, dt=0.1, n_steps=50, device="cuda", **c
 **长文本 + 字符级渲染 + 双语指令是 SFD 的主战场**（LongTextBench / CVTG-2K / OneIG 全部第一），因为语义分支提供结构骨架，擅长组织信息密集的长 prompt。**弱项是 DPG 的 Global 维度（88.24，全场最低）**，且 1B/2B 的长文本能力断崖（0.855 / 0.847）——长文本理解强依赖模型容量。
 :::
 
-### 7.2 RL 后训练增益（5B w/ vs w/o，见 [专题笔记 §C.2](./rl-comparison-2026.md)）
+### 7.2 RL Post-training（DiffusionNFT）：论文原文事实层
+
+> 本节只收 SeFi 论文 §5.5 + 附录 C + 表 10–15 明确写出的事实，不补论文没说的。详细对比另见 [专题笔记 §C.2](./rl-comparison-2026.md)。
+
+**目标**：prompt following、visual quality、artifact suppression、text rendering。RL **不改变 SFD 异步生成动力学，只改变 reward→loss 映射**；生成图经两套 VAE 重编码后拼成 clean target：
+
+$$
+z_{\text{comp}}=\operatorname{concat}(z_{\text{semantic}},z_{\text{texture}})
+$$
+
+且 DiffusionNFT 只依赖最终样本 + reward，**不存完整去噪 trajectory**。
+
+#### 数据选择：四条原文规则
+
+$$
+\boxed{\text{Prompt 要可稳定评价}}
+\qquad
+\boxed{\text{Prompt 带 capability tag，reward 按对应能力打分}}
+$$
+
+$$
+\boxed{\text{rollout 后保留 reward dispersion 足够大的 prompt groups}}
+\qquad
+\boxed{\text{组内再做 top-bottom selection}}
+$$
+
+- SeFi 把 online RL 看成 environment–feedback loop：prompt **按 consistent evaluability 选择**（首要条件是结果能被 reward 稳定评价），而非均匀随机采样。
+- Capability tag 论文只举例三个：**spatial composition、text rendering、artifact control**；reward 只沿相关维度打，防止"好看但语义错"被错误强化。
+- 每轮迭代 $\pi_i \xrightarrow{\text{generate}} \text{score} \rightarrow \text{filter} \rightarrow \text{train} \rightarrow \pi_{i+1}$：$K=400$ 组 × 每组 $M=12$ 候选 = **4800 张**；**整批先 score，零 gradient update**，rollout checkpoint 即 old-policy anchor。
+- Group 内 reward dispersion（std 或 range）过低的组直接丢弃；保留组内高 reward 做正梯度、低 reward 做隐式负信号。论文**没给** dispersion 阈值，也没说"全高/全低删"——不自行扩展。
+
+#### 算法：四个公式（附录 C.1）
+
+组内归一化 advantage（$\sigma$ 取 prompt-level 或 global std，$A_{\max}$ 数值未公开）：
+
+$$
+A_i=\frac{r_i-\operatorname{mean}_{j\in G(p)}(r_j)}{\sigma},
+\qquad
+\rho_i=\operatorname{clip}\left(\frac{\operatorname{clip}(A_i,-A_{\max},A_{\max})}{2A_{\max}}+\frac12,0,1\right)
+$$
+
+同一 noised latent 上当前预测 $v_\theta$ 与冻结 old policy 预测 $v_{\text{old}}$ 构造正负方向：
+
+$$
+v^+=\beta v_\theta+(1-\beta)v_{\text{old}},
+\qquad
+v^-=(1+\beta)v_{\text{old}}-\beta v_\theta
+$$
+
+$$
+\mathcal{L}_{\text{NFT}}=\rho_i\mathcal{L}^++(1-\rho_i)\mathcal{L}^-
+$$
+
+即高 reward 拿更大 positive 权重，低 reward 充当 implicit negatives，old policy 负责 anchor（$\beta$ 数值未公开）。
+
+#### 效果：只做过 5B before/after（正文 §6 取 w/ RL）
 
 | 基准 | w/o RL | w/ RL | Δ |
 | :--- | :--- | :--- | :--- |
@@ -749,7 +804,13 @@ def sfd_sample(v_theta, s_shape, z_shape, dt=0.1, n_steps=50, device="cuda", **c
 | OneIG-EN Overall | 0.5541 | **0.5606** | +0.0065 |
 | DPG-Bench Overall | 87.45 | 87.27 | −0.18 |
 
-RL 主要补文字渲染与指令遵循，**组合能力基本持平、DPG 略降**。
+子维度增量（表 10–15）：GenEval Counting +0.02、Position +0.03、Attr.Binding −0.01；DPG Global −4.82、Relation +1.01；LongText EN +0.0079、ZH +0.0151；CVTG NED +0.0069、WordAcc +0.0164、CLIP −0.0047；OneIG-ZH Text +0.0097、Alignment −0.0050；OneIG-EN Text +0.0148、Alignment −0.0055。
+
+**论文可支持的结论**：RL 明显强化文字生成和复杂 prompt following，compositional 基本稳定，但部分 alignment / DPG 子项有回退（Global −4.82 最显著）。
+
+::: warning 论文没公开的（一律不补）
+RL prompt 来源、总池大小、人工/模板/LLM 合成方式；capability 完整类别表与各能力采样比例；具体 reward 模型名、组合与权重；reward / dispersion 阈值；top-bottom 各取多少张；$A_{\max}$、$\beta$ 数值；RL iterations / batch / LR / GPU / 时长；1B / 2B 是否做过 RL（论文只给 5B ablation 与 w/ RL 主结果）。
+:::
 
 ### 7.3 Turbo（4 步 DMD2 蒸馏）
 
