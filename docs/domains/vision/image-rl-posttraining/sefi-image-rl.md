@@ -1,6 +1,6 @@
 # 语义先行文生图基模 (SeFi-Image)
 
-> **标签**：`Vision` `Diffusion` `SeFi` `SFD` `VAE` `Text-to-Image`
+> **标签**：`Vision` `Diffusion` `SeFi` `SFD` `VAE` `SemVAE` `DINOv2` `Text-to-Image`
 > **更新时间**：2026-09-26
 > **参考来源**：[SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](https://arxiv.org/abs/2606.22568) · [GitHub](https://github.com/jmliu206/SeFi-Image)
 
@@ -281,7 +281,105 @@ VFM 定方向，SemVAE 减肥，Texture VAE 保细节，DiT 照着提纲画画�
 - **可训练参数**：双流 DiT 主干（1B / 2B / 5B）+ 双 timestep embedding + 输入输出投影；文本侧用 Qwen3-VL LLM hidden states 拼接。
 - **为什么还要 SemVAE**：DINO 特征太肥（1369 x 1024）直接扩散太贵。SemVAE 做 `f_s → mu, sigma → 采样 s_1 → 解回 f_hat_s`，目标为 MSE + 余弦 + KL，出图时语义隐变量直接扔掉，只解码纹理隐变量 `z_1`，语义只在中间当拐杖。
 
-### 3.2 Texture VAE：把 KL 几乎关掉，换重建
+### 3.2 Semantic VAE：压的是语义特征，不是图像
+
+::: danger 最容易搞错的一点
+SemVAE **不是**把图像压成 latent，而是把**视觉基础模型已经提取好的高维 patch 语义特征**再压一层：
+
+$$
+\text{高维语义 feature}\to\text{低维 semantic latent}
+\qquad\text{而非}\qquad
+\text{image}\to\text{image latent}
+$$
+
+所以它的重建目标是 **VFM feature**，不是 RGB 图像。这也是它区别于 Texture VAE 的根本定位。
+:::
+
+#### 完整数据流
+
+$$
+f_s=\Phi(x)\in\mathbb{R}^{L\times C_{in}}
+$$
+
+$\Phi$ 冻结（DINOv2-Large，$C_{in}=1024$）。$f_s$ 已不是 RGB，而是一张「语义特征图」——表达哪里是人、哪里是车、结构关系如何，**不含像素纹理**。
+
+**Encoder** 结构：Linear Projection → **4 × Transformer blocks** → LayerNorm → Linear Projection
+
+$$
+h_s=\mathcal E_s(f_s)\in\mathbb{R}^{L\times 2C_s}
+$$
+
+通道一分为二作为对角高斯后验参数，再按重参数化采样：
+
+$$
+\mu_s,\sigma_s^2=h_s[:, :C_s],\ h_s[:, C_s:]
+$$
+$$
+s_1=\mu_s+\sigma_s\odot\epsilon,\qquad \epsilon\sim\mathcal N(0,I)
+$$
+
+::: tip 「只压通道、不压空间」是硬约束
+$s_1$ 长度仍是 $L$——patch token 的空间布局原样保留，只把每个 token 的 feature 维度从 $C_{in}$ 压到 $C_s$。**它不是 global vector，而是保持「哪里对应哪里」的 spatial token layout。** 这正是 $s_1$ 能与 $z_1$ 沿通道直接拼接的前提（见 §5.1）。
+:::
+
+::: warning $C_s$ 的具体数值 SeFi 未披露
+原文只写「$C_s$ is the semantic latent dimension」，**没有给数字**。你笔记里假设的 64/128 属于举例。作为对照，SFD 原文在 ImageNet 256×256 上的消融是 $C_s\in\{2,4,8,16\}$，**16 最优且无饱和拐点**。SeFi 改用 DINOv2-Large（$C_{in}=1024$，SFD 用 B 时是 768），压缩比更大。
+:::
+
+**Decoder** 镜像 encoder 结构，方向相反：$\hat f_s=\mathcal D_s(s_1)$，尽力还原回原 VFM feature。
+
+#### 训练目标
+
+$$
+\mathcal L_{\text{MSE}}=\big\|\hat f_s-f_s\big\|_2^2,\qquad
+\mathcal L_{\cos}=1-\frac{\hat f_s\cdot f_s}{\|\hat f_s\|_2\|f_s\|_2}
+$$
+
+$$
+\mathcal L_{KL}=D_{KL}\big(q(s_1\mid f_s)\,\Vert\,\mathcal N(0,I)\big)
+$$
+
+$$
+\mathcal L_{\text{SemVAE}}=\mathcal L_{\text{MSE}}+\mathcal L_{\cos}+\lambda_{KL}\mathcal L_{KL},\qquad \lambda_{KL}=10^{-7}
+$$
+
+两个重建项的分工：MSE 管**数值**接近，cosine 管**方向**一致——视觉特征的语义常与方向强相关，光靠 MSE 不够。
+
+#### $\lambda_{KL}$ 比 Texture VAE 大 5 个数量级
+
+| | SemVAE | Texture VAE |
+| :--- | :--- | :--- |
+| $\lambda_{KL}$ | $10^{-7}$ | $10^{-12}$ |
+| 隐变量定位 | 紧凑、规则、**易生成**的语义表示 | 近乎 lossless 的**高保真压缩器** |
+
+::: info 这个落差是自洽的（解读，非原文明说）
+Semantic latent 的首要目标是「好生成」而非像素无损，所以容许更强的 KL 正则；Texture latent 要保存高频细节，KL 必须几乎压没。**一个要「好学」，一个要「保真」——这正好对应 §3.3 与 §5.3 的全部设计动机。**
+:::
+
+#### 训练与冻结
+
+- $\Phi$ 全程冻结，只训 $\mathcal E_s,\mathcal D_s$，**在 diffusion 训练之前独立完成**。
+- 训完**只保留 encoder**，decoder 丢弃。
+- 之后每张图走：$x\to\Phi(x)\to\mathcal E_s\to s_1$。
+- 训练配置：与 Texture VAE 同数据，global batch size **64**，lr $5\times10^{-5}$，**1M iterations**，单节点 8×A800 约 **48 小时**。
+
+#### Semantic latent 不参与最终解码
+
+::: warning 原文明确
+> The final image is decoded solely from the texture latent.
+
+```
+Image → VFM(冻结) → SemVAE Enc → Semantic latent   这是什么 / 结构如何 / 各区域是什么
+Image → Texture VAE          → Texture latent    颜色 / 纹理 / 细节 / 可重建成图像
+                                        ↓
+                              SFD 联合建模，语义领先一步
+                                        ↓
+                        Texture VAE Dec → Image   （semantic latent 丢弃）
+```
+
+Semantic latent 只是生成过程中的**语义脚手架**，不是输出通道。扩散学到的是两者的联合生成，语义领先 $\Delta t$ 步帮纹理降难度（§5.1）。
+
+### 3.3 Texture VAE：把 KL 几乎关掉，换重建
 
 #### 为什么还要再微调一次
 
@@ -444,7 +542,7 @@ $$
 
 ### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
 
-高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（机制与 $\sigma$/KL 分析见 [§3.2](#32-texture-vae把-kl-几乎关掉换重建)）：
+高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（语义支路见 [§3.2](#32-semantic-vae压的是语义特征不是图像)，$\sigma$/KL 分析见 [§3.3](#33-texture-vae把-kl-几乎关掉换重建)）：
 
 $$
 \text{更丰富的条件} \;\Longrightarrow\; \text{纹理隐变量待建模分布更窄} \;\Longrightarrow\; \text{更易生成}
