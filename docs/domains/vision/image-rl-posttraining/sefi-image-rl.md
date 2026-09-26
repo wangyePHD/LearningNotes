@@ -355,7 +355,7 @@ s_1=\mu_s+\sigma_s\odot\epsilon,\qquad \epsilon\sim\mathcal N(0,I)
 $$
 
 ::: tip 「只压通道、不压空间」是硬约束
-$s_1$ 长度仍是 $L$——patch token 的空间布局原样保留，只把每个 token 的 feature 维度从 $C_{in}$ 压到 $C_s$。**它不是 global vector，而是保持「哪里对应哪里」的 spatial token layout。** 这正是 $s_1$ 能与 $z_1$ 沿通道直接拼接的前提（见 §5.1）。
+$s_1$ 长度仍是 $L$——patch token 的空间布局原样保留，只把每个 token 的 feature 维度从 $C_{in}$ 压到 $C_s$。**它不是 global vector，而是保持「哪里对应哪里」的 spatial token layout。** 这正是 $s_1$ 能与 $z_1$ 沿通道直接拼接的前提（见 §3.4）。
 :::
 
 ::: warning $C_s$ 的具体数值 SeFi 未披露
@@ -389,7 +389,7 @@ $$
 | 隐变量定位 | 紧凑、规则、**易生成**的语义表示 | 近乎 lossless 的**高保真压缩器** |
 
 ::: info 这个落差是自洽的（解读，非原文明说）
-Semantic latent 的首要目标是「好生成」而非像素无损，所以容许更强的 KL 正则；Texture latent 要保存高频细节，KL 必须几乎压没。**一个要「好学」，一个要「保真」——这正好对应 §3.3 与 §5.3 的全部设计动机。**
+Semantic latent 的首要目标是「好生成」而非像素无损，所以容许更强的 KL 正则；Texture latent 要保存高频细节，KL 必须几乎压没。**一个要「好学」，一个要「保真」——这正好对应 §3.3 与 §5 的全部设计动机。**
 :::
 
 #### 训练与冻结
@@ -413,7 +413,7 @@ Image → Texture VAE          → Texture latent    颜色 / 纹理 / 细节 / 
                         Texture VAE Dec → Image   （semantic latent 丢弃）
 ```
 
-Semantic latent 只是生成过程中的**语义脚手架**，不是输出通道。扩散学到的是两者的联合生成，语义领先 $\Delta t$ 步帮纹理降难度（§5.1）。
+Semantic latent 只是生成过程中的**语义脚手架**，不是输出通道。扩散学到的是两者的联合生成，语义领先 $\Delta t$ 步帮纹理降难度（§3.4）。
 :::
 
 ### 3.3 Texture VAE：把 KL 几乎关掉，换重建
@@ -496,7 +496,7 @@ $\sigma$ 偏大本身**不是**「规整」的证据，而是「KL 太强、压�
 - 背面：$\sigma\uparrow\to$ 采样随机性增加 $\to$ 精确信息难保存 $\to$ **重建保真度下降**
 :::
 
-SeFi 正是因为有 Semantic latent 帮 Texture latent 兜底，才**敢把 KL 几乎关掉**（$10^{-12}$），让 Texture VAE 专心做高保真压缩。这与 §5.3 的 Kodak PSNR $33.18\to36.40$、OmniDoc NED $0.9648$ 是同一件事的两面。
+SeFi 正是因为有 Semantic latent 帮 Texture latent 兜底，才**敢把 KL 几乎关掉**（$10^{-12}$），让 Texture VAE 专心做高保真压缩。这与 §5 的 Kodak PSNR $33.18\to36.40$、OmniDoc NED $0.9648$ 是同一件事的两面。
 
 ### 3.4 DiT 主干与文本编码器
 
@@ -529,7 +529,7 @@ FLUX.2 [klein] 风格主干，**double-stream MMDiT blocks + single-stream block
 :::
 
 ::: warning 改造 2：单 timestep → 双 timestep 条件
-把原来单一的 timestep embedding 换成**双 timestep 条件**：$t_s$ 与 $t_z$ 分别嵌入、拼接，然后**调制所有 transformer blocks**。这是让主干在每个去噪步都感知到两条流的**异步噪声水平**的机制——§5.1 三阶段调度的模型侧实现。
+把原来单一的 timestep embedding 换成**双 timestep 条件**：$t_s$ 与 $t_z$ 分别嵌入、拼接，然后**调制所有 transformer blocks**。这是让主干在每个去噪步都感知到两条流的**异步噪声水平**的机制——三阶段调度的模型侧实现（代码见 §6）。
 :::
 
 #### 三个变体的完整配置（论文 Table 1）
@@ -576,59 +576,9 @@ $y^*=f(x_1)$ 既是 REPA 的监督目标，**又是 SemVAE 的输入**。因此 
 $\beta$ 过大会压制纹理学习（原文消融：$\beta$=8 时 FID 3.96 vs $\beta$=2 时 3.03）。
 :::
 
-## 5. 保真度与风格化权衡 (Trade-off Analysis)
+## 5. 实验：VAE 重建实证（Table 2 / Table 3）
 
-### 5.1 异步调度在 $(t_s,t_z)$ 平面上的形状
-
-$$
-t_s\sim\mathcal U(0,1+\Delta t),\qquad t_z=\max(0,\,t_s-\Delta t),\qquad t_s\leftarrow\min(t_s,1)
-$$
-
-::: danger 两个钳位各管一件事，且顺序不可换
-- `max(0,·)`：$t_s<\Delta t$ 时纹理锁死在 $t_z=0$（纯噪声）$\Rightarrow$ Stage I 只动语义。
-- `min(·,1)`：$t=1$ 已是干净，语义没有「更干净」$\Rightarrow$ Stage III 语义钉死。
-- **$t_z$ 必须用未钳位的 $t_s$ 算**。若先 `min` 再减 $\Delta t$，$t_z$ 上限被压到 $1-\Delta t$，**纹理永远画不完**。
-- 采样上界取 $1+\Delta t$ 而非 1：否则 $t_z$ 到不了 1。
-:::
-
-```
-t_z
- 1.0 |                              ● (1,1) 两路皆净
-     |                              │  ③ 垂直 Stage III
-1-Δt |                  ● (1,1-Δt)   │     语义钉死，纹理收尾
-     |              ╱                │
- Δt |      ● (Δt,0)                 │  ② 对角 Stage II
-     |      │                       │     斜率恒 1，偏移恒 Δt
- 0.0 |●─────┘  ① 水平 Stage I       │     语义初始化，纹理纯噪声
-     +------------------------------+----→ t_s
-      0        Δt                  1.0
-```
-
-| 阶段 | $t_s$ | $t_z$ | 掩码 $(M_s,M_z)$ | 行为 |
-| :--- | :--- | :--- | :--- | :--- |
-| I 语义初始化 | $[0,\Delta t)$ | $0$ | $(1,0)$ | 只画蓝图 |
-| II 异步生成 | $[\Delta t,1]$ | $[0,1-\Delta t)$ | $(1,1)$ | 边画边描，恒定领先 |
-| III 纹理收尾 | $1$ | $[1-\Delta t,1]$ | $(0,1)$ | 精修细节 |
-
-$$
-\hat v=[M_s\odot\hat v_s,\ M_z\odot\hat v_z],\qquad M_s\in\{0,1\}^{B\times C_s\times H\times W},\ M_z\in\{0,1\}^{B\times C_z\times H\times W}
-$$
-
-::: tip 「不增加推理步数」的技巧
-时间范围从 $[0,1]$ 拉长到 $[0,1+\Delta t]$（Stage III 需要），但**同比放大步长间隔**，总步数不变。完成后**只解码 $z_1$**，$s_1$ 丢弃。
-:::
-
-### 5.2 $\Delta t$ 随分辨率递减
-
-| 分辨率 | 256px | 512px | 768px | 1024px |
-| :--- | :--- | :--- | :--- | :--- |
-| $\Delta t$ | 0.2 | 0.2 | **0.1** | **0.1** |
-
-原文未给该调度消融（属工程观察）。SFD 原文在 256px 上最优值为 0.3。**4 步 DMD2 蒸馏时同样保留 $\Delta t=0.1$ 的领先规则**，以免破坏三阶段结构。
-
-### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
-
-#### 硬权衡：两个方向只能选一个
+### 硬权衡：两个方向只能选一个
 
 | 路线 | 后果 |
 | :--- | :--- |
@@ -645,7 +595,7 @@ $$
 即：会**同时**压低细粒度编辑的一致性上限**和**小字渲染质量。Table 3 里 RAE 的 NED = 0.0392 就是这个死穴的数字形态。
 :::
 
-#### SFD 的破局：拆职责，而不是二选一
+### SFD 的破局：拆职责，而不是二选一
 
 SFD 不在两个方向里选边，而是**额外引入一个容量很小的 semantic latent**：
 
@@ -666,7 +616,7 @@ $$
 
 这正是「Towards better reconstruction performance」标题的真正含义：**不是说「我们 VAE 训得更好了」，而是说 SFD 的结构自由度允许你把 VAE 往高保真方向推，而不会严重牺牲生成能力。** 有了这个授权，才敢对 FLUX.2 VAE 做 reconstruction-oriented 的激进微调（$\lambda_{KL}=10^{-12}$，见 [§3.3](#_3-3-texture-vae-把-kl-几乎关掉-换重建)）。
 
-#### Table 2 验证：普通图像重建（Kodak）
+### Table 2 验证：普通图像重建（Kodak）
 
 | VAE | PSNR↑ | SSIM↑ | LPIPS↓ |
 | :--- | :--- | :--- | :--- |
@@ -677,7 +627,7 @@ $$
 
 三个指标**同时**改善（PSNR/SSIM 越高越好，LPIPS 越低越好）→ 不是单指标刷分，而是像素级与感知级重建一起推进。
 
-#### Table 3 验证：文字密集图像（OmniDoc-TokenBench，3042 样本）
+### Table 3 验证：文字密集图像（OmniDoc-TokenBench，3042 样本）
 
 这张更关键——它专测**小字与文字布局**，正是 VAE 最容易压坏的场景。
 
@@ -706,7 +656,7 @@ $$
 **只有「独立语义旁路 + 高保真纹理 VAE」才能同时拿下 0.9648 NED 和 0.46 FID。** SeFi 全部字号渲染收益（CVTG-2K / LongTextBench 第一，§7.1）都建立在这张表上。
 :::
 
-#### 一句话压缩
+### 一句话压缩
 
 $$
 \boxed{\ \text{SFD 用一个易建模的 semantic latent 给 texture generation 提供强条件，因此允许 Texture VAE 保留更多细节、变得「更难」，但 diffusion 整体仍学得动——从而突破了普通 LDM 里重建质量与生成难度之间的硬权衡。}\ }
@@ -796,7 +746,7 @@ RL 主要补文字渲染与指令遵循，**组合能力基本持平、DPG 略�
 
 ### 7.4 五个避坑要点
 
-1. **不要先钳位再算 $t_z$**（见 §5.1），纹理永远画不完。
+1. **不要先钳位再算 $t_z$**（见 §6），纹理永远画不完。
 2. **不要照搬 SFD 的 $\Delta t=0.3$**。本篇 1024px 用 0.1，且随分辨率递减。
 3. **不要把 $\beta$ 一直锁在 2**。CT/SFT 必须降到 1，否则纹理细节被压制。
 4. **不要用纯语义表征当纹理 latent**。表中 RAE 的 NED 0.0392 是前车之鉴。
