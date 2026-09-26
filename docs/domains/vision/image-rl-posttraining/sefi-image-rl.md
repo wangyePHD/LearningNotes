@@ -7,7 +7,7 @@
 ---
 
 ::: warning 前置知识
-本文 §3 的 SFD 机制（复合隐空间、双时间步 $\Delta t$、三阶段掩码调度、REPA 重解码）全部来自 **Semantic-First Diffusion (CVPR 2026)**，本文只做 T2I 化改造。**未读前置篇请先看**：[语义先行扩散范式 (SFD)](../sfd-semantic-first-diffusion.md)。原文消融（$\Delta t$、$\beta$、$C_s$、VFM 尺度、REPA 深度）与本文 §4–§7 的 TODO 段均依赖该篇。
+本文 §3 的 SFD 机制（复合隐空间、双时间步 $\Delta t$、三阶段掩码调度、REPA 重解码）全部来自 **Semantic-First Diffusion (CVPR 2026)**，本文只做 T2I 化改造。**未读前置篇请先看**：[语义先行扩散范式 (SFD)](../sfd-semantic-first-diffusion.md)。
 :::
 
 ---
@@ -283,16 +283,204 @@ VFM 定方向，SemVAE 减肥，Texture VAE 保细节，DiT 照着提纲画画�
 
 ## 4. 损失函数与数学稳定性推导
 
-TODO：公式 6-8，velocity + REPA。
+三阶段总目标（论文 Eq.6–8）：
+
+$$
+\mathcal{L}_{\text{pred}}=\mathbb{E}\Big[\big\|\hat{v}_z-(z_1-z_0)\big\|_2^2+\beta\big\|\hat{v}_s-(s_1-s_0)\big\|_2^2\Big]
+$$
+
+$$
+\mathcal{L}_{\text{REPA}}(\psi,\phi)=-\mathbb{E}\big[\mathcal{L}_{\text{sim}}(y^*,\,h_\phi(h_t))\big],\qquad h_t=f_\psi([s_{t_s},z_{t_z}],[t_s,t_z])
+$$
+
+$$
+\mathcal{L}_{\text{total}}=\mathcal{L}_{\text{pred}}+\lambda\,\mathcal{L}_{\text{REPA}}
+$$
+
+::: info REPA 目标对齐的是「同一份」DINOv2 特征
+$y^*=f(x_1)$ 既是 REPA 的监督目标，**又是 SemVAE 的输入**。因此 $\mathcal{L}_{\text{REPA}}$ 可读作「把噪声语义隐变量 $s_{t_s}$ 解码回干净语义表征」——比原版 REPA 的「从零蒸馏分析」更易优化，故对齐深度只需取第 2 层（原文消融 depth 2 最优，depth 8 次之）。
+:::
+
+::: warning $\beta$ 的课程调度是 SFD 原文没有的
+| 阶段 | $\beta$ | 意图 |
+| :--- | :--- | :--- |
+| 预训练 | **2** | 语义权重加倍，强迫 DiT 先学稳 DINOv2 抽象的结构锚 |
+| CT / SFT | **1** | 结构已稳，降至 1:1 让模型精刻画纹理高频细节 |
+
+$\beta$ 过大会压制纹理学习（原文消融：$\beta$=8 时 FID 3.96 vs $\beta$=2 时 3.03）。
+:::
 
 ## 5. 保真度与风格化权衡 (Trade-off Analysis)
 
-TODO：重建-生成曲线、Δt、三阶段调度。
+### 5.1 异步调度在 $(t_s,t_z)$ 平面上的形状
+
+$$
+t_s\sim\mathcal U(0,1+\Delta t),\qquad t_z=\max(0,\,t_s-\Delta t),\qquad t_s\leftarrow\min(t_s,1)
+$$
+
+::: danger 两个钳位各管一件事，且顺序不可换
+- `max(0,·)`：$t_s<\Delta t$ 时纹理锁死在 $t_z=0$（纯噪声）$\Rightarrow$ Stage I 只动语义。
+- `min(·,1)`：$t=1$ 已是干净，语义没有「更干净」$\Rightarrow$ Stage III 语义钉死。
+- **$t_z$ 必须用未钳位的 $t_s$ 算**。若先 `min` 再减 $\Delta t$，$t_z$ 上限被压到 $1-\Delta t$，**纹理永远画不完**。
+- 采样上界取 $1+\Delta t$ 而非 1：否则 $t_z$ 到不了 1。
+:::
+
+```
+t_z
+ 1.0 |                              ● (1,1) 两路皆净
+     |                              │  ③ 垂直 Stage III
+1-Δt |                  ● (1,1-Δt)   │     语义钉死，纹理收尾
+     |              ╱                │
+ Δt |      ● (Δt,0)                 │  ② 对角 Stage II
+     |      │                       │     斜率恒 1，偏移恒 Δt
+ 0.0 |●─────┘  ① 水平 Stage I       │     语义初始化，纹理纯噪声
+     +------------------------------+----→ t_s
+      0        Δt                  1.0
+```
+
+| 阶段 | $t_s$ | $t_z$ | 掩码 $(M_s,M_z)$ | 行为 |
+| :--- | :--- | :--- | :--- | :--- |
+| I 语义初始化 | $[0,\Delta t)$ | $0$ | $(1,0)$ | 只画蓝图 |
+| II 异步生成 | $[\Delta t,1]$ | $[0,1-\Delta t)$ | $(1,1)$ | 边画边描，恒定领先 |
+| III 纹理收尾 | $1$ | $[1-\Delta t,1]$ | $(0,1)$ | 精修细节 |
+
+$$
+\hat v=[M_s\odot\hat v_s,\ M_z\odot\hat v_z],\qquad M_s\in\{0,1\}^{B\times C_s\times H\times W},\ M_z\in\{0,1\}^{B\times C_z\times H\times W}
+$$
+
+::: tip 「不增加推理步数」的技巧
+时间范围从 $[0,1]$ 拉长到 $[0,1+\Delta t]$（Stage III 需要），但**同比放大步长间隔**，总步数不变。完成后**只解码 $z_1$**，$s_1$ 丢弃。
+:::
+
+### 5.2 $\Delta t$ 随分辨率递减
+
+| 分辨率 | 256px | 512px | 768px | 1024px |
+| :--- | :--- | :--- | :--- | :--- |
+| $\Delta t$ | 0.2 | 0.2 | **0.1** | **0.1** |
+
+原文未给该调度消融（属工程观察）。SFD 原文在 256px 上最优值为 0.3。**4 步 DMD2 蒸馏时同样保留 $\Delta t=0.1$ 的领先规则**，以免破坏三阶段结构。
+
+### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
+
+高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**：
+
+$$
+\text{更丰富的条件} \;\Longrightarrow\; \text{纹理隐变量待建模分布更窄} \;\Longrightarrow\; \text{更易生成}
+$$
+
+所以纹理 VAE 可以直接往重建质量上堆（本篇用微调 FLUX.2 VAE）：
+
+| VAE (Kodak) | PSNR↑ | SSIM↑ | LPIPS↓ |
+| :--- | :--- | :--- | :--- |
+| SD1.5 | 26.66 | 0.7294 | 0.1452 |
+| FLUX.1 | 32.37 | 0.9063 | 0.0554 |
+| FLUX.2 | 33.18 | 0.9194 | 0.0442 |
+| **FLUX.2-finetuned (本篇)** | **36.40** | **0.9565** | **0.0235** |
+
+| VAE (OmniDoc-TokenBench, 3042 样本) | PSNR↑ | SSIM↑ | LPIPS↓ | FID↓ | NED↑ |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| RAE-DINOv2-B | 14.32 | 0.3261 | 0.2290 | 18.21 | 0.0392 |
+| VAVAE | 17.50 | 0.6905 | 0.0974 | 4.45 | 0.3488 |
+| HunyuanImage-3.0 | 22.66 | 0.8672 | 0.0650 | 3.49 | 0.7753 |
+| Wan2.2 | 21.67 | 0.8577 | 0.0525 | 3.05 | 0.8310 |
+| Qwen-Image-VAE-2.0-f16c128 | 30.45 | 0.9706 | 0.0167 | 0.79 | 0.9617 |
+| **FLUX.2-finetuned (本篇)** | **30.91** | **0.9718** | **0.0133** | **0.46** | **0.9648** |
+
+::: warning 这张表就是「重建-生成权衡」的全部证据
+纯 VFM 表征路线（RAE）PSNR 仅 14.32、NED 0.0392——小字直接崩；语义增强但纠缠（VA-VAE）NED 只 0.3488。**只有「独立语义旁路 + 高保真纹理 VAE」才能同时拿下 0.9648 NED 和 0.46 FID。** SeFi 全部字号渲染收益（CVTG-2K / LongTextBench 第一）都建立在这张表上。
+:::
 
 ## 6. 核心控制层代码实现
 
-TODO：双流调度 20~30 行。
+双流异步调度核心（对应论文 Eq.9–10，训练侧 Eq.2–4）：
+
+```python
+import torch
+
+def sample_train_timesteps(bs: int, dt: float, device="cuda"):
+    """双时间步采样。顺序铁律：先算 t_z，再钳位 t_s。"""
+    u = torch.rand(bs, device=device) * (1.0 + dt)   # 扩展区间
+    t_z = torch.clamp(u - dt, min=0.0)               # 纹理滞后，锁死 >= 0
+    t_s = torch.clamp(u, max=1.0)                    # 语义截断，锁死 <= 1
+    return t_s, t_z
+
+
+def sfd_masks(t: float, dt: float):
+    """三阶段掩码可化简为两个阈值比较，无需显式分支。"""
+    #  t <  dt        -> (1, 0)  Stage I   语义初始化
+    #  dt <= t <  1   -> (1, 1)  Stage II  异步生成
+    #  1  <= t <=1+dt -> (0, 1)  Stage III 纹理收尾
+    return (t < 1.0), (t >= dt)
+
+
+@torch.no_grad()
+def sfd_sample(v_theta, s_shape, z_shape, dt=0.1, n_steps=50, device="cuda", **cond):
+    """步数不变，仅把时间范围拉长到 1+dt。"""
+    s, z = torch.randn(s_shape, device=device), torch.randn(z_shape, device=device)
+    grid = torch.linspace(0.0, 1.0 + dt, n_steps + 1, device=device)
+
+    for i in range(n_steps):
+        t, t_n = grid[i].item(), grid[i + 1].item()
+        t_s, t_z = min(t, 1.0), max(0.0, t - dt)
+        M_s, M_z = sfd_masks(t, dt)
+        step = t_n - t
+        v_s, v_z = v_theta(torch.cat([s, z], dim=-1), [t_s, t_z], **cond)
+        s = s + step * M_s * v_s      # Stage III 后语义冻结
+        z = z + step * M_z * v_z      # Stage I 期间纹理不动
+
+    return texture_vae.decode(z)     # 只解码纹理隐变量
+```
 
 ## 7. 避坑指南与评测基准
 
-TODO：GenEval / DPG / LongTextBench / OneIG / CVTG-2K，CLIPScore，artifact。
+### 7.1 主结果（SeFi-Image-5B）
+
+| 基准 | 5B | 最强对手 | 判定 |
+| :--- | :--- | :--- | :--- |
+| GenEval Overall | **0.88** | Qwen-Image 0.85 / Z-Image 0.84 | ✅ 胜（1B 即 0.87 打平 Qwen-Image） |
+| DPG-Bench Overall | 87.27 | Qwen-Image 88.32 / Z-Image 88.14 | ❌ 略逊 |
+| LongTextBench Avg | **0.978** | JoyAI-Image 0.963 / Qwen-Image-2512 0.960 | ✅ 第一 |
+| CVTG-2K NED / Word Acc. | **0.943 / 0.895** | JoyAI-Image 0.937 / 0.874 | ✅ 双项第一 |
+| CVTG-2K CLIPScore | 0.816 | Qwen-Image 0.802 | ✅ |
+| OneIG-EN Overall | **0.5606** | Z-Image 0.5460 / Qwen-Image 0.5390 | ✅ 第一 |
+| OneIG-ZH Overall | **0.5379** | Z-Image 略低 | ✅ |
+
+::: tip 读表要点
+**长文本 + 字符级渲染 + 双语指令是 SFD 的主战场**（LongTextBench / CVTG-2K / OneIG 全部第一），因为语义分支提供结构骨架，擅长组织信息密集的长 prompt。**弱项是 DPG 的 Global 维度（88.24，全场最低）**，且 1B/2B 的长文本能力断崖（0.855 / 0.847）——长文本理解强依赖模型容量。
+:::
+
+### 7.2 RL 后训练增益（5B w/ vs w/o，见 [专题笔记 §C.2](./rl-comparison-2026.md)）
+
+| 基准 | w/o RL | w/ RL | Δ |
+| :--- | :--- | :--- | :--- |
+| GenEval Overall | 0.87 | 0.88 | +0.01 |
+| LongTextBench Avg | 0.9665 | **0.9780** | **+0.0115** |
+| OneIG-ZH Overall | 0.5335 | **0.5379** | +0.0044 |
+| OneIG-EN Overall | 0.5541 | **0.5606** | +0.0065 |
+| DPG-Bench Overall | 87.45 | 87.27 | −0.18 |
+
+RL 主要补文字渲染与指令遵循，**组合能力基本持平、DPG 略降**。
+
+### 7.3 Turbo（4 步 DMD2 蒸馏）
+
+| | GenEval | DPG | LongTextBench | 差距 |
+| :--- | :--- | :--- | :--- | :--- |
+| 5B full-step | 0.88 | 87.45 | 0.967 | — |
+| 5B-Turbo | 0.87 | 86.45 | 0.922 | 1–4 分 |
+
+组合任务掉分最小（语义分支在反向过程早期就锁定高层结构），**文字密集任务掉分最多**（字符渲染需要中间去噪步）。
+
+### 7.4 五个避坑要点
+
+1. **不要先钳位再算 $t_z$**（见 §5.1），纹理永远画不完。
+2. **不要照搬 SFD 的 $\Delta t=0.3$**。本篇 1024px 用 0.1，且随分辨率递减。
+3. **不要把 $\beta$ 一直锁在 2**。CT/SFT 必须降到 1，否则纹理细节被压制。
+4. **不要用纯语义表征当纹理 latent**。表中 RAE 的 NED 0.0392 是前车之鉴。
+5. **4 步蒸馏必须保留 $\Delta t$ 领先规则**，否则三阶段结构被压平。
+
+::: warning 论文层面的信息缺口
+- **RL 阶段的 prompt 池完全未披露**（来源、总量、生成方式均无）。原文仅说明「按可评估性筛选 + 每条带 capability tag + 400 组 × 12 候选」，对比 DiffusionNFT 直接用 FlowGRPO 的 GenEval/OCR train split。
+- **纹理 VAE 微调收了重建收益，但 DPG Global 维度反而最低（88.24）**——高保真 latent 可能带来审美/整体观感上的轻微钝化，论文未解释。
+- 消融仅在 50M 内部数据、256px、32×A800 条件下做过（Fig.9/10），**$\Delta t$ 与 $\beta$ 本身没有消融**。
+:::
+
