@@ -256,40 +256,56 @@ SFT 阶段聚焦于在全分辨率下实现精炼对齐：
 | **文本编码器 Context Length** | **$512 \to 1024$ (翻倍)** | **大幅扩展上下文长度**，从容容纳信息密集的超长提示词与复杂排版指令 |
 | **文本形式配比** | **多粒度混训** | 包含中/英文 Dense Caption、Short Caption 与 Tags，赋予模型对从单短词到长难段落的鲁棒响应力 |
 
-### 2.4 主训练流水线：一条主线（450M → 9M → 650K → 4-step）
+### 2.4 训练流程总览：先表示、再生成、再后训练与加速
 
 $$
-\boxed{\text{Pre-training} \rightarrow \text{Continual Training} \rightarrow \text{SFT} \rightarrow \text{Few-Step Distillation}}
+\boxed{
+\text{VAE准备} \rightarrow \text{DiT预训练} \rightarrow \text{Continual Training} \rightarrow \text{SFT} \rightarrow
+\begin{cases}
+\text{RL Post-training} \\
+\text{Few-step Distillation}
+\end{cases}
+}
 $$
 
-**谁在训练、谁被冻结**：全程真正训练的只有 **DiT backbone**，在复合 semantic-texture 隐空间里学生成；Semantic VAE、Texture VAE、Qwen3-VL text encoder 全部冻结——前两者是之前独立训好的，到了主模型阶段只负责编码（架构细节见 §3）。
+**先训表示**：两套 latent 在 DiT 之前独立准备好，之后全程冻结。**Texture VAE** 从 FLUX.2 VAE 继续 fine-tune（MSE + LPIPS + 极弱 KL），专管纹理、颜色、文字、小细节，最终也靠它的 decoder 把 latent 还原成图像；**Semantic VAE** 不编码 RGB，而是把冻结 VFM 抽好的 patch-level semantic features 压成 compact semantic latent，专管结构、物体、布局（细节见 §3.2 / §3.3）。
 
-主表（论文 Table 4，DiT backbone 训练调度；1B / 2B / 5B 三档共用同一 pipeline）：
+**再训生成**：DiT 在 semantic + texture 复合隐空间里学生成，走 SFD 异步机制（语义流先行去噪）；Qwen3-VL text encoder 同样冻结。下表即论文 Table 4（1B / 2B / 5B 三档共用同一 pipeline）：
 
-| 阶段 | 数据 | 分辨率 | Batch | $\Delta t$ | $\beta$ | Iterations | LR | 阶段目标 |
+| Stage | Data | Resolution | Batch size | $\Delta t$ | $\beta$ | Iterations | LR | 阶段目标 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 预训练 | 450M 重标 + 合成字图 | 256px | 768 | 0.2 | 2 | 250K | $1 \times 10^{-4}$ | 世界知识 + 基础生成 |
-| 预训练 | 450M 重标 + 合成字图 | 512px | 768 | 0.2 | 2 | 300K | $5 \times 10^{-5}$ | 世界知识 + 基础生成 |
-| 预训练 | 450M 重标 + 合成字图 | 768px | 384 | 0.1 | 2 | 100K | $2 \times 10^{-5}$ | 世界知识 + 基础生成 |
-| 预训练 | 450M 重标 + 合成字图 | 1024px | 192 | 0.1 | 2 | 100K | $2 \times 10^{-5}$ | 世界知识 + 基础生成 |
-| 持续训练 | **9M** 精选 | 1024px | 192 | 0.1 | 1 | **180K** | $1 \times 10^{-5}$ | 质量 + 指令遵循 |
-| SFT | **650K** 精选 | 1024px | 192 | 0.1 | 1 | 10K | $1 \times 10^{-5}$ | 高审美 + 文字 + 听指令 |
-| 蒸馏 | SFT teacher | 1024px | — | 0.1 | — | — | — | 50-step → 4-step |
+| Pre-training | 450M 重标 + 合成字图 | 256px | 768 | 0.2 | 2 | 250K | $1 \times 10^{-4}$ | 世界知识 + 基础生成 |
+| Pre-training | 450M 重标 + 合成字图 | 512px | 768 | 0.2 | 2 | 300K | $5 \times 10^{-5}$ | 世界知识 + 基础生成 |
+| Pre-training | 450M 重标 + 合成字图 | 768px | 384 | 0.1 | 2 | 100K | $2 \times 10^{-5}$ | 世界知识 + 基础生成 |
+| Pre-training | 450M 重标 + 合成字图 | 1024px | 192 | 0.1 | 2 | 100K | $2 \times 10^{-5}$ | 世界知识 + 基础生成 |
+| Continual training | **9M** 精选 | 1024px | 192 | 0.1 | 1 | **180K** | $1 \times 10^{-5}$ | 质量 + 指令遵循 |
+| Supervised fine-tuning | **650K** 精选 | 1024px | 192 | 0.1 | 1 | 10K | $1 \times 10^{-5}$ | 高审美 + 文字 + 听指令 |
 
-- **预训练核心是 resolution curriculum**：$256 \to 512 \to 768 \to 1024$，每级从上一级 checkpoint 初始化；全程开 free aspect ratio（7 档桶）与 EMA 0.9999；$\Delta t$ 在 256/512 取 0.2，到 768/1024 降为 0.1。
-- **CT（§2.2 详）**：1024px 上 9M 精选退火 180K 步，提质量与指令遵循，不再扩展世界知识覆盖。
-- **SFT（§2.3 详）**：把输出分布收窄到"高质量、听指令、文字强"；text encoder context length $512 \to 1024$ 吃超长 prompt。
-- **蒸馏（§7.3 详）**：不是训新 base，而是以**冻结的 SFT 为 teacher** 用 DMD2 蒸出 4-step student；student 与 fake-score network 均从 teacher 初始化；蒸馏保持 $\Delta t=0.1$ 语义领先，不把三阶段结构压平；1024px，DMD matching + fake-score regression + feature-space adversarial 三项 loss。
+- **预训练**：核心是 resolution curriculum（$256 \to 512 \to 768 \to 1024$，逐级继承 checkpoint）；全程 450M 重标 + 合成字图、free aspect ratio（7 档桶）、EMA 0.9999；$\Delta t$ 低分辨率 0.2、高分辨率 0.1。目标：世界知识、基础生成、文字能力、基本 prompt following。
+- **CT（§2.2 详）**：1024px 上 9M 精选退火 180K 步，从"什么都能生成"往"生成质量更高、指令更稳定"收。
+- **SFT（§2.3 详）**：650K 把输出分布收窄到高质量、强审美、强文字、强 instruction following；text encoder context length $512 \to 1024$ 吃超长 prompt。
+
+**SFT 之后是两条并行分支，不是串行**（Turbo 明确从 SFT checkpoint 蒸馏，不是 RL 之后再蒸）：
+
+- **RL Post-training（§7.2 与专题笔记 §C.2 详）**：DiffusionNFT 在线迭代，每轮 policy 对每个 prompt 生成 $M=12$ 候选（$K=400$ 组，共 4800 张），reward 按 capability tag 维度打分；低 reward dispersion 的组直接丢弃，组内取高 reward 做正信号、低 reward 做隐式负信号；SFD 异步调度保持不动，RL 只改变"什么样的结果更值得强化"。目标：prompt following、visual quality、artifact suppression、text rendering。
+- **Few-Step Distillation（§7.3 详）**：不是训新 base，而是以**冻结的 SFT 为 teacher** 用 DMD2 蒸出 4-step student；student 与 fake-score network 均从 teacher 初始化；50 步压到 4 步但保留 $\Delta t=0.1$ 语义领先，不把三阶段结构压平；1024px，DMD matching + fake-score regression + feature-space adversarial 三项 loss。
 
 $$
-\boxed{450M\text{ 大规模预训练} \rightarrow 9M\text{ 高质量持续训练} \rightarrow 650K\text{ 精选 SFT} \rightarrow 4\text{-step DMD2 蒸馏}}
+\boxed{
+\text{大规模预训练：学会世界}
+\rightarrow
+\text{Continual：提升质量}
+\rightarrow
+\text{SFT：塑造高质量目标分布}
+\rightarrow
+\text{RL：进一步优化偏好和能力}
+}
+\qquad
+\boxed{\text{SFT} \rightarrow \text{DMD2} \rightarrow \text{4-step Turbo}}
 $$
 
-::: tip 真正值得学的不是超参，是收窄节奏
-$$
-\text{覆盖面优先} \rightarrow \text{质量优先} \rightarrow \text{对齐优先} \rightarrow \text{推理效率优先}
-$$
-数据量 450M → 9M → 650K 逐级收缩，每阶段只解决一个目标。这就是 SeFi recipe 的核心脉络。
+::: tip 主链与部署优化分开记
+自己做后训练要掌握的主链是 $\text{Pretrain} \rightarrow \text{Continual} \rightarrow \text{SFT} \rightarrow \text{RL}$；蒸馏只是最后为推理效率做的部署优化。更底层是收窄节奏：$\text{覆盖面优先} \rightarrow \text{质量优先} \rightarrow \text{对齐优先} \rightarrow \text{推理效率优先}$。
 :::
 
 ## 3. 架构拓扑与特征注入机理
