@@ -461,6 +461,55 @@ $\sigma$ 偏大本身**不是**「规整」的证据，而是「KL 太强、压�
 
 SeFi 正是因为有 Semantic latent 帮 Texture latent 兜底，才**敢把 KL 几乎关掉**（$10^{-12}$），让 Texture VAE 专心做高保真压缩。这与 §5.3 的 Kodak PSNR $33.18\to36.40$、OmniDoc NED $0.9648$ 是同一件事的两面。
 
+### 3.4 DiT 主干与文本编码器
+
+#### Text Encoder：拿 LLM 当文本编码器
+
+用 **Qwen3-VL 的 LLM backbone** 作 text encoder，**抽取多个层的 hidden states 拼接**成文本条件信号（做法同 FLUX.2）。
+
+::: tip 为什么不用 T5 / CLIP
+LLM 在**长且复杂的 prompt** 上能力显著更强，覆盖：多物体关系、计数、空间推理、中英双语语义、文字渲染、罕见概念、复杂指令遵循。这些恰好是 SeFi 的主战场（§7.1 中 LongTextBench / CVTG-2K / OneIG 全部第一）。
+:::
+
+| 生成模型 | 文本编码器 |
+| :--- | :--- |
+| 1B / 2B | Qwen3-VL-**2B** |
+| 5B | Qwen3-VL-**4B**（随模型容量放大，换更丰富的文本表示） |
+
+#### Transformer 架构：双流 MMDiT → 单流
+
+FLUX.2 [klein] 风格主干，**double-stream MMDiT blocks + single-stream blocks** 两段式：
+
+| 阶段 | token 处理 | 理由 |
+| :--- | :--- | :--- |
+| **双流段** | 视觉 token 与文本 token **各自独立成流**，各有独立的 normalization、modulation、FFN；跨模态交互只通过 **joint attention** | 图像与文本是不同模态，信息属性不同 |
+| **单流段** | 两条 token 序列**拼接**后由共享 transformer 层处理 | 更深的融合与对齐 |
+
+#### 为适配 SFD 做的两处改造
+
+::: warning 改造 1：输入投影与输出头按复合隐空间扩张
+视觉 token 携带的是**语义与纹理沿通道拼接**的复合隐变量，因此 input projection 和 output head 相应加宽。Transformer 预测的是复合隐变量上的**联合速度场**，算出后再拆回语义 / 纹理两个分量分别算 loss（§4）。
+:::
+
+::: warning 改造 2：单 timestep → 双 timestep 条件
+把原来单一的 timestep embedding 换成**双 timestep 条件**：$t_s$ 与 $t_z$ 分别嵌入、拼接，然后**调制所有 transformer blocks**。这是让主干在每个去噪步都感知到两条流的**异步噪声水平**的机制——§5.1 三阶段调度的模型侧实现。
+:::
+
+#### 三个变体的完整配置（论文 Table 1）
+
+| Model | Text encoder | Inner dim | Attn heads | Head dim | 双流 blocks | 单流 blocks | Total blocks | Text dim | MLP dim | DiT params |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1B | Qwen3-VL-2B | 2048 | 16 | 128 | 4 | 12 | 16 | 6144 | 6144 | ~1.18B |
+| 2B | Qwen3-VL-2B | 2560 | 20 | 128 | 4 | 16 | 20 | 6144 | 7680 | ~2.18B |
+| 5B | Qwen3-VL-4B | 3328 | 26 | 128 | 6 | 21 | 27 | 7680 | 9984 | ~4.97B |
+
+::: info 读表要点
+- **Head dim 恒为 128**，变的是 head 数（16→20→26）与 inner dim（2048→2560→3328）。
+- **1B 与 2B 的双流段都是 4 blocks**，增量全在单流段（12→16）——**加深主要发生在单流融合段**。
+- **文本维度与 MLP 维度跟着文本编码器走**：1B/2B 共用 Qwen3-VL-2B 故 Text dim 同为 6144；5B 换 4B 后 Text dim 升到 7680、MLP dim 升到 9984。
+- 5B 的双流段也加厚到 6 blocks。
+:::
+
 ## 4. 损失函数与数学稳定性推导
 
 三阶段总目标（论文 Eq.6–8）：
@@ -542,7 +591,7 @@ $$
 
 ### 5.3 重建-生成：SFD 让你敢 aggressively 微调 VAE
 
-高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（语义支路见 [§3.2](#32-semantic-vae压的是语义特征不是图像)，$\sigma$/KL 分析见 [§3.3](#33-texture-vae把-kl-几乎关掉换重建)）：
+高保真 latent 分布更复杂、扩散更难收敛；压缩狠则重建上限低。SFD 的作用是**额外提供条件**（语义支路见 [§3.2](#_3-2-semantic-vae-压的是语义特征-不是图像)，$\sigma$/KL 分析见 [§3.3](#_3-3-texture-vae-把-kl-几乎关掉-换重建)）：
 
 $$
 \text{更丰富的条件} \;\Longrightarrow\; \text{纹理隐变量待建模分布更窄} \;\Longrightarrow\; \text{更易生成}

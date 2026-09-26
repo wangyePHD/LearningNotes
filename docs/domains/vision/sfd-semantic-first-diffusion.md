@@ -7,7 +7,7 @@
 ---
 
 ::: tip 这篇是 SeFi-Image 的前置知识
-SeFi-Image 的 §3.1「Semantic-First Diffusion Modeling」几乎逐式复用了本文的公式 (1)–(20)，只是把类别条件 $y$ 换成 Qwen3-VL 文本条件、把 LightningDiT 换成双流 DiT。**没有本文的基础，读 SeFi 的方法章节会寸步难行。** 衔接细节见 [§7 与 SeFi-Image 的关系](#7-与-sefi-image-的关系前置--应用)。
+SeFi-Image 的 §3.1「Semantic-First Diffusion Modeling」几乎逐式复用了本文的公式 (1)–(20)，只是把类别条件 $y$ 换成 Qwen3-VL 文本条件、把 LightningDiT 换成双流 DiT。**没有本文的基础，读 SeFi 的方法章节会寸步难行。** 衔接细节见 [§7 与 SeFi-Image 的关系](#_7-与-sefi-image-的关系-前置-→-应用)。
 :::
 
 ## 1. 问题定义与核心矛盾
