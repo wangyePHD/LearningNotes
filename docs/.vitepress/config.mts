@@ -135,6 +135,7 @@ export default defineConfig({
           text: '🖼️ 图像与计算机视觉',
           items: [
             { text: '领域概览与路线图', link: '/domains/vision/' },
+            { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
             { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' }
           ]
         },

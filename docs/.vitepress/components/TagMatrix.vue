@@ -110,6 +110,15 @@ const notesList = ref([
   },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
+    title: '语义先行扩散范式 (SFD)',
+    link: '/domains/vision/sfd-semantic-first-diffusion',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-26',
+    summary: 'SFD 前置精读：复合语义-纹理隐空间 + 固定偏移 Δt 异步去噪三阶段调度，ImageNet 256 FID 1.04、较 DiT 收敛快 100×，FLOPs 开销 <0.01%。',
+    tags: ['Vision', 'Diffusion', 'SFD', 'Flow Matching', 'Latent Space', 'REPA', 'DINOv2']
+  },
+  {
     title: 'Lens 训练效率重思考与 3.8B 小模型的越级',
     link: '/domains/vision/caption-efficiency/lens-efficiency-2026',
     domain: '🖼️ 图像视觉',

@@ -1,8 +1,14 @@
 # 语义先行文生图基模 (SeFi-Image)
 
 > **标签**：`Vision` `Diffusion` `SeFi` `SFD` `Text-to-Image`
-> **更新时间**：2026-09-23
+> **更新时间**：2026-09-26
 > **参考来源**：[SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](https://arxiv.org/abs/2606.22568) · [GitHub](https://github.com/jmliu206/SeFi-Image)
+
+---
+
+::: warning 前置知识
+本文 §3 的 SFD 机制（复合隐空间、双时间步 $\Delta t$、三阶段掩码调度、REPA 重解码）全部来自 **Semantic-First Diffusion (CVPR 2026)**，本文只做 T2I 化改造。**未读前置篇请先看**：[语义先行扩散范式 (SFD)](../sfd-semantic-first-diffusion.md)。原文消融（$\Delta t$、$\beta$、$C_s$、VFM 尺度、REPA 深度）与本文 §4–§7 的 TODO 段均依赖该篇。
+:::
 
 ---
 
