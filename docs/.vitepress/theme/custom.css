@@ -78,3 +78,20 @@ mark.hl-key {
   background-color: #ffd43b;
   color: #1f2328;
 }
+
+/* 8. 关键工程 trick / insight 紫色高亮（<mark class="hl-trick">） */
+mark.hl-trick {
+  background-color: #ddc9f5;
+  color: #34194e;
+  padding: 0.1em 0.25em;
+  margin: 0 0.05em;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 600;
+}
+
+.dark mark.hl-trick {
+  background-color: #a583e8;
+  color: #1a0f2b;
+}

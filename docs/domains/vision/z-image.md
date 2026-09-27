@@ -633,21 +633,21 @@ $$
 
 这一节主要解决的不是模型能力问题，而是一个很典型的工业训练问题：**同样的模型和数据，怎么尽可能降低显存占用、减少无效计算，并把 GPU 吃满。** Z-Image 主要从两方面做优化：一方面是根据不同模块的训练状态选择不同的并行和显存策略；另一方面是针对图像模型多分辨率、序列长度变化大的特点，重新设计 batch 构造方式。
 
-首先是 **hybrid parallelization strategy**。Z-Image 并不是整个模型统一使用一种并行方式，而是分模块处理。VAE 和 Text Encoder 在训练过程中保持 frozen，只负责 forward，因此它们没有梯度和 optimizer state 的大额显存开销，所以使用普通 **Data Parallelism（DP）** 即可：每张 GPU 都保留完整模块副本，不同 GPU 处理不同的数据。真正需要更新的是大规模 DiT backbone，它的参数、梯度和 optimizer states 会占据大量显存，因此使用 **FSDP2**。FSDP2 的核心就是把这些训练状态 shard 到不同 GPU 上，而不是让每张 GPU 都保存完整副本，从而降低单卡显存压力。
+首先是 <mark class="hl-trick">**hybrid parallelization strategy**</mark>。Z-Image 并不是整个模型统一使用一种并行方式，而是分模块处理。<mark class="hl-trick">VAE 和 Text Encoder 在训练过程中保持 frozen，只负责 forward，因此它们没有梯度和 optimizer state 的大额显存开销，所以使用普通 **Data Parallelism（DP）** 即可</mark>：每张 GPU 都保留完整模块副本，不同 GPU 处理不同的数据。<mark class="hl-trick">真正需要更新的是大规模 DiT backbone，它的参数、梯度和 optimizer states 会占据大量显存，因此使用 **FSDP2**</mark>。FSDP2 的核心就是把这些训练状态 shard 到不同 GPU 上，而不是让每张 GPU 都保存完整副本，从而降低单卡显存压力。
 
-除了模型状态，训练时另一个显存大户是 **activation**。正常情况下，forward 经过每一层时产生的中间 activation 都要保存，backward 时再用这些中间结果计算梯度。对于 DiT 来说，层数多、图像 token 序列又长，这部分显存会非常大。因此 Z-Image 对所有 DiT layers 都采用 **Gradient Checkpointing**：只保存一部分关键中间节点，其余 activation 不保留，等 backward 真正需要时再重新执行对应的一段 forward。它本质上是在做：
+除了模型状态，训练时另一个显存大户是 **activation**。正常情况下，forward 经过每一层时产生的中间 activation 都要保存，backward 时再用这些中间结果计算梯度。对于 DiT 来说，层数多、图像 token 序列又长，这部分显存会非常大。因此 Z-Image 对所有 DiT layers 都采用 <mark class="hl-trick">**Gradient Checkpointing**</mark>：只保存一部分关键中间节点，其余 activation 不保留，等 backward 真正需要时再重新执行对应的一段 forward。它本质上是在做：
 
 $$
 \boxed{\ \text{更多计算} \rightarrow \text{更少 activation 显存}\ }
 $$
 
-因此 checkpointing 不会让模型变小，也不会改变训练目标，只是通过"反向时重新算"换取更低显存，从而支持更大的 batch 或更长的序列。
+因此 checkpointing <mark class="hl-trick">不会让模型变小，也不会改变训练目标，只是通过"反向时重新算"换取更低显存，从而支持更大的 batch 或更长的序列</mark>。
 
-Z-Image 还对 DiT blocks 使用了 **`torch.compile`**。这个东西解决的不是显存切分，而是运行效率。普通 PyTorch eager execution 会把很多操作逐个调度到 GPU，存在 Python 调度、kernel launch 等额外开销；`torch.compile` 会尝试把计算图编译优化，把可以融合的操作合并起来，减少这些调度开销。因此它的目标可以简单理解为：**同样的 DiT forward/backward，尽可能让 GPU 更高效地执行，提高整体训练 throughput。**
+Z-Image 还对 DiT blocks 使用了 <mark class="hl-trick">**`torch.compile`**</mark>。<mark class="hl-trick">这个东西解决的不是显存切分，而是运行效率</mark>。普通 PyTorch eager execution 会把很多操作逐个调度到 GPU，存在 Python 调度、kernel launch 等额外开销；`torch.compile` 会尝试把计算图编译优化，把可以融合的操作合并起来，减少这些调度开销。因此它的目标可以简单理解为：<mark class="hl-trick">**同样的 DiT forward/backward，尽可能让 GPU 更高效地执行，提高整体训练 throughput。**</mark>
 
-第二部分是 Z-Image 针对 **mixed-resolution training** 做的优化。图像分辨率和宽高比不同，经过 VAE 后得到的 image token 数量也不同，也就是说每个样本的 sequence length 差别可能非常大。如果一个 batch 里同时放一个很短的序列和一个很长的序列，为了能够并行计算，短序列通常需要 padding 到最长序列长度，这样大量计算实际上都浪费在 padding token 上。Z-Image 因此会根据 metadata 里的 height 和 width，提前估计每个样本的 sequence length，然后把长度相近的数据分到同一个 batch，这就是 **sequence-length-aware batch construction**。
+第二部分是 Z-Image 针对 **mixed-resolution training** 做的优化。图像分辨率和宽高比不同，经过 VAE 后得到的 image token 数量也不同，也就是说每个样本的 sequence length 差别可能非常大。如果一个 batch 里同时放一个很短的序列和一个很长的序列，为了能够并行计算，短序列通常需要 padding 到最长序列长度，这样大量计算实际上都浪费在 padding token 上。Z-Image 因此会<mark class="hl-trick">根据 metadata 里的 height 和 width，提前估计每个样本的 sequence length，然后把长度相近的数据分到同一个 batch，这就是 **sequence-length-aware batch construction**</mark>。
 
-在此基础上，他们又做了 **dynamic batch sizing**。长序列单个样本消耗的显存和计算都更多，因此长序列 batch 使用较小的 batch size，避免 OOM；短序列比较便宜，就可以使用更大的 batch size，避免 GPU 显存和计算资源闲置。因此可以简单记成：
+在此基础上，他们又做了 <mark class="hl-trick">**dynamic batch sizing**</mark>。<mark class="hl-trick">长序列 batch 使用较小的 batch size，避免 OOM；短序列就可以使用更大的 batch size，避免 GPU 显存和计算资源闲置</mark>。因此可以简单记成：
 
 $$
 \text{Long sequence} \Rightarrow \text{Small batch}
@@ -657,7 +657,7 @@ $$
 \text{Short sequence} \Rightarrow \text{Large batch}
 $$
 
-这样不同分辨率的数据虽然 token 数量不同，但每个 batch 都尽可能接近硬件承载上限，提高整体 GPU utilization。
+这样不同分辨率的数据虽然 token 数量不同，但<mark class="hl-trick">每个 batch 都尽可能接近硬件承载上限，提高整体 GPU utilization</mark>。
 
 所以 4.2 的完整逻辑可以压缩成：
 
@@ -676,7 +676,7 @@ $$
 $$
 
 ::: tip 真正需要长期记住的
-**Z-Image 会先根据"模块是否需要训练"决定并行策略，再根据"序列到底有多长"决定 batch 怎么组。FSDP2 解决模型训练状态太占显存，Gradient Checkpointing 解决 activation 太占显存，`torch.compile` 提升计算吞吐，length-aware batching 和 dynamic batch sizing 则减少多分辨率训练里的 padding 和显存浪费。** 这就是 4.2 的全部核心内容。
+**Z-Image 会<mark class="hl-trick">先根据"模块是否需要训练"决定并行策略，再根据"序列到底有多长"决定 batch 怎么组</mark>。FSDP2 解决模型训练状态太占显存，Gradient Checkpointing 解决 activation 太占显存，`torch.compile` 提升计算吞吐，length-aware batching 和 dynamic batch sizing 则减少多分辨率训练里的 padding 和显存浪费。** 这就是 4.2 的全部核心内容。
 :::
 
 ::: info 原文补充（笔记核对时添加，论文 §4.2 可查）
