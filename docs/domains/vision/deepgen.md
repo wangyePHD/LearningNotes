@@ -5,7 +5,7 @@
 > **参考来源**：[DeepGen 1.0: A Lightweight Unified Multimodal Model for Advancing Image Generation and Editing (arXiv:2602.12205v2)](https://arxiv.org/abs/2602.12205) · [GitHub: DeepGenTeam/DeepGen](https://github.com/DeepGenTeam/DeepGen) · [HuggingFace: DeepGenT](https://huggingface.co/DeepGenT) · [Datasets](https://huggingface.co/datasets/DeepGenTeam/DeepGen-1.0)
 > **原文**：本地 `Papers/DeepGen.pdf`（21 页，正文 18 页 + 附录 A/B）
 > **精读重点**：§3 Training（data train）+ §3.3 RL + §4 Data
-> **精读进度**：§4 Data ★ ✅ ｜ §3 Training（3.1–3.3，含 3.3 RL）★ ｜ §2 Architecture ｜ §5 Experiments ｜ §6 Conclusion（笔记随学习逐节增补）
+> **精读进度**：§4 Data ★ ✅ ｜ §3.1 Alignment Pre-Training ✅ ｜ §3.2 Joint SFT ✅ ｜ **§3.3 MR-GRPO ★** ｜ §2 Architecture ｜ §5 Experiments ｜ §6 Conclusion（笔记随学习逐节增补）
 
 ---
 
@@ -19,7 +19,90 @@
 
 ### 3.1 Stage 1: Alignment Pre-Training
 
+<mark class="hl-trick">第一阶段只训练 **SCB connector 和 128 个 learnable think tokens**，其余参数全部冻结，也就是 VLM 和 DiT 都不更新</mark>。可以把这一步理解成：<mark class="hl-trick">Qwen2.5-VL 和 SD3.5-Medium 本身都已经是 pretrained module，但它们的 representation space 并不是天然对齐的，所以先只训练中间桥梁</mark>，让 VLM 的语义、视觉、推理信息能够变成 DiT 能使用的 condition。
+
+这一阶段只用两种基础任务：<mark class="hl-trick">**general text-to-image generation 和 general image editing**</mark>，也就是 §4 里的约 **35M generation image-text pairs + 6.6M editing triplets**。<mark class="hl-key">这里还没有加入 reasoning generation、reasoning editing、text rendering 这些专项任务，所以它本质上是在打"统一 generation/editing 的底座"。</mark>
+
+| 项 | Stage 1 配置 |
+| :--- | :--- |
+| 训练步数 | <mark class="hl-trick">**200,000 iterations**</mark> |
+| 分辨率 | <mark class="hl-trick">固定 **512×512**</mark>，<mark class="hl-trick">**不做 arbitrary resolution**</mark>（Table 9） |
+| Learning rate | <mark class="hl-trick">**1×10⁻⁴**</mark> |
+| Warm-up | <mark class="hl-trick">正文写 **20,000 steps**</mark> ⚠️ 见下方矛盾 |
+| Optimizer / Scheduler | AdamW / cosine |
+| Weight decay / Clip | 0.05 / 1.0 |
+| Batch size / GPU | 512 / **64×H200** |
+| <mark class="hl-trick">可训练参数</mark> | <mark class="hl-trick">**仅 SCB connector**</mark> |
+
 ### 3.2 Stage 2: Joint Supervised Fine-Tuning
+
+Stage 2 才是真正的 <mark class="hl-trick">**Joint SFT**</mark>。这时候作者开始扩大可训练范围：<mark class="hl-trick">**DiT 解冻并参与训练，VLM 不直接 full fine-tune，而是通过 LoRA 做轻量更新，SCB connector 继续训练**</mark>。
+
+<mark class="hl-key">这么做的目的很明确——既希望 VLM 能适应 generation/editing 任务，又不希望 joint optimization 把 VLM 原有的 multimodal understanding 和 world knowledge 破坏掉，所以作者选择 LoRA，而不是直接把整个 VLM 全参数打开。</mark>原文措辞是 *"To mitigate potential **degradation of the VLM's multimodal comprehension** during joint optimization, we apply LoRA for **efficient** fine-tuning of the VLM."*
+
+这时数据也从"基础对齐"升级成真正的多任务混训，包括 <mark class="hl-trick">**general generation、general editing、reasoning-based generation、reasoning-based editing、text rendering**</mark>。<mark class="hl-key">也就是说 DeepGen 的 omni-capability 主要是在这个阶段形成的</mark>。
+
+::: tip 与 Z-Image 的路线对照
+<mark class="hl-key">DeepGen 并不是给每个能力单独开一个后训练 branch，而是在 Joint SFT 阶段把这些能力一起喂给统一模型。</mark>Z-Image 则是「SFT → 蒸馏 → RLHF」串行、编辑另开一支继续训练。两种统一模型的组织方式。
+:::
+
+| 项 | Stage 2 配置 |
+| :--- | :--- |
+| 训练步数 | <mark class="hl-trick">**400,000 iterations**</mark> |
+| 分辨率 | <mark class="hl-trick">正文写固定 **512×512**，同时通过 **dynamic resizing 保持原始 aspect ratio**</mark> ⚠️ 见下方矛盾 |
+| Arbitrary Resolution | <mark class="hl-trick">Table 9 标 **✓**</mark> ⚠️ |
+| Learning rate | <mark class="hl-trick">**5×10⁻⁵**</mark> |
+| Warm-up | <mark class="hl-trick">正文写 **20,000 steps**</mark> ⚠️ |
+| Batch size / GPU | 768 / 64×H200 |
+| <mark class="hl-trick">LoRA</mark> | <mark class="hl-trick">**rank 64 / α 128 / dropout 0.05**</mark> |
+| <mark class="hl-trick">可训练参数</mark> | <mark class="hl-trick">**SCB connector + DiT + VLM 的 LoRA**</mark> |
+
+两阶段可以压成：
+
+$$
+\boxed{
+\text{Stage 1}:\ \text{Frozen VLM + Frozen DiT}\rightarrow\text{Train Connector + Think Tokens}
+}
+$$
+
+$$
+\boxed{
+\text{Stage 2}:\ \text{Train DiT + Connector + VLM-LoRA}\rightarrow\text{Joint Gen/Edit/Reasoning/Text SFT}
+}
+$$
+
+::: tip 真正该记住的
+<mark class="hl-key">**DeepGen 先解决"VLM 和 DiT 能不能顺畅交流"，再解决"统一模型能不能学好多种能力"。Stage 1 是 representation alignment，Stage 2 才是 capability learning。**</mark>
+:::
+
+![DeepGen Fig.3：DeepGen 1.0 架构（VLM-DiT + SCB）。左半是 VLM：System Prompt 与编辑指令各经 Text tokenizer、参考图经 ViT Encoder，序列里 Visual Token（橙）/ Text Token（灰）/ Learnable Think Token（黄）三类拼接，token 序列从 **VLM Block 1、Block 2、…、Block N-R、Block N** 共 6 层均匀抽取后送入 Connector（SigLIP 视觉编码器 + 6 个 transformer 层）。右半是 DiT：DiT 输入由三路拼接——Connector 输出的 **Multimodal Condition**、参考图经 **VAE Encoder** 的 latent、以及 **Noisy Input** 经 Noisy Refiner 的噪声 token，统一做 self-attention，末端经 VAE Decoder 出图。每个 block 右侧的 🔥/❄ 图标按 caption 说明**依次表示该模块在 Pre-Training / SFT / RL 三阶段是否可训练**。](/deepgen-fig3-architecture.png)
+
+::: info Fig. 3 揭示的完整可训练矩阵（正文没写这张表）
+caption 明确：图标 *"indicate whether the corresponding module is frozen or trainable during the **Pre-Training, SFT, and RL stages, respectively**"*。据此可读出：
+
+| 模块 | Pre-Training | SFT | RL |
+| :--- | :--- | :--- | :--- |
+| VLM Blocks（含 ViT Encoder） | ❄ 冻结 | 🔥 可训练（LoRA） | ❄ 冻结 |
+| <mark class="hl-trick">Connector</mark> | <mark class="hl-trick">🔥 可训练</mark> | 🔥 可训练 | <mark class="hl-trick">❄ 冻结</mark> |
+| DiT Blocks | ❄ 冻结 | 🔥 可训练 | 🔥 可训练 |
+
+<mark class="hl-key">**由此得到一条正文没明说的结论：RL 阶段只更新 DiT，Connector 与 VLM 都是冻结的。**</mark>§3.3 正文只说 *"we apply reinforcement learning after supervised fine-tuning"*，没有交代可训练范围 —— 这是靠 Fig. 3 的图标读出来的。实践上这意味着 <mark class="hl-key">**RL 阶段不碰条件编码路径，奖励信号只经 DiT 影响输出**</mark>，这也解释了为什么 RL 阶段的改动比 SFT 阶段安全得多（§5.3.2 的 RL 消融全部只训 1,000 steps）。
+:::
+
+::: warning 论文内部的两处不一致（照记录，不自行校正）
+**① Warm-up 数字对不上。** 正文两阶段都写 <mark class="hl-trick">**20,000 warm-up steps**</mark>，但 Appendix Table 9 写 <mark class="hl-trick">**warmup ratio = 0.01**</mark>。按 200K iteration 算 0.01 只有 2K，按 400K 算只有 4K —— <mark class="hl-key">**无论哪个阶段都对不上 20,000**</mark>。论文没有解释。
+
+**② 分辨率表述不一致。** §3.2 正文写 *"fixed resolution of 512×512 **while preserving the original aspect ratio via dynamic resizing**"* —— "固定 512×512"与"保持原始宽高比"本身互相矛盾；而 Table 9 又把 Stage 2 的 **Arbitrary Resolution 标为 ✓**。<mark class="hl-key">论文没有进一步说明具体的 resize / bucket 机制。</mark>
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §2 + §3.1/3.2 + Table 9 可查）
+- **两阶段的可训练参数，Table 9 是权威口径**：Stage-I 写 *"Trainable Param: **SCB connector**"*；Stage-II 写 *"SCB connector, **DiT**, **LoRA in VLM**"*。§3.1/§3.2 正文与之一致。
+- **底座模型（§2 给出）**：VLM = **Qwen-2.5-VL (3B)**，DiT = **SD3.5-Medium (2B)**（*"initialized from [11] with **joint generation–editing capability**"* —— 注意 DiT 底座本身就自带生编一体能力）。Connector = **SigLIP 视觉编码器 + 6 个 transformer 层**。合计约 **5B**。
+- **LoRA 引用 [24]**，即 Hu et al. 的 LoRA 原文。
+- **双分支视觉编码（Fig. 3 caption 强调）**：*"a **ViT encoder** captures high-level semantics for the VLM, while a **VAE encoder** extracts compressed latent features for the DiT"* —— 参考图被**两条路**编码：高层语义走 ViT→VLM，压缩 latent 走 VAE→DiT。
+- **DiT 位置编码区分 reference 与 target**：caption 写 *"DiT positional encodings **explicitly distinguish reference tokens from target tokens**"* —— 与 Z-Image §4.1 用 3D RoPE 时间维偏移区分 reference/target 是同类设计。
+- **RL 阶段的三个改动预告**（§3.3 开头，属下一节内容）：MR-GRPO（扩展自 Pref-GRPO [27]）、**novel auxiliary supervised diffusion loss** 补充 KL 正则以缓解长期 RL 的能力退化、以及 **noise-preserving stochastic sampling** [29]。
+:::
 
 ### 3.3 Stage 3: Reinforcement Learning ★
 
