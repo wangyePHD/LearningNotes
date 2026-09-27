@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1 + 3.2，3.3 待展开）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -491,3 +491,42 @@ $$
 :::
 
 多粒度实例见上文 [Fig. 9 左半](#sec-3-captioner)。下一节 3.3 会转到 **source-target pair 怎么生成 editing instruction**。
+
+### 3.3 Difference Caption for Image Editing
+
+3.3 **Difference Caption for Image Editing** 这一节的核心，就是把一对 source image / target image，转换成一条尽可能准确、简洁的编辑指令。Z-Image 没有直接让 captioner 看两张图然后"一步到位"生成 instruction，而是采用一个三阶段过程：**先分别详细描述 source 和 target，再显式分析两者差异，最后把差异压缩成 editing instruction。** 论文把这个过程称为一种 step-by-step / CoT 风格的生成方式。
+
+第一步是 **Detailed Captioning**。对 source 和 target 两张图分别生成完整 caption，而且这些 caption 会包含 OCR 信息。目的就是先把两张图各自的内容尽量"说清楚"，避免直接比较原图时漏掉细节。第二步是 **Difference Analysis**，模型同时参考原始图像和两边的详细 caption，从视觉和文字两个角度把所有变化找出来，比如主体变化、物体增删、背景变化、姿态变化、文字变化等。第三步才是 **Instruction Synthesis**，把前面的差异总结成一条简洁、可执行的编辑指令。论文给出的例子就是：source 里是一只普通猫，target 里这只猫被放到海滩、换成人形西装身体、手里多了酒杯；最终 instruction 会把这些变化统一组织成一条自然语言编辑命令。
+
+这个设计最值得你学的是：**把"理解两张图"和"生成编辑指令"拆开。** 如果直接一步生成 instruction，很容易漏掉小变化，或者把 source/target 里共同存在的内容也误写成编辑操作。Z-Image 先让模型分别理解两边，再做 difference analysis，相当于先得到一个结构化的变化列表，再压缩成 instruction，所以监督会更干净。
+
+你可以把 3.3 记成这条链：
+
+$$
+\boxed{
+(I_s, I_t)
+\rightarrow
+(C_s, C_t)
+\rightarrow
+\Delta(I_s,I_t)
+\rightarrow
+\text{Edit Instruction}
+}
+$$
+
+其中 $C_s, C_t$ 是 source/target 的详细 caption，$\Delta$ 是差异分析。论文没有公开这三步各自用什么 prompt 模板、具体模型结构或过滤阈值，所以学到这个程度就够了。
+
+::: tip 最需要记住的一句话
+
+**Difference Caption 的本质，是把 source-target pair 先转成"可解释的差异"，再生成最终编辑指令。**
+:::
+
+实例见上文 [Fig. 9 右半](#sec-3-captioner) —— Step2 把差异归成 Subject modification / Element addition / Scene change 三类，Step3 压缩成一句指令。
+
+::: info 原文补充（笔记核对时添加，论文 §3.3 可查）
+- **原文对三步的定位**：论文把 Step2 称为 *"Difference Analysis"*，并写明它 *"leveraging both the raw images and their generated captions, to tell all discrepancies from **visual and textual** perspectives"* —— 即比较时**图和 caption 同时看**，且显式区分**视觉差异**与**文字差异**两类。
+- **三步 CoT 借鉴 [100]**：原文 *"we employ a three-step CoT process that systematically breaks down the comparative task [100]"*。
+- **Step1 复用 §3.1 的 OCR-inclusive caption**：论文写 Step1 是 *"generate a comprehensive, **OCR-inclusive** caption for both the source and target images respectively"* —— 所以文字变化是被**显式**纳入差异分析的，这也是为什么文字编辑（§2.5 的 rendering 路线）能有精确监督。
+- **与 §2.5 是一条闭环**：§2.5 用渲染系统造出 source/target 像素对，§3.3 用这三步为它们生成 instruction 文本。**前者保证像素级 ground-truth，后者保证语言级 ground-truth**，两条路线的产物在这里汇合。
+- **一个论文未讨论的依赖**：Step2 的差异质量取决于 Step1 caption 的质量。若 captioner 漏掉了某个细微变化（§3.1 承认密集文字场景会漏字），**这个变化在后续两步里就彻底不可见了** —— 误差被前置步骤静默传递。这是 CoT 式 pipeline 的共性风险，论文没有分析。
+:::
