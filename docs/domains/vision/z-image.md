@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2–§2.5 其余三模块 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3–§2.5 其余两模块 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -193,4 +193,41 @@ $$
 - **OCR / 水印检测是 VLM 顺带做的**，这是一个**被明确强调的差异点**：*"diverging from prior works [21, 64, 76] that use separate modules for OCR and watermark detection, our approach leverages the powerful inherent capabilities of our VLM."* 即 Qwen-Image / Seedream 3.0 等用**独立模块**做 OCR 与水印，Z-Image 靠 VLM 的固有能力，省了模块与流水线。
 - **AIGC 过滤的真实目的**：论文写明是 *"crucial for preventing degradation in the model's output quality **and physical realism**"*。这条对做真实感生成很重要——**用 AIGC 图训练会同时损伤物理真实性**。
 - **跨模态一致性只查 alt caption**：CN-CLIP 算的是 image 与**原始 alt caption** 的相关性，在重生成 caption **之前**。所以这一关是过滤「图文配错」，不是过滤「描述不详细」。
+:::
+
+### 2.2 Cross-modal Vector Engine
+
+这一节只需要抓住两个核心：**语义去重** 和 **定向检索**。2.1 的 Data Profiling Engine 是在回答"单条数据本身怎么样"，而 2.2 是在回答"这条数据和整个数据池里的其他数据是什么关系"。因此它不再只看单张图的质量，而是把海量样本放进一个统一的 multimodal embedding space 里，研究哪些样本彼此相似、哪些区域过密、哪些概念稀缺。
+
+在语义去重上，Z-Image 沿用了 Stable Diffusion 3 的思路，但把原来的 `range_search` 换成了更适合超大规模数据的 **kNN search**。`range_search` 是"把某个相似度阈值内的所有邻居都找出来"，在十亿级数据上扩展性很差；kNN 则是"固定找每个样本最近的 $k$ 个邻居"。拿到这些近邻以后，Z-Image 根据 kNN 距离构建 **proximity graph**，再在图上做 **community detection**，把高度相似的数据组织成一个个语义社区。这样就不只是判断两个样本是不是重复，而是能识别一整片高度冗余的数据簇。论文还明确说，当 $k$ 足够大时，这种 kNN 图可以很好地近似原来的 range-search 结果，但工程效率高得多。
+
+它的工程规模也比较值得记：论文给出的结果是，**1 billion items**，在 **8 张 H800** 上完成 index construction 和 **100-NN querying**，大约需要 **8 小时**，而且整个流程是 GPU 加速的。更重要的是，community detection 不只是为了删重复数据，它产生的 semantic structure 和 modularity levels 还可以用于 **fine-grained data balancing**。也就是说，embedding space 某个区域特别密，说明这一类数据过多；某个区域很稀，可能代表长尾概念。这样后续采样时就可以对过密区域降权、对稀缺区域补数据。
+
+Cross-modal Vector Engine 的另一个核心作用是 **retrieval**。Z-Image 可以拿模型生成失败的图片或者 problematic prompt 去向量库里检索相关训练数据。如果发现某个概念的数据太少，就做 targeted augmentation；如果发现某些错误行为和某一类训练数据高度相关，就可以定位并 prune 相应的数据簇。论文明确把这个系统用于发现 **distributional voids**、补长尾数据，以及诊断并清理导致模型错误的数据。
+
+所以这一节最终可以压成一句话：
+
+$$
+\boxed{
+\text{Multimodal Embedding}
+\rightarrow
+\text{kNN}
+\rightarrow
+\text{Proximity Graph}
+\rightarrow
+\text{Community Detection}
+\rightarrow
+\text{Dedup + Balancing + Retrieval}
+}
+$$
+
+::: tip 一句话总结
+
+> Z-Image 的向量引擎不是单纯拿来去重，而是把整个训练数据池变成一个可搜索、可聚类、可诊断的语义空间，最终服务于数据去重、分布平衡、长尾补齐和模型失败修复。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §2.2 可查）
+- **社区检测用的是外部算法**：论文标注了引用 [68]，即在 proximity graph 上套用现成的 community detection，而不是自研。
+- **kNN 的双重身份**：kNN 距离**既是去重的依据**（构造 proximity graph），**又是检索的索引**（配 SOTA index 算法 [54]）。论文写明检索侧 *"leveraging multimodal features [86] combined with a state-of-the-art index algorithm [54]"*，其中 [86] 正是 §2.1 用于图文一致性打分的同一个 **CN-CLIP**。
+- **retrieval 服务的两个对象**：论文明确列出 data curation（找 distributional voids → 定向采样补概念空洞）与 **active model remediation**（用 failure case 反查并 prune 责任数据簇）两条线，后者与 §2.4 的 Active Curation Engine 闭环。
 :::
