@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3 World Knowledge Topological Graph ✅ ｜ §2.4–§2.5 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3 World Knowledge Topological Graph ✅ ｜ §2.4 Active Curation Engine ✅ ｜ §2.5 编辑对构造 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -270,4 +270,75 @@ $$
 - **层次化是 automatic hierarchical strategy**（论文标注借鉴 [71]），且**每个 parent node 由 VLM 对其子节点做总结命名**——所以 taxonomy 的层级标签本身也是生成的，不是人工给定的。
 - **sampling 是 staged 的**：论文原文 *"perform principled, **staged** sampling from the data pool"*，即采样权重不仅决定「采不采」，还决定「在哪个训练阶段采」。
 - **它同时是 SFT 的前置设施**：§4.4 的 Concept Balancing with Tagged Resampling 用的 rarity score 正是靠本节的图谱 + BM25 检索算出来的。两节是同一套设施在预训练与 SFT 两个阶段的复用。
+:::
+
+### 2.4 Active Curation Engine
+
+2.4 **Active Curation Engine** 是第二节里最值得真正吃透的一块，因为它把前面的 2.1、2.2、2.3 全部串成了一个"数据—模型—再数据"的闭环。
+
+它的核心思想是：**数据集不是一次性清洗完就固定不变，而是随着模型能力不断暴露问题，再反向补数据、修标注、更新数据分布。** 论文里给的例子很典型：模型对"松鼠鳜鱼"这个概念生成失败，说明它可能把"松鼠"和"鳜鱼"做了字面组合，而没有真正学会这道菜。于是系统会把这个 failure case 当成诊断信号，通过前面 2.2 的 cross-modal retrieval 去数据池里找相关样本，同时用规则过滤和去重筛掉低质量数据，再补充这一类长尾概念的数据。也就是说，模型的失败本身变成了下一轮数据采集的触发器。
+
+![Z-Image Fig.5：Active Curation Engine 总览。Z-Image 诊断出长尾概念「松鼠鳜鱼」生成失败 → 文本 embedding 检索 → 去重与规则过滤 → 定向补数据 → Continual Pretraining 回灌模型，构成闭环。](/zimage-fig5-active-curation.png)
+
+另一条闭环是 **captioner 和 reward model 的主动学习**。论文里 Figure 6 讲得比较清楚：系统先用 2.3 的 topology graph 和当前 reward model，从未标注的 media pool 里挑一批概念分布更合理、质量更合适的数据；然后当前的 captioner 和 reward model 给这些数据自动生成 pseudo-label，包括 caption 和 score。接下来不是直接拿去训练，而是经过 **Human verifier + AI verifier** 双重检查；通过的样本直接进入下一步，失败的样本会进入人工修正，专家重新改 caption 或 score。修正后的高质量标注数据再拿回来重新训练 captioner 和 reward model，于是下一轮自动标注会更准。
+
+![Z-Image Fig.6：Human-in-the-Loop 主动学习循环。Media Pool 经 Concept/Quality Balance 挑样 → Reward+Captioner 打 pseudo-label → Human/AI Verifier 双重校验 → pass 直接用，fail 走 Human Correct → 回流重训 Reward/Captioner（虚线）。注意图中 score 被人工从 7/8 改成 9/4，caption 从「精致的」改成「平平无奇的」。](/zimage-fig6-hitl-active-learning.png)
+
+所以整个 2.4 其实可以压成两个闭环。第一个是：
+
+$$
+\text{Model Failure}
+\rightarrow
+\text{Retrieval / Diagnosis}
+\rightarrow
+\text{Targeted Data Augmentation}
+\rightarrow
+\text{Retraining}
+$$
+
+第二个是：
+
+$$
+\text{Media Pool}
+\rightarrow
+\text{Pseudo Label}
+\rightarrow
+\text{Human + AI Verification}
+\rightarrow
+\text{Manual Correction}
+\rightarrow
+\text{Update Captioner / Reward Model}
+$$
+
+这两条链合起来，就是 Z-Image 所谓的 Active Curation。它不再是"数据工程服务模型训练"这种单向关系，而是：
+
+$$
+\boxed{
+\text{模型暴露问题}
+\rightarrow
+\text{数据系统响应}
+\rightarrow
+\text{数据质量提升}
+\rightarrow
+\text{模型再提升}
+}
+$$
+
+::: tip 真正需要掌握的分工
+
+> 2.1 负责看单条数据质量，2.2 负责在语义空间里找相似和缺口，2.3 负责控制概念分布，2.4 则把这些能力变成一个持续迭代的 active data loop。这其实非常接近工业界真正的数据飞轮。
+:::
+
+这一节学到这里基本就够了，不需要再继续抠太多实现细节。最值得长期记住的一句话是：
+
+::: danger Active Curation 的本质
+**不是"主动采样"，而是让模型失败成为下一轮数据构建的监督信号。**
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §2.4 可查）
+- **论文把 Active Curation 拆成两个明确定义的职能**：一是 *"frontier exploration engine"*（用自动采样找出模型表现差或缺知识的 hard cases），二是 *"closed-loop data annotation pipeline"*（持续精炼数据质量）。前者找问题，后者修标注。
+- **松鼠鳜鱼案例的诊断结论是原文的**：模型 *"lacks the specific concept for this dish and may rely on compositional reasoning (combining 松鼠 and 鳜鱼), leading to erroneous generations **absent of domain-specific training data**"*。注意归因是**缺少领域特异训练数据**，不是模型能力不足——所以修法是补数据而不是加参数。
+- **Fig. 6 里有一处容易被忽略的细节**：人工修正不只是改 caption，**score 也被改**（图中 7→9、8→4），且改的方向是**下调**。这说明主动学习的目标不是让 reward model 打高分，而是**校准**它。
+- **双重校验的分工**：AI Verifier 用的是 **Reward**（图中明确标出），即用奖励模型做自动校验；Human Verifier 处理机器判不准的部分。失败样本不是丢弃，而是走 **Human Correct** 修正后**回流**去重训 Reward/Captioner（图中虚线）。
+- **人机分工的隐含成本**：这条闭环里 human verifier 和 manual correction 都是**不可并行扩展**的人力环节，与 §1.2 里「\$628K 未计入人工成本」的判断一致——**数据飞轮转得越快，人力投入越大**。
 :::
