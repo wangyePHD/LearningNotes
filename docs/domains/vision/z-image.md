@@ -3,7 +3,8 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ✅（4.1–4.8 全八小节）｜ §5 Evaluation ｜ §6 Conclusion ｜ **§7 讨论（写实感来源）✅**（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3）｜ §4 Model Training ✅（4.1–4.8 全八小节）｜ §7 讨论：写实感来源 ✅
+> **未覆盖**：§5 Performance Evaluation（Elo 三平台与 9 项客观基准的数值表）、§6 Conclusion、§2.5 之后的编辑对构造细节之外的 §5.3 定性八小节 —— 按需回原文 arXiv:2511.22699v5 补。
 
 ---
 
