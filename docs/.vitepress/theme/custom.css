@@ -95,3 +95,20 @@ mark.hl-trick {
   background-color: #a583e8;
   color: #1a0f2b;
 }
+
+/* 9. 讨论/推断标记绿色高亮（<mark class="hl-spec">）：用于区别于原文事实的推断 */
+mark.hl-spec {
+  background-color: #b8e6c1;
+  color: #10361d;
+  padding: 0.1em 0.25em;
+  margin: 0 0.05em;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 600;
+}
+
+.dark mark.hl-spec {
+  background-color: #74c98d;
+  color: #0b2413;
+}

@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ✅（4.1–4.8 全八小节）｜ §5 Evaluation ｜ §6 Conclusion（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ✅（4.1–4.8 全八小节）｜ §5 Evaluation ｜ §6 Conclusion ｜ **§7 讨论（写实感来源）✅**（笔记随学习逐节增补）
 
 ---
 
@@ -1046,4 +1046,75 @@ $$
 - **编辑场景下 PE 的负担更重**：§5.3.6 明确编辑时 PE 还要处理"消歧意图、注入世界知识、**物理推理**"—— 例如无 PE 时"设计一张海报"版面混乱、"泡普洱茶"画不出水与茶包的相互作用。原因是编辑时 PE 要同时理解**图**与**指令**的关系。
 - **PE 的开销没有被计入任何成本表**：Table 1 的 314K H800·h 与 §1.4 的 "<16GB VRAM" 都不含 PE 的推理开销。**端到端部署时每次生成都要先跑一遍 VLM**，这与 §1.2「\$628K 未计入数据/人工成本」属同一类记账问题，论文未讨论。
 - **PE 不参与 RLHF**：§4.6 的 reward model 评估的是 Z-Image 自身输出，PE 的改写质量没有被任何 reward 直接监督。
+:::
+
+---
+
+## 7. 讨论：为什么 Z-Image 的写实感特别强？
+
+> ⚠️ **本节性质说明**：§1–§4 是论文事实记述；**本节是我基于论文各处的表述做的串联与推断，不是论文原文的论述**。凡是论文确有明文的，我标了原文出处；凡是推断，我标了「推断」二字。§5 的数字尚未写入本笔记，涉及基准分数的结论等 §5 补完后再回来核对。
+
+### 7.1 先看论文自己是怎么说的
+
+论文在四个地方提到写实，但**从未给出因果解释**：
+
+| 位置 | 原文 | 说了什么 |
+| :--- | :--- | :--- |
+| Abstract | *"exceptional capabilities in **photorealistic** image generation"* | 现象陈述 |
+| §2.1 AIGC 过滤 | *"crucial for preventing degradation in the model's output quality **and physical realism**"* | **唯一给出因果的地方**：过滤 AIGC 图是为了保 physical realism |
+| §4.5.1 D-DMD | *"not only matches the original multi-step teacher but even **surpasses** it in terms of photorealism and visual impact"* | 蒸馏不降写实、反而超 teacher |
+| §4.6 / §5.1 | RLHF *"enhances **photorealism**, aesthetic quality, and instruction following"* | RLHF 能提写实 |
+
+**所以论文给的是四条分散在不同阶段的线索，而不是一个统一机制。** 下面是我把它们串起来的尝试。
+
+### 7.2 三个直接证据（论文明文）
+
+**① 数据侧：把 AIGC 图从预训练语料里剔掉。** 这是全文最关键的一处。§2.1 训练了一个专用 classifier 过滤 AI 生成内容，理由不是画质而是 <mark class="hl-spec">*"physical realism"*</mark>。
+
+这一点值得停下来想：**AIGC 图与真实照片的画质差距其实很小**（都很清晰、都很美），但它们缺的是**物理可信度** —— 光影不闭合、反射不衰减、材质没有次表面散射、衣服在暴雨里还是干的。所以过滤 AIGC 图买的不是"更清晰"，而是**"更符合真实世界成像规律"**。
+
+**② 奖励侧：把「像不像 AI 生成」显式写进 reward。** §4.6.1 的 reward model 三个维度里，除了 instruction-following 和 aesthetics，第三个就是 <mark class="hl-spec">**AI-Content Detection perception**</mark>。GRPO 的聚合维度里也直接列了 realism。
+
+**数据侧过滤 AIGC + 奖励侧惩罚 AIGC 感 = 同一个偏好在流水线的两端各实现一次。** 这在论文里没有被任何一处点明，但两处摆在一起看，意图很难是巧合。
+
+**③ 定性证据：失败模式全是"物理不自洽"。** §5.3.1 举了对竞品的具体批评：手机随手拍场景里 *"generate unrealistic things (**e.g., clothes that remain completely unsoaked in the heavy rain**)"*；多表情肖像里 *"exaggerated and unrealistic expressions"*。
+
+这两个例子的共性是：**不是画得不像，而是"这样在现实里不可能发生"。**
+
+### 7.3 我的推断：一个共同的机制叫「可辨识度」
+
+把上面三条并起来看，我倾向于认为 Z-Image 的写实感来自一个统一机制 —— **真实世界数据的分布被完整保留到最终工作点，而"AI 味"的所有来源都被系统性地抑制了**。这个机制横跨四个阶段，每一阶段各挡掉一部分：
+
+| 阶段 | 挡掉了什么"假"的来源 | 论文依据 |
+| :--- | :--- | :--- |
+| <mark class="hl-spec">数据（§2.1）</mark> | AIGC 图本身的物理不自洽 | *"preventing degradation in ... physical realism"* |
+| <mark class="hl-spec">SFT（§4.4）</mark> | web-scale 数据里的低质模式：不稳定风格化、不一致渲染 | *"discard low-quality modes (e.g., **unstable stylization or inconsistent rendering**)"* |
+| <mark class="hl-spec">蒸馏（§4.5.1）</mark> | 少步化引入的退化：高频丢失、色偏 | D-DMD *"detail preservation and **color fidelity**"* |
+| <mark class="hl-spec">RLHF（§4.6）</mark> | reward hacking 与 AI-content perception | *"reducing **undesirable artifacts**"* |
+
+**核心论点是：真实感不是一个"额外加上去"的能力，而是"没有被污染"的结果。** 大多数基座模型的训练语料里 AIGC 图占比越来越高，模型学到的是"摄影作品的高频统计"而不是"真实世界的成像规律"——这正好解释了整个社区近两年共同抱怨的 **"AI 味"**（蜡像感、过度锐化、HDR 化、光影扁平）。
+
+而 Z-Image 的做法是**在数据入口就把这个污染源切断**，再用后训练把剩余的退化一层层修掉。§4.5.1 那句"蒸馏后**反超** 100 步 teacher 的 photorealism"我认为是这一整套链条生效的间接证据 —— 如果 teacher 的写实感只是"没有明显破绽"，学生不可能在写实维度上超过它，只能是在**去伪**上做得更干净。
+
+### 7.4 这个解释的边界与反例
+
+::: warning 它解释不了全部
+- **数据里 AIGC 到底占多少比例、过滤阈值多严，论文没给。** 训练语料是 *"large-scale internal copyrighted collections"*，无法外部核验。**所以"过滤 AIGC 带来多少写实增益"无法量化，论文也没有做这个消融。**
+- **中文文字渲染 SOTA（CVTG-2K 0.8671、OneIG Text 0.987/0.988）不是写实赛道的能力**，它恰好证明了 Z-Image 走的是"全面"而非"单点"路线 —— 真实感与文字正确性来自不同的机制（后者主要归功于 §3.1 的 OCR-CoT captioning）。
+- **"反超 teacher 的 photorealism"只有文字声明，没有量化表。** §4.5.3 整节只有 Fig. 13 视觉对照，无 FID / 无美学分。这条论据是**定性断言**。
+- **§5.2.2 里 Z-Image-Edit 并不领先**（ImgEdit 第 3、GEdit-Bench 第 3），按 [Fig. 11](#sec-4-training) 它**没经过 §4.5 蒸馏与 §4.6 RLHF**。如果"去伪链条"是写实感的来源，那么**编辑分支缺了链条的后两环，编辑结果的写实感理应弱一截** —— 但论文没有测这项，无法验证。
+:::
+
+### 7.5 对你自己做基模的可迁移结论
+
+1. **"AI 味"是数据问题，不是 loss 问题。** 如果你的基座模型总带蜡像感，优先怀疑训练语料里的 AIGC 比例，而不是加 realism reward。奖励是事后纠正，数据是事前预防，**成本差一个量级**。
+2. **RLHF 阶段的 reward 可以直接引入「AI-content / 物理自洽」这类可判定的维度**，且不必是主观美学分。Z-Image 证明它可判（§4.6.2 的 DPO 之所以只能用客观维，正是因为客观维才能自动化标注）。
+3. **后训练的每一环都在"去伪"而非"加质"。** 分布收窄、概念平衡、蒸馏去伪影、RL 去伪奖励 —— 这四件事的共同点是**缩小偏差**，没有一个是在扩大能力。**这与 §1.2「预训练占 92.4% 算力、后训练只占 7.6%」的观察一致：后训练是"把已有分布修干净"，不是"造新能力"。**
+4. **别指望 PE 补写实。** §4.8 的 PE 补的是世界知识与内容规划，Fig. 15 三行对照里没有一行涉及真实感。**PE 反而有风险**：它会主动做"内容补全"（论文自己标为 hallucination），补错的事实会被 Z-Image 忠实画出。
+5. **可复现的最小子集**：如果资源有限，优先做「**AIGC 数据过滤 + 蒸馏期 detail/color 保真**」这两条 —— 它们是论文里**唯二有明确因果表述**的写实相关措施，且都不依赖大 VLM 或人工标注。
+
+::: danger 最需要保持怀疑的一点
+整条"去伪链条"解释在逻辑上自洽，也和论文的定性描述吻合，但**它的每一环在论文里都是定性的**。全文唯一的量化归因是 §1.2 的算力分布（Table 1），而**那张表不含任何质量维度**。
+
+换句话说：**这篇论文能证明"Z-Image 写实感强"，但不能证明"是因为做了这些"。** 要验证，需要在 AIGC 过滤比例上做消融 —— 而论文没做，外部也无法复现其语料。这是一个**方法论上可改进**的地方，也是你若要发文章可以切入的空白。
 :::
