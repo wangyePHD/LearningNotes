@@ -108,6 +108,15 @@ const notesList = ref([
     summary: '从 2D UNet 级联到 3D Causal VAE 与 DiT 主干的演变，解析连续潜空间压缩与物理一致性建模。',
     tags: ['Video Gen', 'DiT', 'Diffusion', '3D VAE']
   },
+  {
+    title: '单流扩散基模 Z-Image (S3-DiT + 全链路后训练)',
+    link: '/domains/vision/z-image',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-26',
+    summary: 'S3-DiT 6.15B 单流主干（30 层/3840 hidden，Qwen3-4B+Flux VAE）+ 数据四模块闭环；SFT 三件套、D-DMD 解耦 CA/DM、DMDR、DPO(客观)+GRPO(复合奖励)；全流程 314K H800·h≈$628K，Turbo 8 NFE。',
+    tags: ['Vision', 'Diffusion', 'DiT', 'Flow Matching', 'Distillation', 'RLHF', 'Z-Image']
+  },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
     title: '语义先行扩散范式 (SFD)',

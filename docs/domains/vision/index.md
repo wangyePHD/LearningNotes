@@ -6,6 +6,7 @@
 
 | 篇目 | 主题 / 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
+| **单流扩散基模 Z-Image** | S3-DiT 6.15B 单流主干 + 数据四模块闭环，SFT 三件套 → D-DMD/DMDR 蒸馏 8 NFE → DPO+GRPO，全流程 314K H800·h | 🟢 已完结 | [阅读笔记 →](./z-image.md) |
 | **语义先行扩散范式 (SFD)** | 复合语义-纹理隐空间 + 固定偏移 $\Delta t$ 异步去噪三阶段，ImageNet FID 1.04 / 收敛快 100× | 🟢 已完结 | [阅读笔记 →](./sfd-semantic-first-diffusion.md) |
 | **语义先行文生图基模 (SeFi-Image)** | SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力 | 🟢 精读中 | [阅读笔记 →](./image-rl-posttraining/sefi-image-rl.md) |
 | **Caption 与效率专题** | DALL-E 3 recaption 范式与 Lens 效率方法论，两篇精读 | 🟢 已完结 | [进入专题 →](./caption-efficiency/) |
