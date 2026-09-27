@@ -694,7 +694,7 @@ $$
 
 ![Z-Image Fig.12：训练各阶段的生成结果演进（实际横跨 §4.1–§4.6 全流程）。列为 (a) Pre-train → (b) SFT → (c) PE → (d) FSD → (e) RLHF。可观察到 pre-train 阶段构图/文字尚不准确但语义已成立，SFT 后画面质量与美学跃升，PE 阶段推理链补齐了复杂构图，蒸馏阶段保住质量，RLHF 阶段写实感与光影进一步收敛。](/zimage-fig12-training-stages.png)
 
-先看基础训练目标。Z-Image 使用 **Flow Matching**。从高斯噪声 $x_0$ 和真实图像 latent $x_1$ 之间做线性插值：
+先看基础训练目标。Z-Image 使用 <mark class="hl-trick">**Flow Matching**</mark>。从高斯噪声 $x_0$ 和真实图像 latent $x_1$ 之间做线性插值：
 
 $$
 x_t=t\,x_1+(1-t)\,x_0
@@ -707,20 +707,19 @@ v_t=x_1-x_0
 $$
 
 训练 loss 就是模型输出的 vector field 与真实 velocity 之间的 MSE：
-
 $$
 \mathcal{L}=\mathbb{E}_{t,x_0,x_1,y}\Big[\big\|u(x_t,y,t;\theta)-(x_1-x_0)\big\|_2^2\Big] \tag{1}
 $$
 
-这里 $y$ 是条件嵌入、$\theta$ 是可学习参数。还用了两个比较重要的训练技巧：一个是跟 SD3 一样使用 **logit-normal timestep sampler**，让训练更多集中在中间 timestep；另一个是跟 Flux 类似的 **dynamic time shifting**，因为不同图像分辨率的 SNR 分布不同，需要根据分辨率调整实际噪声时间，从而让多分辨率训练更稳定。
+这里 $y$ 是条件嵌入、$\theta$ 是可学习参数。还用了两个比较重要的训练技巧：一个是跟 SD3 一样使用 <mark class="hl-trick">**logit-normal timestep sampler**</mark>，<mark class="hl-trick">让训练更多集中在中间 timestep</mark>；另一个是跟 Flux 类似的 <mark class="hl-trick">**dynamic time shifting**</mark>，因为<mark class="hl-trick">不同图像分辨率的 SNR 分布不同，需要根据分辨率调整实际噪声时间，从而让多分辨率训练更稳定</mark>。
 
-第一阶段是 **Low-resolution Pre-training**。这个阶段非常纯粹：<mark class="hl-trick">只做 **$256\times256$ 的 text-to-image generation**</mark>。目标不是追求最终高清效果，而是用较低计算成本先把最基础的东西学出来，包括 cross-modal alignment、基本视觉知识、各种 concepts、styles、compositions。论文明确说，<mark class="hl-trick">这一阶段占了整个 pre-training compute 的一半以上</mark>，因为作者认为<mark class="hl-trick">模型的大部分 foundational visual knowledge，包括 **Chinese text rendering**，其实都可以在低分辨率阶段先学到</mark>。
+第一阶段是 <mark class="hl-trick">**Low-resolution Pre-training**</mark>。这个阶段非常纯粹：<mark class="hl-trick">只做 **$256\times256$ 的 text-to-image generation**</mark>。目标不是追求最终高清效果，而是用较低计算成本先把最基础的东西学出来，包括 cross-modal alignment、基本视觉知识、各种 concepts、styles、compositions。论文明确说，<mark class="hl-trick">这一阶段占了整个 pre-training compute 的一半以上</mark>，因为作者认为<mark class="hl-trick">模型的大部分 foundational visual knowledge，包括 **Chinese text rendering**，其实都可以在低分辨率阶段先学到</mark>。
 
-然后进入 **Omni-pre-training**。这里的"Omni"主要指三个维度。第一个是 **Arbitrary-Resolution Training**：<mark class="hl-trick">不再固定 $256$，而是把原始图像通过 resolution-mapping function 映射到预定义的 training resolution range</mark>，允许不同分辨率和宽高比一起训练。这样可以<mark class="hl-trick">减少强行 downsample 带来的信息损失</mark>，也为最后支持大约 1K–1.5K 分辨率做准备。
+然后进入 <mark class="hl-trick">**Omni-pre-training**</mark>。这里的"Omni"主要指三个维度。第一个是 <mark class="hl-trick">**Arbitrary-Resolution Training**</mark>：<mark class="hl-trick">不再固定 $256$，而是把原始图像通过 resolution-mapping function 映射到预定义的 training resolution range</mark>，允许不同分辨率和宽高比一起训练。这样可以<mark class="hl-trick">减少强行 downsample 带来的信息损失</mark>，也为最后支持大约 1K–1.5K 分辨率做准备。
 
-第二个是 **Joint Text-to-Image and Image-to-Image Training**。这点很重要：<mark class="hl-trick">Z-Image 不是先把 T2I foundation model 完整训完，再单独从头搞 editing，而是在 omni-pretraining 阶段就已经把 image-to-image task 混进来了</mark>。这里使用前面 2.5 构建的大规模、自然的、弱对齐 image pairs，让模型在大规模 pretrain compute 下<mark class="hl-trick">提前学"两个图像之间的关系"</mark>。论文明确说，这给后续 editing 提供了很好的 initialization，而且他们观察到这种联合预训练**没有明显损害 T2I 性能**。
+第二个是 <mark class="hl-trick">**Joint Text-to-Image and Image-to-Image Training**</mark>。这点很重要：<mark class="hl-trick">Z-Image 不是先把 T2I foundation model 完整训完，再单独从头搞 editing，而是在 omni-pretraining 阶段就已经把 image-to-image task 混进来了</mark>。这里使用前面 2.5 构建的大规模、自然的、弱对齐 image pairs，让模型在大规模 pretrain compute 下<mark class="hl-trick">提前学"两个图像之间的关系"</mark>。论文明确说，这给后续 editing 提供了很好的 initialization，而且他们观察到这种联合预训练**没有明显损害 T2I 性能**。
 
-第三个是 **Multi-level and Bilingual Caption Training**。前面第 3 节学到的 Z-Captioner 终于在这里真正用起来：训练时会混合 bilingual 的 long / medium / short captions、tags、simulated user prompts，同时<mark class="hl-trick">还会以较小概率使用原始 textual metadata，用来增强 world knowledge</mark>。作者强调，不同粒度和不同视角 caption 能提供更广的 mode coverage，为后续阶段打基础。对于 image-to-image 数据，他们还会随机选择两种文本条件：一种是 **target image caption**，对应 reference-guided generation；另一种是 **pairwise difference caption**，对应 image editing。至于这两个条件各自的采样概率，论文没有公开。
+第三个是 <mark class="hl-trick">**Multi-level and Bilingual Caption Training**</mark>。前面第 3 节学到的 Z-Captioner 终于在这里真正用起来：训练时会混合 bilingual 的 long / medium / short captions、tags、simulated user prompts，同时<mark class="hl-trick">还会以较小概率使用原始 textual metadata，用来增强 world knowledge</mark>。作者强调，不同粒度和不同视角 caption 能提供更广的 mode coverage，为后续阶段打基础。对于 image-to-image 数据，他们还会随机选择两种文本条件：一种是 **target image caption**，对应 reference-guided generation；另一种是 **pairwise difference caption**，对应 image editing。至于这两个条件各自的采样概率，论文没有公开。
 
 所以 4.3 最重要的训练主线可以直接记成：
 
