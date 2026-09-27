@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览，3.1–3.3 待展开）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1 + 3.2，3.3 待展开）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -391,7 +391,7 @@ $$
 
 ---
 
-## 3. Image Captioner（论文 §3）
+## 3. Image Captioner（论文 §3） { #sec-3-captioner }
 
 第 3 节 **Image Captioner** 的总览其实很清楚：Z-Image 不是把 caption 当成"给图片写一句描述"，而是把它当成**训练监督信号的设计问题**。这一节的目标，是让同一张图同时拥有适合不同训练需求的文本表达，并且让这些文本尽可能覆盖图里的文字、世界知识、细节信息，以及编辑前后的差异。Figure 8 里给出的整体结构就是：单图经过 Z-Captioner，结合 **World Knowledge、OCR Augmentation、Tagging**，生成多层级的 T2I captions；对于 image pair，则生成专门的 image editing instruction。
 
@@ -428,3 +428,66 @@ $$
 - **差分 caption 的三步 CoT 借鉴了 [100]**，且 Step2 明确 *"leveraging both the raw images and their generated captions"* —— 即比较时**既看图也读 caption**，不是纯文本比对。
 - **Fig. 9 左图暴露了一个 caption 设计风险**：Tagging Caption 里 OCR 转写、地名、风格标签、杂志刊名、页码文字**全部平铺进同一串逗号列表**，长尾且无语义结构。论文把它当 tag 用途是合理的，但这类监督若占比过高，可能诱导模型输出堆砌式 prompt。这是论文未讨论的潜在副作用。
 :::
+
+### 3.1 Detailed Caption with OCR Information
+
+3.1 **Detailed Caption with OCR Information** 这一节其实很短，但它对 Z-Image 的文字生成能力很关键。论文最明确的结论是：**如果图像里本身有文字，那么 caption 里必须显式包含这些 OCR 信息，否则模型很难学好文字渲染。** 作者甚至直接说，他们实验中观察到，把 OCR 信息明确写进 image caption，和最终生成图像中的准确 text rendering 是"inextricably bound"的。
+
+它的做法不是"先生成整段 caption，再顺手补 OCR"，而是采用一个类似 CoT 的两步流程：**先把图像里所有可见文字识别出来，再基于这些 OCR 结果去生成完整 caption**。这么做的原因是，如果直接让 captioner"一次性描述整张图"，当图中文字很多、很密时，模型很容易漏掉部分文字；先单独做 OCR，相当于先把最容易丢失的文本信息显式抽出来，再让后续 caption 必须基于这些结果生成。论文特别强调，这对长文本、密集文字场景尤其重要。
+
+还有一个很容易忽略但很关键的细节：**OCR 结果保持原语言，不做翻译。** 比如图片里写的是中文，就保留中文；写的是英文，就保留英文。作者这么做是为了避免 caption 阶段把文字翻译掉，导致后面生成时模型学成"看到中文场景却输出英文翻译"这种错误映射。这个设计对 Z-Image 的中英文双语 text rendering 很重要。
+
+所以 3.1 你可以直接记成这一条：
+
+$$
+\boxed{
+\text{Image}
+\rightarrow
+\text{Explicit OCR First}
+\rightarrow
+\text{Caption conditioned on OCR}
+}
+$$
+
+真正要掌握的点只有两个：**第一，图中文字要作为显式监督信号进入 caption；第二，OCR 要先做、且保留原语言。** 这一节不需要再往下抠，因为论文这里没有公开 OCR 模型结构、OCR loss、识别阈值或者具体训练细节。
+
+::: warning 这一节的论证强度
+*"inextricably bound"* 是很强的措辞，但**论文没有给出对应的消融表或数字**（CVTG-2K / LongText-Bench 只报了最终成绩，没报"去掉 OCR 增强会掉多少"）。所以这是一个**实验断言但未量化**的结论。可以放心当作设计原则接受，但引用时不宜说成"论文证明了"。
+:::
+
+实例见上文 [Fig. 9 左半](#sec-3-captioner) —— Long Caption 里把围裙上的「2025 杭州美食节」和挂签上的「中雨香」逐字转写并保留原语言，正是这条规则的产物。
+
+### 3.2 Multi-Level Caption with World Knowledge
+
+3.2 **Multi-Level Caption with World Knowledge** 这一节的核心，不是"把 caption 写得更长"，而是让同一张图同时拥有**不同粒度、不同用途**的文本监督。论文明确说，Z-Captioner 一共设计了 5 类 caption：**long、medium、short、tags、simulated user prompts**。其中 long/medium caption 尽可能覆盖图像里的主体、物体、背景、位置、OCR 等完整信息，用来建立精细的 text-image mapping；而 short、tags 和 simulated user prompts 更接近真实用户输入，尤其 simulated user prompt 故意是不完整的，只描述用户可能真正关心的局部内容，而不是把整张图都说一遍。
+
+这里最值得理解的是为什么要多粒度。论文的逻辑是：如果训练时永远只给超详细长 caption，模型会很擅长"按说明书作图"，但真实用户往往只会输入很短、很模糊的 prompt。反过来，如果只用短 prompt，模型又学不到足够细的视觉-语言对应关系。所以 Z-Image 同时保留不同粒度，本质是在兼顾两种能力：**精细对齐** 和 **真实用户 prompt 适应性**。论文在 omni-pretraining 部分也明确说，多粒度 caption 和不同视角的描述能够提供更广的 mode coverage，有利于后续训练。
+
+"with World Knowledge" 则是另一层增强。Z-Image 不希望 captioner 只描述"这里有一栋塔、一片湖"，而是希望它能在有足够证据时识别出"这是杭州西湖、雷峰塔"这种具体实体。因此他们在 caption 生成时引入 meta information，把 world knowledge 注入到所有 5 类 caption 中。论文明确说，这么做是为了减少对 public figures、famous landmarks、known events 这类 named entities 的 hallucination。也就是说，world knowledge 的作用不是让 caption 更文学，而是让它在具体实体命名上更准确。
+
+同时，Z-Image 对长 caption 的风格还有一个很明确的限制：**plain and objective**。它要求描述尽量基于图中可观察事实，避免主观解释和想象性联想。作者认为这样可以减少无关信息，提高 image generation 训练的数据效率。
+
+所以 3.2 最后你可以记成：
+
+$$
+\boxed{
+\text{同一张图}
+\rightarrow
+\text{多粒度 Caption}
++
+\text{World Knowledge}
+}
+$$
+
+其中，多粒度解决"详细监督"和"真实用户 prompt"之间的差异；world knowledge 解决 named entity 和具体世界概念的准确识别；而整体 caption 风格保持客观、事实化，避免无关想象。
+
+::: info 原文补充（笔记核对时添加，论文 §3.2 可查）
+- **5 类 caption 的原文措辞**：*"We design five different types of image captions in total, including long, medium and short captions, as well as tags and simulated user prompts."* 注意是**五类**，"simulated user prompts" 单列一类。
+- **长 caption 塞的东西有清单**：原文列了 *"full OCR results as mentioned above, along with subjects, objects, background, location information, et al."*
+- **客观文风的目的是数据效率不是可读性**：原文 *"By **inhibiting subjective interpretations and imaginative associations**, our purpose is to **enhance data efficiency** ... by eliminating non-essential information."* —— 这是主动**牺牲 caption 的文学性**换训练信号纯度。
+- **world knowledge 的注入条件是"条件于 meta information"**：§2.1 Data Profiling Engine 产出的元信息在这里被 captioner 消费。**§2.1 → §3.2 是一条直接的数据流**：没有 profiling engine 的元信息，captioner 无从做实体命名。
+- **与 §4.3 的呼应**：你提到的 "mode coverage 有利于后续训练" 在论文 §4.3 有对应原句 —— *"The use of captions at different granularities and from diverse perspectives provides **broad mode coverage**, which is beneficial for subsequent stages of training."* 这条在 §4.3 讲 omni 预训练时会再次出现。
+- **medium caption 的正例在附录**：§3 总览的 Fig. 9 只展示了 long / short / tags 三类的实例，**medium caption 与 simulated user prompt 没有给实例**。
+:::
+
+多粒度实例见上文 [Fig. 9 左半](#sec-3-captioner)。下一节 3.3 会转到 **source-target pair 怎么生成 editing instruction**。
