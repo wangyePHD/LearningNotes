@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.5 ✅，4.6–4.8 待展开）｜ §5 Evaluation
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.6 ✅，4.7–4.8 待展开）｜ §5 Evaluation
 
 ---
 
@@ -879,4 +879,74 @@ $$
 - **D-DMD 的额外结论**：论文说蒸馏后的模型 *"not only **matches** the original multi-step teacher but even **surpasses** it in terms of **photorealism and visual impact**"* —— 即在**写实感和视觉冲击力**上反超 teacher，这与 §5.1 的人类偏好结论方向一致。
 - **RL 用在蒸馏内部，不是蒸完之后**：§4.5.2 标题即 *"Enhancing Capacity **with RL and Regularization**"*，且写的是 *"we **incorporate** Reinforcement Learning (RL) **into the few-step distillation process**"*。这与 §4.6 的独立 RLHF 阶段是**两次不同的 RL**，别混。
 - **两个 RL 的分工**：DMDR 里的 RL 负责 *"unlock the student model's capacity to **align with human preferences**"*，而 §4.6 的 RLHF 负责 *"substantial improvements in **photorealism, aesthetic quality, and instruction following**"*。前者嵌在蒸馏里当"能力解锁"，后者是独立后训练阶段。
+:::
+
+### 4.6 Reinforcement Learning with Human Feedback (RLHF)
+
+4.6 是<mark class="hl-trick">**接在 4.5 Few-Step Distillation 之后**的完整人类偏好后训练阶段</mark>。前面的 FSD / Turbo 模型已经兼顾了速度和较强的基础生成能力，但作者认为它在<mark class="hl-trick">更细粒度的人类偏好上仍然可能不稳定</mark>，因此又设计了一套完整的 RLHF pipeline。整体结构非常清楚：<mark class="hl-trick">**先训练一个多维 Reward Model，再做两阶段优化：先 DPO 做 offline alignment，再 GRPO 做 online refinement。**</mark> 这两阶段的目的也不同：DPO 先处理客观、可验证的能力，GRPO 再利用多维 reward 去优化更主观、更综合的质量。Figure 14 也明确表明，<mark class="hl-trick">RLHF 是建立在 FSD 模型基础之上，进一步提升 photorealism、aesthetic quality 和 instruction following</mark>。
+
+$$
+\boxed{\ \text{FSD / Turbo Foundation}\rightarrow\text{Multi-dimensional Reward Model}\rightarrow\text{DPO}\rightarrow\text{GRPO}\ }
+$$
+
+![Z-Image Fig.14：FSD（上排）与 RLHF（下排）视觉对照。四组 prompt 分别是异色眼眸特写、溪边玩水的少女、香蕉长出猴子的脑袋、狮子骑的袋鼠。可观察到 RLHF 之后眼睛睫毛更根根分明、皮肤纹理更真实；少女的面部与身体结构更自然；香蕉与猴子的融合处层次更合理；狮子与运动员的解剖与光照更可信。](/zimage-fig14-rlhf.png)
+
+#### 4.6.1 Reward Annotation and Training
+
+RLHF 的核心基础是 Reward Model。Z-Image 的 Reward Model 主要评估三个维度：<mark class="hl-trick">**instruction-following capability、AI-Content Detection perception、aesthetic quality**</mark>。
+
+其中 instruction following 的标注流程讲得最详细：<mark class="hl-trick">先对 prompt 做 syntactic 和 semantic decomposition，把一条复杂 prompt 拆成一个结构化层级</mark>，包括 **核心主体实体、属性要求、动作或交互要求、空间或构图约束、风格或渲染条件**。然后<mark class="hl-trick">人工标注员不需要直接给整张图一个模糊的总分，而是只需要点击模型输出中"没有满足"的元素</mark>。最后根据被满足元素所占比例，计算 instruction-following score，并把这个分数作为目标 reward。
+
+$$
+r_{\text{IF}}=\frac{\#\{\text{被满足的元素}\}}{\#\{\text{结构化层级中的全部元素}\}}
+$$
+
+<mark class="hl-trick">这个设计的核心价值是把"是否听懂 prompt"变成更细粒度、更结构化、可解释的监督，而不是单一总体评分。</mark>
+
+对于另外两个维度，论文只明确说 Reward Model 也会专门学习 **AI-Content Detection perception** 和 **aesthetic quality**，但<mark class="hl-trick">没有继续披露它们具体怎么标注、Reward Model 用什么网络结构、训练数据规模多大、各个维度分别采用什么 loss</mark>。因此这部分不能再自行补充。
+
+#### 4.6.2 Stage 1: Offline Alignment with DPO on Objective Dimensions
+
+第一阶段采用 <mark class="hl-trick">**DPO**</mark>，但 Z-Image <mark class="hl-trick">**并不是拿所有人类偏好都来做 DPO**</mark>。作者认为，像 aesthetics、style 这种主观维度，如果要大规模人工构造高质量 preference pair，成本很高，而且不同人的判断不稳定，因此他们刻意把 DPO 聚焦到 <mark class="hl-trick">**objective, verifiable dimensions**</mark>，也就是具有明确正确答案的能力，论文举的代表性例子就是 <mark class="hl-trick">**text rendering 和 object counting**</mark>。例如 prompt 要求图中写出某段文字，那么文字完全正确的图就作为 chosen，出现拼写错误或文字错误的图作为 rejected。
+
+这些 preference pair 的构造<mark class="hl-trick">**也不是纯人工完成**</mark>。Z-Image 使用现代 VLM <mark class="hl-trick">**程序化地生成大量候选 preference pairs**</mark>，然后再让人工做 verification 和 cleaning，形成一种 <mark class="hl-trick">**VLM 自动构造 + 人工快速校验**</mark> 的数据流水线。作者认为，这种方式相比纯人工制作 preference data，可以显著提升标注 throughput 和 consistency，同时又通过人工清洗保证最终数据的 fidelity。
+
+DPO 训练里还用了<mark class="hl-trick">**两层 curriculum**</mark>：
+
+| 层 | 做法 | 原文依据 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">**prompt complexity curriculum**</mark> | <mark class="hl-trick">先从简单任务（只渲染一个单词、生成少量物体）开始，再逐步增加到包含多个元素、复杂 layout、困难 style 的任务</mark> | *"begins with prompts of **low complexity** ... and **progressively advances** to more challenging instructions"* |
+| <mark class="hl-trick">**preference pair differentiation curriculum**</mark> | <mark class="hl-trick">训练初期优先用 **moderate differentiation** 的 pair，之后逐渐引入差异更大或更细微的更难 pair</mark> | *"DPO's convergence is **sensitive to the differentiation** between positive and negative samples ... **initially prioritizes pairs with moderate differentiation**"* |
+
+作者认为这种设计能<mark class="hl-trick">加快收敛，并提升最终效果</mark>。
+
+所以 4.6.2 的本质可以理解为：<mark class="hl-trick">**先用那些"有明确对错"的能力做一轮稳定、低噪声的 preference alignment。**</mark> 这一步不是为了追求更主观的审美上限，而是先把文字、数量、结构化指令等客观能力对齐好。
+
+#### 4.6.3 Stage 2: Online Refinement with GRPO
+
+完成 DPO 之后，第二阶段进入 <mark class="hl-trick">**GRPO 的在线强化学习**</mark>。此时训练目标不再局限于 text rendering 和 object counting 这些客观维度，而是开始利用前面训练好的多维 Reward Model，对模型做更广泛的优化。论文明确写到，这一阶段重点提升 <mark class="hl-trick">**photorealistic image generation、aesthetic quality 和 nuanced instruction-following**</mark>。
+
+GRPO 的一个重要设计是：<mark class="hl-trick">它不是只使用一个单一 reward，而是把多个 reward score 聚合成一个 **composite advantage function**</mark>。论文举到的维度包括 realism、aesthetics、instruction following 等。通过这种 multi-faceted feedback，模型能够同时从多个角度被优化，而不是为了某一个单独指标过度拟合。论文进一步强调，这种多 reward 联合优化可以同时提升 photorealism、aesthetic quality、semantic accuracy，并<mark class="hl-trick">减少 undesirable artifacts</mark>，而且<mark class="hl-trick">实际效果明显优于只优化单一 reward 的方案</mark>——原文是 *"significantly more effective than optimizing against a single reward, allowing the model to achieve a **better balance** across multiple, often **competing**, quality dimensions"*。
+
+其中 Reward Model 提供 **instruction following、AI-content perception、aesthetic quality** 等多维反馈；DPO 先针对 **text rendering、object counting** 这类 objective / verifiable dimensions 做离线偏好对齐，并采用 **VLM 自动构造 pair + 人工清洗 + 双层 curriculum**；GRPO 再基于多维 reward 做在线优化，把 realism、aesthetics、semantic accuracy、instruction following 和 artifact suppression 继续往上推。
+
+::: warning 本节未公开的内容（不能从论文推断）
+- **Reward Model** 的具体网络结构、训练数据规模；
+- **AI-content perception 与 aesthetic quality 的具体标注协议**；
+- **各 reward 的权重** $\{$、**DPO 的 $\beta$**、**preference pair 总量**；
+- **DPO / GRPO 的训练 step、学习率**；
+- **GRPO 的 group size、每个 prompt 的 rollout 数量、KL coefficient**；
+- **composite advantage 的具体公式**（论文只说"aggregating the scores"）。
+:::
+
+::: tip 最终只需要牢牢记住这一句
+> **Z-Image 的 RLHF 不是直接上 GRPO，而是先用 DPO 把客观正确性对齐好，再用多维 Reward Model 驱动 GRPO 去优化更主观、更综合的人类偏好。**
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.6 可查）
+- **与 §4.5 的关系已在图上坐实**：Fig. 14 的 caption 是 *"Building upon **the strong foundation of the FSD model**, RLHF further enhances photorealism, aesthetic quality, and instruction following."* 加上 Fig. 11 里 RLHF 的 x 坐标（421）位于 Few-step Distillation（359）**右侧**，两条证据一致：**RLHF 作用在蒸馏产物上**。
+- **这是论文里的第二次 RL**：第一次是 §4.5.2 嵌在蒸馏内部的 DMDR，第二次是本节的独立 RLHF 阶段。两次都用奖励信号，但**前者解锁 few-step 能力、后者做偏好对齐**，不要混。
+- **AI-Content Detection 这个维度值得注意**：它不是常规 RLHF 里的 safety/quality 项，而是显式评估"看起来像不像 AI 生成"。结合 §2.1 的 AIGC 过滤（*"preventing degradation in output quality **and physical realism**"*），可以看出一条**贯穿全文的写实主义主线**：数据侧过滤 AIGC 图 → 架构侧强调 physical realism → 奖励侧显式评 AI-content perception。
+- **DPO 的 chosen/rejected 判定是"二元正确性"而非"程度比较"**：原文明确 *"clear and **binary** correctness criteria"*。这正是它能被 VLM 自动化的前提 —— 也解释了为什么主观维（aesthetics、style）反而**不能**这么做，这与 §2.4 里 reward model 需要人工校准的结论一致。
+- **引用出处**：DPO 引 [59]、GRPO 引 [66, 46]、CFG 引 [29]、multi-faceted 优化思路引 [84]。
 :::
