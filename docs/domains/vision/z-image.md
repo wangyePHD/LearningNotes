@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5 全五小节）｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览，3.1–3.3 待展开）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -387,4 +387,44 @@ $$
 - **video pair 的筛选阈值是"高语义相关性"而非"相邻帧"**：论文用 CN-CLIP 算 image embedding 的 **cosine similarity**，在每个 image group 内筛出高相关对。也就是说采的是"同组语义相关的帧"，不要求时间上紧邻。
 - **video pair 的天然优势是"多编辑类型耦合"**：论文举例 simultaneous changes in human pose and background —— 这类**同时发生**的多因素变化，用预定义 taxonomy 反而很难造出来。
 - **渲染系统借用了既有工作**（论文标注 [76]，即 Qwen-Image 一系），不是自研；其价值在于 **ground-truth instruction 由渲染操作本身给出**，天然免去人工标注。
+:::
+
+---
+
+## 3. Image Captioner（论文 §3）
+
+第 3 节 **Image Captioner** 的总览其实很清楚：Z-Image 不是把 caption 当成"给图片写一句描述"，而是把它当成**训练监督信号的设计问题**。这一节的目标，是让同一张图同时拥有适合不同训练需求的文本表达，并且让这些文本尽可能覆盖图里的文字、世界知识、细节信息，以及编辑前后的差异。Figure 8 里给出的整体结构就是：单图经过 Z-Captioner，结合 **World Knowledge、OCR Augmentation、Tagging**，生成多层级的 T2I captions；对于 image pair，则生成专门的 image editing instruction。
+
+![Z-Image Fig.8：Z-Captioner 双路流水线。上路 Single Image → 生成 Tagging/Short/Long Caption 三类 T2I caption；下路 Image Pair → Step1 Caption / Step2 Analysis / Step3 Instruction 三步生成编辑指令。World Knowledge 从上方注入，OCR Augmentation 从下方注入。](/zimage-fig8-captioner-pipeline.png)
+
+对于单张图，Z-Captioner 最终不是只输出一种 caption，而是会生成不同粒度的描述。论文后面明确说一共设计了 **5 种 caption：long、medium、short、tags 和 simulated user prompts**。长 caption 尽量完整描述图像内容，适合精细图文对齐；短 caption 和 tags 更简洁；simulated user prompt 则专门模拟真实用户那种"短、不完整、只说自己关心部分"的输入。这样做的目的，是让模型既能学会精确对应复杂长描述，也能适应真实用户比较随意、信息不完整的 prompt。
+
+这一节还有两个很关键的增强。第一是 **OCR-aware captioning**：Z-Image 特别强调，图里如果有文字，要先显式识别出来，而且保留原语言，再把 OCR 结果写进 caption，因为他们认为这和最终文字渲染能力直接相关。第二是 **world knowledge injection**：caption 不只是描述"看到了什么"，还会结合 meta information 去识别具体实体、地标、事件，尽量减少 named entity 的错误和幻觉。论文明确把这两点作为 Z-Captioner 的核心设计。
+
+对于图像编辑，逻辑又不一样。Z-Captioner 不直接看 source/target 就一句话猜 edit instruction，而是走三步：先分别给 source 和 target 做详细 caption，然后做 difference analysis，最后再把这些差异压缩成 concise editing instruction。也就是：
+
+$$
+\text{Source/Target Caption}
+\rightarrow
+\text{Difference Analysis}
+\rightarrow
+\text{Editing Instruction}
+$$
+
+这样做的好处是把"看懂两张图"和"总结编辑动作"拆开，能更系统地覆盖视觉变化和文字变化。
+
+![Z-Image Fig.9：caption 实例。左半为单图的三类 caption——Tagging Caption 是一长串逗号分隔标签（含 OCR 转写与地名 'West Lake, Hangzhou, China, Leifeng Pagoda'、中英文字 '2025 杭州美食节'、'中雨香'），Long Caption 里把图中文字逐条转写并保留原语言；右半为差分 caption 的三步：source 是白猫特写，target 是拟人猫穿西装站在海滩，Step2 分析出 Subject modification / Element addition / Scene change 三类差异，Step3 压缩成一句自然语言指令。](/zimage-fig9-caption-examples.png)
+
+::: tip 第 3 节的总体印象
+
+> Z-Captioner 的核心不是 caption 越长越好，而是针对不同训练任务设计不同形式的监督文本。T2I 需要多粒度 caption、OCR 和 world knowledge；Editing 则需要 source-target difference caption。后面 3.1、3.2、3.3 其实就是分别把这三块展开。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §3 可查）
+- **Z-Captioner 是"all-in-one"**：论文明确说它 *"by incorporating **multiple types** of image caption"* 建成一个全功能 captioner，依据是 *"different captioning tasks can benefit each other as they share the same goal of understanding and depicting images"*（引用 [49]）。**多任务 captioner 反而互相增益**，不是简单堆功能。
+- **OCR 的因果是论文用实验断言的**：原文 *"according to our experiments, including explicit OCR information in image captions is **inextricably bound** with accurate text rendering"* —— 不可分割。但论文**未给该实验的消融表**，属未验证细节。
+- **OCR 强制不翻译**：*"we **force the OCR results to remain in their original languages without any translation**, avoiding them being falsely rendered in their translated languages"* —— 这条对中英混排海报很关键。
+- **§3.2 的两个反直觉设计**（原文可查，是本节最容易被漏掉的）：① 长 caption *"deliberately adopt a **plain and objective** linguistic style ... strictly confining them to factual information"*，主动**抑制主观想象**以提升数据效率；② 模拟用户 prompt *"are **incomplete** prompts"*，与 short caption 有本质区别 —— short caption 描述全图，模拟 prompt *"focusing only on specific parts of interest to the user, while making no mention of the rest of the image"*。
+- **差分 caption 的三步 CoT 借鉴了 [100]**，且 Step2 明确 *"leveraging both the raw images and their generated captions"* —— 即比较时**既看图也读 caption**，不是纯文本比对。
+- **Fig. 9 左图暴露了一个 caption 设计风险**：Tagging Caption 里 OCR 转写、地名、风格标签、杂志刊名、页码文字**全部平铺进同一串逗号列表**，长尾且无语义结构。论文把它当 tag 用途是合理的，但这类监督若占比过高，可能诱导模型输出堆砌式 prompt。这是论文未讨论的潜在副作用。
 :::
