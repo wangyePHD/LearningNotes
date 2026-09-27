@@ -51,7 +51,8 @@ export default defineConfig({
           { text: '🎬 视频模型 (Video Intelligence)', link: '/domains/video/' },
           { text: '🖼️ 图像与视觉 (CV & Image)', link: '/domains/vision/' },
           { text: '💬 语言与推理 (LLM & Reasoning)', link: '/domains/llm/' },
-          { text: '🎙️ 多模态与语音 (Multimodal)', link: '/domains/multimodal/' }
+          { text: '🎙️ 多模态与语音 (Multimodal)', link: '/domains/multimodal/' },
+          { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' }
         ]
       },
       { text: '📐 通用基石', link: '/foundations/' },
@@ -180,7 +181,20 @@ export default defineConfig({
         }
       ],
 
-      // 5. 通用理论基石专属侧边栏
+      // 5. 智能体系统专属侧边栏
+      '/domains/agent/': [
+        {
+          text: '🤖 智能体系统与工具编排',
+          items: [
+            { text: '领域概览与 12 课路线图', link: '/domains/agent/' },
+            { text: '智能体循环的形式化 (Loop + State)', link: '/domains/agent/agent-loop-formalization' },
+            { text: '结构化输出即可靠性契约 (q^n 与重试)', link: '/domains/agent/structured-output-contract' },
+            { text: '规划作为数据与 AoT 依赖图 (DAG)', link: '/domains/agent/planning-aot-dependency-graph' }
+          ]
+        }
+      ],
+
+      // 6. 通用理论基石专属侧边栏
       '/foundations/': [
         {
           text: '📐 通用理论基石',
@@ -193,7 +207,7 @@ export default defineConfig({
         }
       ],
 
-      // 6. 算力与工程专属侧边栏
+      // 7. 算力与工程专属侧边栏
       '/infra/': [
         {
           text: '⚡ 算力与系统工程',
@@ -205,7 +219,7 @@ export default defineConfig({
         }
       ],
 
-      // 7. 实战项目专属侧边栏
+      // 8. 实战项目专属侧边栏
       '/projects/': [
         {
           text: '🚀 个人复现与落地项目',

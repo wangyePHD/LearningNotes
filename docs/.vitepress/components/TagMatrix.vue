@@ -2,7 +2,7 @@
   <div class="tag-matrix-container">
     <div class="matrix-header">
       <p class="matrix-desc">
-        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、LLM、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
+        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
       </p>
     </div>
 
@@ -256,6 +256,33 @@ const notesList = ref([
     tags: ['LLM', 'LoRA', 'Benchmark']
   },
   {
+    title: '智能体循环的形式化：Loop + State',
+    link: '/domains/agent/agent-loop-formalization',
+    domain: '🤖 智能体',
+    domainClass: 'domain-agent',
+    date: '2026-09-27',
+    summary: 'Agent = 受控马尔可夫链五元组；闭集约束 argmax 与状态转移方程；全量记忆注入致 O(T²) token 二次税与 T_max 上界；解码延迟 BW 模型；震荡/静默失败检测。',
+    tags: ['Agent', 'Agent Loop', 'State', 'Tool Use', 'Complexity', 'Infra']
+  },
+  {
+    title: '结构化输出即可靠性契约：q^n 与相关重试陷阱',
+    link: '/domains/agent/structured-output-contract',
+    domain: '🤖 智能体',
+    domainClass: 'domain-agent',
+    date: '2026-09-27',
+    summary: '合法率 P_L ≈ q^n 随 schema 指数衰减；k 次重试 (1-p)^k 与贪心解码相关失败使重试完全失效；self-consistency 投票；三层强制等级与 GBNF 约束解码。',
+    tags: ['Agent', 'Structured Output', 'Reliability', 'Probability', 'Math Derivation', 'Tool Use']
+  },
+  {
+    title: '规划作为数据与 AoT 依赖图',
+    link: '/domains/agent/planning-aot-dependency-graph',
+    domain: '🤖 智能体',
+    domainClass: 'domain-agent',
+    date: '2026-09-27',
+    summary: '计划即偏序 DAG；原子动作 A1/A2/A3 公理与 εN 误差累积给出粒度判据 N ≤ lnρ/lnq；Kahn 拓扑调度与关键路径并行上界；环检测与静默部分失败防御。',
+    tags: ['Agent', 'Planning', 'AoT', 'DAG', 'Complexity', 'Tool Use']
+  },
+  {
     title: '2026 年第 38 周研习周报：视频时空生成与算力工程闭环',
     link: '/reviews/2026-W38',
     domain: '📅 研习复盘',
@@ -483,6 +510,7 @@ const filteredNotes = computed(() => {
 .domain-vision { background: rgba(38, 166, 154, 0.15); color: #26a69a; }
 .domain-llm { background: rgba(142, 68, 173, 0.15); color: #9c27b0; }
 .domain-multi { background: rgba(66, 165, 245, 0.15); color: #1e88e5; }
+.domain-agent { background: rgba(0, 176, 255, 0.15); color: #039be5; }
 .domain-foundations { background: rgba(255, 179, 0, 0.18); color: #f57f17; }
 .domain-infra { background: rgba(76, 175, 80, 0.15); color: #43a047; }
 .domain-projects { background: rgba(100, 116, 139, 0.15); color: #64748b; }

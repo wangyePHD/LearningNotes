@@ -10,6 +10,7 @@
 - 🖼️ **图像与可控生成**：`.agent/specs/vision-customization.md`
 - 💬 **语言模型与推理**：`.agent/specs/llm-reasoning.md`
 - 🎙️ **多模态与特征对齐**：`.agent/specs/multimodal-alignment.md`
+- 🤖 **智能体系统与工具编排**：`.agent/specs/agent-systems.md`
 - 📐 **数学理论与基石推导**：`.agent/specs/math-foundations.md`
 - ⚡ **算力基建与系统优化**：`.agent/specs/system-infra.md`
 - 💡 **科研灵感池记录**：`.agent/specs/idea-pool.md`

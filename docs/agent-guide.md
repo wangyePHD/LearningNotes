@@ -14,6 +14,7 @@
 | **🖼️ 图像与风格定制** | `.agent/specs/vision-customization.md` | 冻结主干 vs 训练分支比例、零卷积/交叉注意力特征注入机理、前向恒等性与梯度推导、保真度 vs 风格化博弈曲线 |
 | **💬 语言模型与推理** | `.agent/specs/llm-reasoning.md` | GRPO 组相对策略优化数学目标、无 Critic 显存削减公式、抗作弊奖励工程（Reward Hacking）、慢思考顿悟现象分析 |
 | **🎙️ 多模态与特征对齐** | `.agent/specs/multimodal-alignment.md` | 模态间隙 (Modality Gap) 分析、超球面特征映射、对称 InfoNCE 损失数学推导、特征崩塌防范与零样本迁移 |
+| **🤖 智能体系统与工具编排** | `.agent/specs/agent-systems.md` | 智能体形式化为受控马尔可夫链、闭集动作约束 argmax、$q^n$ 格式合法率与 $k$ 次重试残余失败率、上下文 $O(T^2)$ 预算、Kahn 拓扑执行与关键路径、golden 回归与 span 级可观测性 |
 | **📐 通用理论基石** | `.agent/specs/math-foundations.md` | 严格假设前提、步步有据的代数/微积分推导、反向传播梯度稳定性、Softmax 饱和证明、数值 Monte-Carlo 验证代码 |
 | **⚡ 算力与系统工程** | `.agent/specs/system-infra.md` | Roofline 算术强度定量判定（Memory-Bound vs Compute-Bound）、显存分级带宽延迟、Triton/CUDA 优化实现、实测吞吐提升表 |
 | **💡 科研灵感池** | `.agent/specs/idea-pool.md` | 疑问句反直觉假说、灵感触发点、核心科学假设 (Hypothesis)、审稿人视角潜在坑点与最小证伪实验 |

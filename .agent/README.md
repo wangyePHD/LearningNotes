@@ -24,6 +24,7 @@
 | **图像生成与风格定制** | `docs/domains/vision/` | `.agent/specs/vision-customization.md` |
 | **语言模型与推理** | `docs/domains/llm/` | `.agent/specs/llm-reasoning.md` |
 | **多模态与特征对齐** | `docs/domains/multimodal/` | `.agent/specs/multimodal-alignment.md` |
+| **智能体系统与工具编排** | `docs/domains/agent/` | `.agent/specs/agent-systems.md` |
 | **数学原理与通用基石** | `docs/foundations/` | `.agent/specs/math-foundations.md` |
 | **算力基建与系统优化** | `docs/infra/` | `.agent/specs/system-infra.md` |
 | **奇思妙想与科研灵感** | `docs/ideas/` | `.agent/specs/idea-pool.md` |

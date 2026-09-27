@@ -11,6 +11,7 @@ When Ye Wang gives you a knowledge point, paper insight, experiment finding, or 
    - Vision & style transfer: read `.agent/specs/vision-customization.md`
    - LLM & Reasoning: read `.agent/specs/llm-reasoning.md`
    - Multimodal & CLIP: read `.agent/specs/multimodal-alignment.md`
+   - Agent systems & tool orchestration: read `.agent/specs/agent-systems.md`
    - Foundations & Math: read `.agent/specs/math-foundations.md`
    - Infra & CUDA: read `.agent/specs/system-infra.md`
    - Ideas & Sandbox: read `.agent/specs/idea-pool.md`

@@ -149,6 +149,14 @@ onMounted(() => {
           </div>
         </a>
 
+        <a href="/domains/agent/" class="nav-card">
+          <div class="card-icon">🤖</div>
+          <div class="card-body">
+            <h4>智能体系统与工具编排 (Agent)</h4>
+            <p>Agent Loop 形式化为受控马尔可夫链、结构化输出 q^n 可靠性契约、AoT 依赖图拓扑调度与关键路径分析。</p>
+          </div>
+        </a>
+
         <a href="/foundations/" class="nav-card">
           <div class="card-icon">📐</div>
           <div class="card-body">

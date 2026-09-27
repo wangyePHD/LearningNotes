@@ -10,6 +10,7 @@ Whenever you are asked to write, organize, or update notes in this repository:
    - `vision-customization.md` (Style transfer, ControlNet, zero-conv)
    - `llm-reasoning.md` (GRPO, reasoning models, RL post-training)
    - `multimodal-alignment.md` (CLIP, VLM, InfoNCE loss)
+   - `agent-systems.md` (agent loop, tool use, structured output, planning, evals)
    - `math-foundations.md` (Flow Matching, Transformer variance derivation)
    - `system-infra.md` (CUDA, Roofline model, vLLM PagedAttention)
    - `idea-pool.md` (Hypotheses, research brainstorming)
