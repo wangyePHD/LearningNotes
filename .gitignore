@@ -4,3 +4,7 @@ dist
 docs/.vitepress/dist
 docs/.vitepress/cache
 *.local
+
+# 论著原文 PDF：受版权保护且体积巨大（当前 129MB），仅本地查阅，不入库
+Papers/
+*.pdf
