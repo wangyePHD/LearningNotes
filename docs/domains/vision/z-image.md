@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.4 ✅，4.5–4.8 待展开）｜ §5 Evaluation
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.5 ✅，4.6–4.8 待展开）｜ §5 Evaluation
 
 ---
 
@@ -817,4 +817,66 @@ $$
 - **概念平衡依赖 §2.3 的设施**：*"a dynamic resampling strategy guided by **world knowledge topological graph in Section 2**"* —— 与 §2.3 的 semantic-level sampling weight 是同一套机制，只是 §4.4 换到 SFT 阶段使用。**§2.3 与 §4.4 是同一设施在两个阶段的复用。**
 - **与 §2.3 的一处措辞差异**：§2.3 用的是 BM25 分数参与算 "semantic-level sampling weight"（含图谱层级关系），§4.4 简化为 BM25 算 "rarity scores"。两处描述粒度不同，论文未统一。
 - **Model merging 的目标函数写得很克制**：论文用 **"Pareto-optimal"** 和 **"without complex inference routing"** 来定位，意思就是"用一次离线插值换掉推理期的条件路由系统"——这在工程上是很实际的理由（部署时不想挂多模型路由）。
+:::
+
+### 4.5 Few-Step Distillation
+
+Z-Image 的 4.5 主要解决一个实际部署问题：<mark class="hl-trick">**原始 SFT 模型质量已经很高，但生成一张图大约需要 100 NFE**，推理成本和延迟都比较高，因此需要把它蒸馏成 few-step 模型。</mark> 这里的核心目标可以理解成：<mark class="hl-trick">让 Student 用很少的步数完成 Teacher 原来需要很多步才能完成的生成过程</mark>。论文把这个过程描述为，让 student 在更少 timestep 上模仿 teacher 的 denoising dynamics，并<mark class="hl-trick">降低采样轨迹的不确定性，从而把原本较长的迭代过程压缩成更高效的推理</mark>。Z-Image 最终把模型做到 **8-step / 8 NFE**。
+
+Z-Image 最开始采用的是 <mark class="hl-trick">**DMD（Distribution Matching Distillation）**</mark>。现阶段可以先把它理解成：不是要求 Student 逐步照抄 Teacher 的每一个中间结果，而是希望 **few-step Student 最终生成出来的分布仍然接近 Teacher 的高质量生成分布**。但作者实际训练时发现，<mark class="hl-trick">标准 DMD 虽然能显著减少推理步数，却容易带来 **高频细节损失和颜色偏移**，例如 texture 变糊、局部细节减弱、整体色调发生漂移</mark>。
+
+#### 4.5.1 Decoupled DMD
+
+作者发现，DMD 内部其实有<mark class="hl-trick">两个作用不同的机制</mark>：
+
+| 机制 | 论文定位 | 原文措辞 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">**CFG-Augmentation (CA)**</mark> | <mark class="hl-trick">**真正推动蒸馏、建立 few-step 生成能力的主要动力**</mark> | *"the **primary engine** driving the distillation process"*，且 *"this factor has been **largely overlooked** in previous literature"* |
+| <mark class="hl-trick">**Distribution Matching (DM)**</mark> | <mark class="hl-trick">**更像 regularizer**，负责稳定训练、清除 artifact、防止生成分布跑偏</mark> | *"functions primarily as a **powerful regularizer**, ensuring the stability of the training process and removing the emerging artifacts"* |
+
+作者因此把两者<mark class="hl-trick">**解耦**，不再让它们完全共享同一套处理方式，而是分别为 CA 和 DM 设计适合自己的 **renoising schedule**</mark>。通过这种方式，Decoupled DMD 能明显改善普通 DMD 的细节退化和色偏问题。
+
+::: tip 论文对 CA 的定位值得单独强调
+*"**Despite its dominant role**, this factor has been **largely overlooked in previous literature**."* —— 论文明确说：CA 才是 DMD 有效性的**主引擎**，而社区此前把它当配角。这是一个**反社区共识的论断**，也是 D-DMD 的全部立论基础。
+:::
+
+![Z-Image Fig.13：四种蒸馏策略的视觉对照。列为 (a) SFT → (b) Standard DMD → (c) Decoupled DMD → (d) D-DMD+DMDR。第二行「手部特写」最能说明问题：(b) DMD 把掌纹与指关节细节洗成一片模糊、肤色发白发灰；(c) D-DMD 细节与色调回来；(d) D-DMD+DMDR 掌纹最锐利。第一行古董店场景中 (b) 的色调明显偏暗偏黄。第三行达芬奇风格油画中 (b) 的金字塔构图与朦胧背景都糊掉了。](/zimage-fig13-distillation.png)
+
+#### 4.5.2 DMDR（Distillation meets RL）
+
+思路是：<mark class="hl-trick">few-step Student 虽然已经能快速生成，但如果只做蒸馏，它主要是在逼近 Teacher</mark>；为了继续提升 aesthetic alignment、semantic faithfulness 和 human preference，作者又把 RL 引入 few-step distillation。
+
+问题是 <mark class="hl-trick">RL 很容易出现 **reward hacking**</mark>，也就是模型为了拿更高 reward 生成"高分但实际不合理"的结果。论文指出<mark class="hl-trick">常规做法是引入外部正则（external regularization）来缓解</mark>。而 Decoupled DMD 已经证明 <mark class="hl-trick">DM 本身就是一个很强的 regularizer</mark>，所以 DMDR 直接把 RL 和 DM 结合起来：
+
+<mark class="hl-trick">**RL 负责把 Student 往更高 reward、更符合人类偏好的方向推，DM 负责约束 Student 不要偏离高质量生成分布。**</mark>
+
+论文原文把这称为 *"organically combined"* —— 即 **Decoupled DMD 的洞察直接被复用为 RL 的稳定机制**，这也是 D-DMD 与 DMDR 能串成一条链的原因。
+
+#### 4.5.3 结果
+
+原始 SFT 模型作为高质量但较慢的基础，Standard DMD 先把它压成 few-step 模型，但会出现 blur 和 color shift；Decoupled DMD 修复这些退化；再加入 DMDR 进一步提升视觉质量和偏好对齐，得到最终的 **Z-Image-Turbo**。论文给出的最终结果是 <mark class="hl-trick">**8-step / 8 NFE**</mark>，而且在 perceived quality 和 aesthetic appeal 上，<mark class="hl-trick">很多情况下还能超过原始的 100-step teacher</mark>。
+
+$$
+\boxed{
+\text{SFT Teacher}\rightarrow\text{DMD}\rightarrow\text{Decoupled DMD}\rightarrow\text{DMDR}\rightarrow\text{Z-Image-Turbo, 8 NFE}
+}
+$$
+
+其中可以把 <mark class="hl-trick">**CA 理解成"让 Student 学会少步生成"**，把 **DM 理解成"防止 Student 跑偏"**</mark>。这就是 4.5 对你现在最有价值的工业层面理解。
+
+::: warning 本节最重要的坑：三个算法都不是本文原创，且公式全部缺失
+论文对 DMD 引 [88, 89]、对 Decoupled DMD 引 [45]、对 DMDR 引 [31]，并明确写 *"**We refer interested readers to the respective academic papers for full technical details.**"* 因此本节**没有给出任何损失函数、renoising schedule、权重系数或超参**——4.5.3 甚至**只有一段文字 + Fig. 13 视觉对照，没有任何量化表格**（无 FID、无美学分、无逐步 NFE 对照）。
+
+**要复现必须回读三篇原文**：
+- **DMD** — Yin et al. 2024（arXiv:2311.18828）
+- **Decoupled DMD** — Liu et al. 2025a（本节核心，CA/DM 解耦与双 renoising schedule）
+- **DMDR** — Jiang et al. 2025（arXiv:2511.13649）
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.5 可查）
+- **100 NFE 明确包含 CFG**：原文 *"approximately 100 Number of Function Evaluations (NFEs) to generate high-quality samples **using Classifier-Free Guidance (CFG)*** [29]" —— 所以这个 100 是**含 CFG 的双次前向**，不是步数。
+- **"让概率路径坍缩成确定性路径"这个表述很准**：原文说蒸馏的核心难点是 *"reducing the inherent uncertainty of this trajectory, allowing the student to **'collapse' its probabilistic path into a deterministic** and highly efficient inference process"*。
+- **D-DMD 的额外结论**：论文说蒸馏后的模型 *"not only **matches** the original multi-step teacher but even **surpasses** it in terms of **photorealism and visual impact**"* —— 即在**写实感和视觉冲击力**上反超 teacher，这与 §5.1 的人类偏好结论方向一致。
+- **RL 用在蒸馏内部，不是蒸完之后**：§4.5.2 标题即 *"Enhancing Capacity **with RL and Regularization**"*，且写的是 *"we **incorporate** Reinforcement Learning (RL) **into the few-step distillation process**"*。这与 §4.6 的独立 RLHF 阶段是**两次不同的 RL**，别混。
+- **两个 RL 的分工**：DMDR 里的 RL 负责 *"unlock the student model's capacity to **align with human preferences**"*，而 §4.6 的 RLHF 负责 *"substantial improvements in **photorealism, aesthetic quality, and instruction following**"*。前者嵌在蒸馏里当"能力解锁"，后者是独立后训练阶段。
 :::
