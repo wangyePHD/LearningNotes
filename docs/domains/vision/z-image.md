@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3–§2.5 其余两模块 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3 World Knowledge Topological Graph ✅ ｜ §2.4–§2.5 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -230,4 +230,44 @@ $$
 - **社区检测用的是外部算法**：论文标注了引用 [68]，即在 proximity graph 上套用现成的 community detection，而不是自研。
 - **kNN 的双重身份**：kNN 距离**既是去重的依据**（构造 proximity graph），**又是检索的索引**（配 SOTA index 算法 [54]）。论文写明检索侧 *"leveraging multimodal features [86] combined with a state-of-the-art index algorithm [54]"*，其中 [86] 正是 §2.1 用于图文一致性打分的同一个 **CN-CLIP**。
 - **retrieval 服务的两个对象**：论文明确列出 data curation（找 distributional voids → 定向采样补概念空洞）与 **active model remediation**（用 failure case 反查并 prune 责任数据簇）两条线，后者与 §2.4 的 Active Curation Engine 闭环。
+:::
+
+### 2.3 World Knowledge Topological Graph
+
+2.3 **World Knowledge Topological Graph** 的核心其实比名字简单：它是在解决"**训练数据的概念分布怎么被系统地控制**"这个问题。前面的 2.1 告诉你每条数据有什么属性，2.2 告诉你数据之间谁和谁相似；到了 2.3，Z-Image 更进一步，想知道整个数据池里"哪些概念多、哪些概念少、这些概念之间是什么层级关系"，然后据此做更精细的数据采样。论文把这个知识图谱称为整个数据基础设施的"semantic backbone"。
+
+它的构建过程大致分三步。第一步，从 **Wikipedia entities 和 hyperlink structure** 出发，先搭一个非常大但也很冗余的知识图谱；然后做两类 pruning：一类是根据 **PageRank centrality** 去掉特别边缘、几乎没人引用的概念，另一类是用 VLM 判断这个概念是否"可视觉化"，把太抽象、很难稳定生成图像的概念删掉。这里很重要，因为它不是要做一个百科全书式知识图谱，而是要做一个**服务图像生成的数据概念图**。
+
+第二步，他们发现只靠 Wikipedia 还是不够覆盖真实视觉数据，所以又用内部大规模 captioned image data 来补图谱。具体做法是从 caption 里抽取 tags 和 text embeddings，然后做自动层次化组织，再让 VLM 给每个 parent node 总结/命名。这样就把大量离散 tag 整理成一个有父子关系的 taxonomy tree。也就是说，一个"拉面"样本不会只是孤零零一个 tag，它可能会挂在"日本料理 → 面食 → 拉面"这样的层级关系里。这个层级结构后面做 balance 时就比单纯统计 tag 频次更有用。
+
+第三步是让这个图谱和真实产品需求对齐。他们会人工挑选并 **up-weight 高频用户 prompt 对应的概念**，同时主动加入训练池里原本没有、但最近新出现的 trending concepts。这个设计说明图谱不是一次构完就不动，而是会随着真实用户需求和数据分布动态更新。
+
+真正落到训练采样时，Z-Image 会把每条训练 caption 里的 tags 映射到知识图谱节点，再综合 **BM25 score + 图谱里的层级关系**，为每条训练数据算一个 semantic-level sampling weight。这个 weight 再交给数据引擎，决定训练时哪些样本更应该被采到。这样就能避免数据量特别大的常见概念一直占满 batch，同时给长尾概念更高采样概率。论文明确说，这个机制用于 fine-grained control over training data distribution。
+
+所以 2.3 你其实记住这条链就够了：
+
+$$
+\boxed{
+\text{Wikipedia + Caption Tags}
+\rightarrow
+\text{Concept Graph / Taxonomy}
+\rightarrow
+\text{Prune + Expand + Reweight}
+\rightarrow
+\text{Semantic Sampling Weight}
+\rightarrow
+\text{Balanced Training Distribution}
+}
+$$
+
+::: tip 真正需要掌握的不是 PageRank 或 BM25 的公式，而是这个思想
+
+> Z-Image 不只是"数据多不多"地做平衡，而是把概念放进有层级结构的知识图谱里，再按概念稀缺度、层级关系和真实用户需求去控制采样。这就是 2.3 最值得你带走的东西。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §2.3 可查）
+- **两类 pruning 的分工**：PageRank 去的是「**没人引用**」（统计孤岛），VLM 去的是「**引用多但画不出**」（概念不可视觉化）。后者是图像生成特有的过滤器，纯 NLP 知识图谱不会做这一刀。
+- **层次化是 automatic hierarchical strategy**（论文标注借鉴 [71]），且**每个 parent node 由 VLM 对其子节点做总结命名**——所以 taxonomy 的层级标签本身也是生成的，不是人工给定的。
+- **sampling 是 staged 的**：论文原文 *"perform principled, **staged** sampling from the data pool"*，即采样权重不仅决定「采不采」，还决定「在哪个训练阶段采」。
+- **它同时是 SFT 的前置设施**：§4.4 的 Concept Balancing with Tagged Resampling 用的 rarity score 正是靠本节的图谱 + BM25 检索算出来的。两节是同一套设施在预训练与 SFT 两个阶段的复用。
 :::
