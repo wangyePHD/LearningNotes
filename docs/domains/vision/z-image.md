@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2.1 Data Profiling Engine ✅ ｜ §2.2 Cross-modal Vector Engine ✅ ｜ §2.3 World Knowledge Topological Graph ✅ ｜ §2.4 Active Curation Engine ✅ ｜ §2.5 编辑对构造 ｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5 全五小节）｜ §3 Image Captioner ｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
 
 ---
 
@@ -341,4 +341,50 @@ $$
 - **Fig. 6 里有一处容易被忽略的细节**：人工修正不只是改 caption，**score 也被改**（图中 7→9、8→4），且改的方向是**下调**。这说明主动学习的目标不是让 reward model 打高分，而是**校准**它。
 - **双重校验的分工**：AI Verifier 用的是 **Reward**（图中明确标出），即用奖励模型做自动校验；Human Verifier 处理机器判不准的部分。失败样本不是丢弃，而是走 **Human Correct** 修正后**回流**去重训 Reward/Captioner（图中虚线）。
 - **人机分工的隐含成本**：这条闭环里 human verifier 和 manual correction 都是**不可并行扩展**的人力环节，与 §1.2 里「\$628K 未计入人工成本」的判断一致——**数据飞轮转得越快，人力投入越大**。
+:::
+
+### 2.5 Efficient Construction of Editing Pairs with Graphical Representation
+
+2.5 这一节和前面不太一样，前面 2.1–2.4 讲的是通用数据基础设施，2.5 开始专门讲 **图像编辑数据怎么构造**。它要解决的核心问题是：高质量编辑 pair 很难大规模获得，因为不仅要有 source/target 两张图，还要有准确的 edit instruction，而且编辑后还得尽量保持没改的区域一致。Z-Image 的做法不是只依赖一种数据来源，而是组合了几条路线。
+
+![Z-Image Fig.7：编辑数据的三种构造策略。(a) Graphical Representation——一张输入图经编辑 2/3 得到两个版本，两版本间还能互为 source/target（箭头 5/6），实线是编辑操作、虚线是反向 pair；(b) Paired Image from Videos——同一庭院的前后两帧，指令是「替换橙色圆形踏步石为 5 块长方形板岩、移除小树换成低矮松树等」的长指令；(c) Rendering for Text Editing——可控渲染生成的文字编辑 pair，指令直接由渲染操作产生。](/zimage-fig7-editing-pairs.png)
+
+第一条是 **Mixed Editing with Expert Models**。他们先定义一套编辑任务 taxonomy，然后用不同的 task-specific expert model 去生成高质量编辑数据。关键点在于，他们不满足于"一对图只学一个编辑动作"，而是会把多个编辑操作合并进同一个 pair，形成 mixed-editing data。比如同一张图里既换背景、又改颜色、再增加物体，这样一条样本就能同时教模型多个操作，提高训练效率。论文明确说，这样可以让模型从一个 composite pair 里学习多个 editing task，而不是分别准备很多单任务 pair。
+
+第二条也是这一节最有特点的，是 **Efficient Graphical Representation**。对于同一个 input image，他们先生成多个不同编辑版本。然后这些版本之间可以继续两两组合，构造新的 source-target pair。论文的意思是：原始图和 $N$ 个编辑版本之间，不只是有 $N$ 对关系，还可以通过不同 edited versions 之间的组合进一步扩增 pair 数量。这样一来，一组已经生成好的编辑结果可以被反复重组，不需要重新调用 expert model，就能把训练数据规模继续放大。与此同时，这种重组天然会产生 mixed-editing pair，也会产生 inverse pair。作者特别强调 inverse pair 的意义：可以让"真实、未失真的图"作为 target，从而提升数据质量。
+
+第三条是 **Paired Images from Videos**。预定义编辑任务的缺点是分布太人工、编辑类型有限，所以 Z-Image 又从大规模视频里取自然相邻或相关 frame。因为同一段视频里的不同帧往往共享主体、场景或风格，它们天然就有一定的 editing relation。论文再用 CN-CLIP 计算 frame pair 的语义相似度，筛掉关系太弱的 pair。这样得到的数据有三个优势：任务类型更丰富、很多 pair 天然包含多个同时变化的因素，而且规模更容易扩展。
+
+最后一条是 **Rendering for Text Editing**。文字编辑数据天然特别稀缺，因为真实图里带文字的样本本来就不均衡，而且 source-target pair 很难有精准编辑标注。所以他们专门做了一个可控文字渲染系统，可以控制 text content、font、color、size、position。这样就能自动生成大规模 text-editing pair，而且 instruction 是由渲染操作本身直接产生的，因此标注精度很高。
+
+所以 2.5 你最终记成一条链就够了：
+
+$$
+\boxed{
+\text{Expert Models}
++
+\text{Pair Recombination}
++
+\text{Video Frames}
++
+\text{Text Rendering}
+\rightarrow
+\text{Large-scale Editing Pairs}
+}
+$$
+
+::: tip 真正值得记住的是四来源互补
+
+> Z-Image 的编辑数据不是单一合成路线，而是"专家模型保证质量，图结构重组提高数据利用率，视频帧补自然多样性，渲染系统解决文字编辑"这四种来源互补。
+:::
+
+如果你后面要做统一生成/编辑模型，这一节其实很值得迁移，因为它最直接回答了一个工程问题：**编辑数据贵的时候，怎么把有限的高质量 pair 扩成足够大的训练集。**
+
+::: info 原文补充（笔记核对时添加，论文 §2.5 可查）
+- **组合数有明确公式**：论文写明一张输入图 + $N$ 个编辑版本可构造 $\binom{N+1}{2}$ 个 pair（引用 [41]），且原文用词是 *"scale the training data at **zero cost**"* —— 零成本指的是**不再调用 expert model**，不是零算力。
+- **Fig. 7(a) 的箭头含义**：实线（如 2、3）指 editing operation，虚线（如 1、4、5、6）指反向/inverse pair。图里 $5 \leftrightarrow 6$ 那对**两个 edited version 互为 source/target**，正是"重组产生新 pair"的可视化。
+- **四条路线的分工是互补而非冗余**：taxonomy + expert model 负责**任务覆盖广度**；graphical representation 负责**数据利用率**；video frames 负责**多样性**（论文原话：预定义任务 *"suffers from limited diversity"*）；rendering 负责**文字编辑**（自然图 *"suffer from the scarcity and imbalance of textual content"*）。
+- **video pair 的筛选阈值是"高语义相关性"而非"相邻帧"**：论文用 CN-CLIP 算 image embedding 的 **cosine similarity**，在每个 image group 内筛出高相关对。也就是说采的是"同组语义相关的帧"，不要求时间上紧邻。
+- **video pair 的天然优势是"多编辑类型耦合"**：论文举例 simultaneous changes in human pose and background —— 这类**同时发生**的多因素变化，用预定义 taxonomy 反而很难造出来。
+- **渲染系统借用了既有工作**（论文标注 [76]，即 Qwen-Image 一系），不是自研；其价值在于 **ground-truth instruction 由渲染操作本身给出**，天然免去人工标注。
 :::
