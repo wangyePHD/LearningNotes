@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.2 ✅，4.3–4.8 待展开）｜ §5 Evaluation
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.3 ✅，4.4–4.8 待展开）｜ §5 Evaluation
 
 ---
 
@@ -686,4 +686,66 @@ $$
 - **sequence length 是"估计"而非"精确"**：论文说 *"we **estimate** the sequence length of each sample **based on the resolution** recorded in the metadata"*，即只用 H×W 推算，**不读 VAE 实际输出**。这是纯 metadata 侧的近似，代价极小，但对自由宽高比的图只能估个均值。
 - **本节与 §4.1 的联系**：§4.1 的 3D Unified RoPE 意味着图像 token 数随 (H, W) 变化，§4.3 的 arbitrary-resolution 训练又把分辨率彻底放开 —— **正是这两点让 §4.2 的 length-aware batching 成为必需项，而不是可选优化**。
 - **论文未讨论的取舍**：gradient checkpointing（多算）与 dynamic batch（多填显存）**方向相反**，两者叠加后的最优组合依赖具体硬件，论文没有给出任何调参指引或消融。
+:::
+
+### 4.3 Pre-training
+
+4.3 **Pre-training** 是 Z-Image 训练流程里非常关键的一节，因为它真正把前面的 Data Infrastructure、Captioner 和模型结构接起来了。整体上预训练分成两个阶段：**Low-resolution Pre-training → Omni-pre-training**。前者先在低分辨率上高效地把基础视觉知识和图文对齐学起来，后者再扩展到任意分辨率、生成+编辑联合训练以及多粒度 caption。
+
+![Z-Image Fig.12：训练各阶段的生成结果演进（实际横跨 §4.1–§4.6 全流程）。列为 (a) Pre-train → (b) SFT → (c) PE → (d) FSD → (e) RLHF。可观察到 pre-train 阶段构图/文字尚不准确但语义已成立，SFT 后画面质量与美学跃升，PE 阶段推理链补齐了复杂构图，蒸馏阶段保住质量，RLHF 阶段写实感与光影进一步收敛。](/zimage-fig12-training-stages.png)
+
+先看基础训练目标。Z-Image 使用 **Flow Matching**。从高斯噪声 $x_0$ 和真实图像 latent $x_1$ 之间做线性插值：
+
+$$
+x_t=t\,x_1+(1-t)\,x_0
+$$
+
+然后让模型预测这条路径上的 velocity：
+
+$$
+v_t=x_1-x_0
+$$
+
+训练 loss 就是模型输出的 vector field 与真实 velocity 之间的 MSE：
+
+$$
+\mathcal{L}=\mathbb{E}_{t,x_0,x_1,y}\Big[\big\|u(x_t,y,t;\theta)-(x_1-x_0)\big\|_2^2\Big] \tag{1}
+$$
+
+这里 $y$ 是条件嵌入、$\theta$ 是可学习参数。还用了两个比较重要的训练技巧：一个是跟 SD3 一样使用 **logit-normal timestep sampler**，让训练更多集中在中间 timestep；另一个是跟 Flux 类似的 **dynamic time shifting**，因为不同图像分辨率的 SNR 分布不同，需要根据分辨率调整实际噪声时间，从而让多分辨率训练更稳定。
+
+第一阶段是 **Low-resolution Pre-training**。这个阶段非常纯粹：<mark class="hl-trick">只做 **$256\times256$ 的 text-to-image generation**</mark>。目标不是追求最终高清效果，而是用较低计算成本先把最基础的东西学出来，包括 cross-modal alignment、基本视觉知识、各种 concepts、styles、compositions。论文明确说，<mark class="hl-trick">这一阶段占了整个 pre-training compute 的一半以上</mark>，因为作者认为<mark class="hl-trick">模型的大部分 foundational visual knowledge，包括 **Chinese text rendering**，其实都可以在低分辨率阶段先学到</mark>。
+
+然后进入 **Omni-pre-training**。这里的"Omni"主要指三个维度。第一个是 **Arbitrary-Resolution Training**：<mark class="hl-trick">不再固定 $256$，而是把原始图像通过 resolution-mapping function 映射到预定义的 training resolution range</mark>，允许不同分辨率和宽高比一起训练。这样可以<mark class="hl-trick">减少强行 downsample 带来的信息损失</mark>，也为最后支持大约 1K–1.5K 分辨率做准备。
+
+第二个是 **Joint Text-to-Image and Image-to-Image Training**。这点很重要：<mark class="hl-trick">Z-Image 不是先把 T2I foundation model 完整训完，再单独从头搞 editing，而是在 omni-pretraining 阶段就已经把 image-to-image task 混进来了</mark>。这里使用前面 2.5 构建的大规模、自然的、弱对齐 image pairs，让模型在大规模 pretrain compute 下<mark class="hl-trick">提前学"两个图像之间的关系"</mark>。论文明确说，这给后续 editing 提供了很好的 initialization，而且他们观察到这种联合预训练**没有明显损害 T2I 性能**。
+
+第三个是 **Multi-level and Bilingual Caption Training**。前面第 3 节学到的 Z-Captioner 终于在这里真正用起来：训练时会混合 bilingual 的 long / medium / short captions、tags、simulated user prompts，同时<mark class="hl-trick">还会以较小概率使用原始 textual metadata，用来增强 world knowledge</mark>。作者强调，不同粒度和不同视角 caption 能提供更广的 mode coverage，为后续阶段打基础。对于 image-to-image 数据，他们还会随机选择两种文本条件：一种是 **target image caption**，对应 reference-guided generation；另一种是 **pairwise difference caption**，对应 image editing。至于这两个条件各自的采样概率，论文没有公开。
+
+所以 4.3 最重要的训练主线可以直接记成：
+
+$$
+\boxed{\ 256^2\ \text{T2I Low-res Pretraining} \rightarrow \text{Omni-pretraining}\ }
+$$
+
+而 Omni-pretraining 再同时加入：
+
+$$
+\boxed{\ \text{Arbitrary Resolution}+\text{T2I/I2I Joint Training}+\text{Multi-level Bilingual Captions}\ }
+$$
+
+最终完成 omni-pre-training 后，模型已经能生成 **约 1K–1.5K arbitrary-resolution images**，并且同时接受 text 和 image condition，这时候才成为后续 **Z-Image generation SFT** 和 **Z-Image-Edit continued training** 的共同基础模型。
+
+::: tip 这一节真正值得记住的工业思想
+**不要一上来就用最高分辨率、最复杂任务烧算力。先在 $256^2$ 用便宜计算学绝大部分基础知识，再逐渐引入高分辨率、多宽高比、I2I 和复杂 caption，把昂贵计算留给真正需要高分辨率与多任务能力的阶段。**
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.3 可查）
+- **引用出处**：flow matching 引 [44, 48]；logit-normal 采样 *"Following SD3 [18]"*；dynamic time shifting *"as used in Flux [34]"*；caption 重要性引 [4]。**采样器超参（logit-normal 的均值/标准差、time shifting 的分辨率映射指数）论文一个都没给。**
+- **"一半以上"精确是 50.9%**：Table 1 里低分辨率预训练 147.5K / 预训练总计 290K。注意论文写的是 *"over half of our total **pre-training** compute"*，**是预训练内部占比，不是全流程占比**（全流程口径是 47.0%）。引用时注意别混。
+- **原文有一处笔误**：该段写 *"As shown in **Figure 1**, this phase accounts for over half..."*，但这个数字在 **Table 1** 里，Figure 1 是写实效果 showcase。
+- **Omni-pre-training 是多阶段的，不是单阶段**：原文 *"the omni-pre-training phase is conducted in **multiple stages**. Upon completion of the **final stage**, the model becomes capable of..."* —— 但**具体分几阶段、每阶段多久完全没披露**。
+- **任意分辨率的动机不止省算力**：原文列了三条 —— 学 cross-scale visual information、*"mitigates information loss caused by downsampling to a fixed resolution"*、*"improves overall data efficiency"*。
+- **I2I 混训是 Z-Image-Edit 低成本的根源**：§4.7 的 edit 继续训练是"从 base model 继续训练"，而 base model 的编辑先验**正是本节种下的**。这解释了 §1.3 支柱③说的"摊薄重预训练预算、不需要独立昂贵阶段"。
+- **本节最大的复现性缺口**：预训练**数据量（图像数）、batch size、学习率、优化器、阶段划分、训练时长对应的迭代步数——全部未公开**。相比 §1.2 的 Table 1 只给了算力总量，这里的信息密度低得多。
 :::
