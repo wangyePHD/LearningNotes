@@ -930,6 +930,20 @@ GRPO 的一个重要设计是：<mark class="hl-trick">它不是只使用一个�
 
 其中 Reward Model 提供 **instruction following、AI-content perception、aesthetic quality** 等多维反馈；DPO 先针对 **text rendering、object counting** 这类 objective / verifiable dimensions 做离线偏好对齐，并采用 **VLM 自动构造 pair + 人工清洗 + 双层 curriculum**；GRPO 再基于多维 reward 做在线优化，把 realism、aesthetics、semantic accuracy、instruction following 和 artifact suppression 继续往上推。
 
+::: info Composite Advantage：怎么理解（简版）
+论文明确说的是：<mark class="hl-trick">多个 reward score 会被聚合成一个 composite advantage，再用这个综合信号做 GRPO 更新</mark>。最简单的抽象形式：
+
+$$
+A_{\text{composite}}=f\big(r_{\text{realism}},\ r_{\text{aesthetic}},\ r_{\text{instruction}},\ \ldots\big)
+$$
+
+工程上最常见的 $f$ 是加权和 $A=w_1r_{\text{realism}}+w_2r_{\text{aesthetic}}+w_3r_{\text{instruction}}$，但<mark class="hl-trick">**这只是帮助理解的通用形式，不是 Z-Image 公开的公式**</mark>。原文只说 *"aggregating the scores from our reward model"*，<mark class="hl-trick">没说是简单相加、加权和、归一化后再加，也没说是否有 clipping / rank normalization / gating，更没给各 reward 权重</mark>。
+
+**为什么要这么做**：只优化单一 reward 很容易把某个维度推高、其他能力变差——只优化 aesthetic，模型会越来越"好看"但 prompt-following 变弱；只优化 instruction following，语义更准但质感下降。论文明确说多维联合比 single-reward *"significantly more effective"*，能在相互竞争的质量维度间取得更好的 balance。
+
+> 记这一句就够：<mark class="hl-trick">多个 reward 不是各训一遍，而是每次 GRPO 更新时把多个 reward score 聚合成一个 composite advantage，再用这个综合信号更新模型</mark>。怎么聚合、权重多少，论文没公开。
+:::
+
 ::: warning 本节未公开的内容（不能从论文推断）
 - **Reward Model** 的具体网络结构、训练数据规模；
 - **AI-content perception 与 aesthetic quality 的具体标注协议**；
