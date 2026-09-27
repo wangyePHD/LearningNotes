@@ -117,6 +117,15 @@ const notesList = ref([
     summary: 'S3-DiT 6.15B 单流主干（30 层/3840 hidden，Qwen3-4B+Flux VAE）+ 数据四模块闭环；SFT 三件套、D-DMD 解耦 CA/DM、DMDR、DPO(客观)+GRPO(复合奖励)；全流程 314K H800·h≈$628K，Turbo 8 NFE。',
     tags: ['Vision', 'Diffusion', 'DiT', 'Flow Matching', 'Distillation', 'RLHF', 'Z-Image']
   },
+  {
+    title: '轻量统一多模态模型 DeepGen 1.0 (SCB + MR-GRPO)',
+    link: '/domains/vision/deepgen',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-09-27',
+    summary: '3B VLM + 2B DiT = 5B 统一生成/编辑/推理模型。SCB 从 6 个 VLM 层抽特征 + learnable think tokens 桥接；训练三阶段：只训 connector 的对齐预训练 → 解冻 DiT + VLM LoRA 的联合 SFT → MR-GRPO 强化学习；仅 ~50M 样本即超越 80B HunyuanImage。',
+    tags: ['Vision', 'Unified Model', 'VLM-DiT', 'Flow Matching', 'RL', 'GRPO', 'DeepGen']
+  },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
     title: '语义先行扩散范式 (SFD)',
