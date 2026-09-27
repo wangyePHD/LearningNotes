@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.6 ✅，4.7–4.8 待展开）｜ §5 Evaluation
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ✅（4.1–4.8 全八小节）｜ §5 Evaluation ｜ §6 Conclusion（笔记随学习逐节增补）
 
 ---
 
@@ -548,7 +548,9 @@ $$
 > | §4.7 | Z-Image-Edit 继续训练 | 无 |
 > | §4.8 | Prompt Enhancer | Fig. 15 PE 可视化 |
 >
-> **真实流水线顺序（Fig. 11 坐标重建）**：低分辨率预训练 → Omni 预训练 → SFT → **少步蒸馏** → **RLHF**；编辑分支从 SFT 处向下分出（Continued PT → SFT for Editing）。
+> **真实流水线顺序（据 Fig. 11 原图）**：低分辨率预训练 → Omni 预训练，然后**一分为二**——上支走 Z-Image（SFT → 少步蒸馏 → RLHF），下支走 Z-Image-Edit（Continued Pre-training → SFT for Editing）。
+
+![Z-Image Fig.11：完整训练流水线。左侧两个蓝色框是共享的预训练（Low-Resolution Pre-training → Omni Pre-training）；从 Omni Pre-training 右侧引出后**分为两支**：上方虚线框 # Z-Image 内为 Supervised Fine-tuning → Few-step Distillation → Reinforcement Learning with Human Feedback；下方虚线框 # Z-Image-Edit 内为 Continued Pre-training For Editing → Supervised Fine-tuning For Editing。**编辑分支不经过少步蒸馏，也不经过 RLHF。**](/zimage-fig11-pipeline.png)
 
 ### 4.1 Architecture
 
@@ -963,4 +965,85 @@ $$
 - **AI-Content Detection 这个维度值得注意**：它不是常规 RLHF 里的 safety/quality 项，而是显式评估"看起来像不像 AI 生成"。结合 §2.1 的 AIGC 过滤（*"preventing degradation in output quality **and physical realism**"*），可以看出一条**贯穿全文的写实主义主线**：数据侧过滤 AIGC 图 → 架构侧强调 physical realism → 奖励侧显式评 AI-content perception。
 - **DPO 的 chosen/rejected 判定是"二元正确性"而非"程度比较"**：原文明确 *"clear and **binary** correctness criteria"*。这正是它能被 VLM 自动化的前提 —— 也解释了为什么主观维（aesthetics、style）反而**不能**这么做，这与 §2.4 里 reward model 需要人工校准的结论一致。
 - **引用出处**：DPO 引 [59]、GRPO 引 [66, 46]、CFG 引 [29]、multi-faceted 优化思路引 [84]。
+:::
+
+### 4.7 Continued Training for Image Editing
+
+<mark class="hl-trick">**Z-Image-Edit 不是另起炉灶训练的，而是从 base model 继续训练**（对应 [Fig. 11](#sec-4-training) 里从 Omni Pre-training 引出的下支）。**损失函数与 flow matching 完全相同，只动数据与分辨率日程。**</mark> 整个过程分两阶段：
+
+#### Stage 1：Continued Pre-training
+
+<mark class="hl-trick">用 §2.5 构造的编辑对，加上 **T2I SFT 数据一起训练**（保住画质）</mark>。分辨率走<mark class="hl-trick">两段日程：先在 $512^2$ 上把**全部编辑数据**跑几千步、快速适应编辑任务，再升到 $1024^2$ 做高质量生成</mark>。
+
+之所以要混 T2I 数据，论文给的理由很直接：<mark class="hl-trick">编辑对**昂贵且难获取**，总量远小于 T2I 数据、**多样性也差得多**</mark>。因此论文**建议一个偏高的 T2I 比例**：
+
+$$
+\boxed{\ \text{text-to-image} : \text{image-to-image} = 4 : 1\ }
+$$
+
+<mark class="hl-trick">不这么做，训练中 T2I 能力会退化（*avoid performance degradation during training*）。</mark>
+
+#### Stage 2：SFT for Editing
+
+<mark class="hl-trick">人工构建**任务均衡的高质量子集**，进一步提升整体表现、**尤其是指令跟随能力**</mark>。但有一个反直觉的操作：<mark class="hl-trick">**合成数据（如文字编辑用的渲染文字数据）被大幅降采样**</mark>。
+
+理由原文写得很清楚 —— <mark class="hl-trick">这类数据虽然容易获取、且指令跟随 100% 准确，但 *"far from the distribution of **real-world user input**"*</mark>，所以在最后这个阶段要 **heavily downsampled**。
+
+::: tip 这一节的三个关键超参／决策
+| 项 | 取值 | 作用 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">分辨率日程</mark> | <mark class="hl-trick">$512^2$（几千步快速适应）$\rightarrow$ $1024^2$（高质量）</mark> | 低成本先学会编辑，再提清晰度 |
+| <mark class="hl-trick">T2I : I2I 配比</mark> | <mark class="hl-trick">**4 : 1**</mark> | <mark class="hl-trick">防止 T2I 能力退化</mark> |
+| <mark class="hl-trick">合成文字编辑数据</mark> | <mark class="hl-trick">**heavily downsampled**</mark> | <mark class="hl-trick">避免偏离真实用户输入分布</mark> |
+
+**注意「降采样」不是因为它质量差** —— 它指令 100% 准确，恰恰是因为**太完美**以至于不像真实用户输入。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.7 可查）
+- **论文写的是 "e.g., 4:1"**：原文 *"we suggest a relatively higher ratio of text-to-image data (**e.g.**, text-to-image:image-to-image = 4:1)"* —— **4:1 是举例而非实测最优值**，复现时应视作起点而非定论。
+- **"base model" 指的就是 Omni 预训练产物**：Fig. 11 里编辑分支从 Omni Pre-training 引出，与本节 "Starting from the **base model**" 一致。**编辑分支不经过少步蒸馏，也不经过 RLHF**（见 Fig. 11 原图）。
+- **这解释了 Z-Image-Edit 为何不是 SOTA**：按 [Fig. 11](#sec-4-training)，编辑分支只享受了"Continued PT + SFT"两级后训练，**没有 §4.5 的蒸馏质量修复、也没有 §4.6 的 RLHF 偏好对齐**。这与 §5.2.2 中 Z-Image-Edit 在 ImgEdit（4.30，第 3）与 GEdit-Bench（第 3）均非第一的实测结果一致。
+- **两阶段只有 SFT 用了人工筛选**：Stage 1 是"构造好的编辑对 + T2I SFT 数据"，Stage 2 才 *"manually constructed"* 任务均衡子集。论文没给 Stage 1 的数据量。
+- **本节全部超参未披露**：编辑对总量、两阶段各自的迭代步数（仅 Stage 1 说了"a few thousand steps"）、学习率、batch size、Stage 2 的人工筛选比例。
+:::
+
+### 4.8 Prompt Enhancer with Reasoning Chain
+
+#### 为什么需要 PE
+
+<mark class="hl-trick">Z-Image 只有 6B，在 world knowledge、intent understanding、complex reasoning 上都有明显短板；但它同时是一个很强的 text decoder** —— 擅长把**详细**的 prompt 翻成真实图像**</mark>。所以解法不是把模型加大，而是<mark class="hl-trick">**外挂一个认知模块，把粗糙 prompt 翻译成详细 prompt**</mark>：
+
+$$
+\text{PE}=\text{System Prompt}+\text{Pretrained VLM}+\text{Structured Reasoning Chain}
+$$
+
+#### 关键设计：PE-aware SFT（PE 全程冻结）
+
+<mark class="hl-trick">论文明确区别于其他方法：*"Distinct from other methods, we **keep the large VLM fixed** during alignment."*</mark> 做法<mark class="hl-trick">不是训练那个大模型，而是**在 SFT 阶段就让所有 prompt（以及 Z-Image-Edit 的输入图）先过一遍 PE**，把 PE 的输出分布当成 Z-Image 的对齐目标</mark>：
+
+$$
+\underbrace{\text{成本} = 0}_{\text{不训 VLM}} + \underbrace{\text{与普通 SFT 同价}}_{\text{只是 caption 换成 PE 增强版}}
+$$
+
+这就是 §1.3 支柱③说的 **"without incurring additional LLM training costs"**。
+
+#### 推理链：Fig. 15 的三组对照
+
+<mark class="hl-trick">论文的结论是推理链在干两件事：*"effectively **injects world knowledge** and provides **fine-grained content planning** for complex user prompts."*</mark>
+
+![Z-Image Fig.15：PE 推理链的可视化对照。三列为 Z-Image Turbo / PE w/o reasoning / PE w/ reasoning。第一行「坐标 30°09′36″N, 120°07′12″E 的照片」：无推理链时 PE 把坐标当成文字标注渲染在航拍图上；有推理链时先推断出「浙江省杭州市西湖区附近，西湖是世界文化遗产」，于是生成了实景西湖照片。第二行「手帐风格泡普洱茶步骤」：无推理链只给出模糊的「温器/投茶/洗茶/冲泡/出汤」列表；有推理链规划出 5 个具体步骤（紫砂壶公道杯茶具、取 5-7 克、沸水洗茶、浸泡 30 秒、分茶），每步都有对应插图与说明文字。第三行「Five key habits」：无推理链给出与孩子无关的通用图标；右侧推理链显式做「Content Filling (Hallucination)」，主动补全 5 条具体习惯并渲染成教室里的手绘海报。](/zimage-fig15-prompt-enhancer.png)
+
+<mark class="hl-trick">第一行是 PE 最能说明本质的案例：同一个坐标，PE w/o reasoning 把坐标**当文字渲染**，PE w/ reasoning 先查位置再构图。</mark>
+
+::: warning 推理链被论文直接标为「Hallucination」，这是功能而非缺陷
+第三行原文写的是 *"**Content Filling (Hallucination)**: Since the user did not provide specific habits, I must generate these five content points based on **common sense logic** to ensure the image possesses **concrete details**"*。
+
+<mark class="hl-trick">文生图本来就需要 PE 把 underspecified prompt 补成可画的细节 —— 所以这里的"幻觉"是**受控的、面向可画性的主动补全**，而不是模型出错。</mark>但也意味着 <mark class="hl-trick">PE 补出的事实正确性不受 Z-Image 约束</mark>，若 PE 补错了，Z-Image 会忠实地把错内容画出来。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.8 可查）
+- **四段式推理链在 §5.3.6**：论文在定性评测里把 PE 的推理链描述为 **core subject analysis → problem solving/world knowledge injection → aesthetic enhancement → comprehensive description** 四段，而 Fig. 15 只展示了其中「查位置/定步骤/补内容」三种具体形态，**四段式本身没有配图**。
+- **编辑场景下 PE 的负担更重**：§5.3.6 明确编辑时 PE 还要处理"消歧意图、注入世界知识、**物理推理**"—— 例如无 PE 时"设计一张海报"版面混乱、"泡普洱茶"画不出水与茶包的相互作用。原因是编辑时 PE 要同时理解**图**与**指令**的关系。
+- **PE 的开销没有被计入任何成本表**：Table 1 的 314K H800·h 与 §1.4 的 "<16GB VRAM" 都不含 PE 的推理开销。**端到端部署时每次生成都要先跑一遍 VLM**，这与 §1.2「\$628K 未计入数据/人工成本」属同一类记账问题，论文未讨论。
+- **PE 不参与 RLHF**：§4.6 的 reward model 评估的是 Z-Image 自身输出，PE 的改写质量没有被任何 reward 直接监督。
 :::
