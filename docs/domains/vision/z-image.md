@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.3 ✅，4.4–4.8 待展开）｜ §5 Evaluation
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1–4.4 ✅，4.5–4.8 待展开）｜ §5 Evaluation
 
 ---
 
@@ -749,4 +749,72 @@ $$
 - **任意分辨率的动机不止省算力**：原文列了三条 —— 学 cross-scale visual information、*"mitigates information loss caused by downsampling to a fixed resolution"*、*"improves overall data efficiency"*。
 - **I2I 混训是 Z-Image-Edit 低成本的根源**：§4.7 的 edit 继续训练是"从 base model 继续训练"，而 base model 的编辑先验**正是本节种下的**。这解释了 §1.3 支柱③说的"摊薄重预训练预算、不需要独立昂贵阶段"。
 - **本节最大的复现性缺口**：预训练**数据量（图像数）、batch size、学习率、优化器、阶段划分、训练时长对应的迭代步数——全部未公开**。相比 §1.2 的 Table 1 只给了算力总量，这里的信息密度低得多。
+:::
+
+### 4.4 Supervised Fine-Tuning (SFT)
+
+SFT 的三个 trick：**① 分布收窄 → ② 概念平衡（重采样）→ ③ 模型合并**。三者串起来是一条完整的链：先收窄到高质量子流形、再保证收窄过程中不丢长尾、最后抹平收窄带来的能力偏向。
+
+#### ① Distribution Narrowing via High-Quality Alignment
+
+<mark class="hl-trick">Omni-pre-training 虽然建立了广泛的世界理解与 mode coverage，但"由 web-scale 数据的噪声性决定的"分布必然高方差</mark>。所以 SFT 的主要目标<mark class="hl-trick">不是修正局部伪影，而是把生成分布收窄到一个聚焦的、高保真的子流形</mark>（引 [67]）。做法是从预训练的噪声监督，切换到<mark class="hl-trick">由数据基建过滤出的高质图像 + super detailed, grounded captions 构成的课程</mark>。
+
+<mark class="hl-trick">这种严格监督充当"锚点"，强迫模型丢弃低质量模式（如不稳定的风格化、不一致的渲染），并严格对齐详细文本描述，从而把模型从 diversity-maximizing 工作点推到 quality-maximizing 工作点</mark>。
+
+#### ② Concept Balancing with Tagged Resampling
+
+收窄分布带来的**核心风险是灾难性遗忘**，尤其是长尾概念容易被主导模式淹没。Z-Image 的对策是<mark class="hl-trick">在整个 SFT 阶段强制严格的概念平衡（strict class balancing）</mark>：用 §2 的 world knowledge topological graph 引导动态重采样 —— <mark class="hl-trick">维护一个概念上的目标先验，用 BM25-based retrieval 实时（on the fly）算出每条训练样本的 rarity score</mark>；<mark class="hl-trick">构造 mini-batch 时，对欠表征概念（稀有实体、特定艺术风格）up-weight，对过表征概念 down-weight</mark>。
+
+> ⚠️ **这里最容易误解的一点**：up-weight / down-weight 指的是**训练数据在采样阶段的权重**，**不是**给某类样本额外乘一个更大的 loss coefficient。论文写的是 *"**Mini-batches are constructed by** up-weighting under-represented concepts"* —— 作用于**批次构造**。更准确地写就是：
+>
+> $$
+> p_i \propto w_i,\qquad w_i = \text{由概念稀缺度等因素得到的 sampling weight}
+> $$
+>
+> 长尾样本 $w_i$ 更大、常见样本 $w_i$ 更小。**论文没有说这些样本的 loss 再乘一个额外权重，所以不要理解成 loss reweighting。**
+
+效果是：<mark class="hl-trick">模型在收敛到高质量分布的同时，概念上的边缘分布（marginal distribution）保持均匀，从而保住预训练模型的语义多样性</mark>。
+
+#### ③ Robustness via Model Merging
+
+<mark class="hl-trick">即便做了平衡，在特定高质量数据集上做 SFT 仍会引入微妙的能力偏向或 trade-off（例如 photorealism vs. stylistic flexibility）</mark>。为了拿到 Pareto 最优解<mark class="hl-trick">又不需要复杂的推理期路由</mark>，论文把 **Model Merging**（引 [75, 93]）用作最后一步。
+
+<mark class="hl-trick">**Model Merging** 我刚才确实讲得太快了。Z-Image 的做法是：先从**同一个 backbone checkpoint** 出发，分别训练多个 SFT variant，但每个 variant 在数据或训练偏好上稍微偏向不同能力。论文举的例子是，有的更偏 **strict instruction following**，有的更偏 **aesthetic rendering**。这意味着它不是指"同一个模型训练到不同 step 再平均"，而是有意识地得到多个能力侧重点不同的 SFT checkpoint。</mark>
+
+<mark class="hl-trick">然后他们不是做 ensemble，也不是推理时多个模型一起跑，而是直接在**参数空间**做线性插值</mark>：
+
+$$
+\theta_{\text{final}}=\sum_i \alpha_i\,\theta_i
+$$
+
+这里 $\theta_i$ 是第 $i$ 个 SFT variant 的参数，$\alpha_i$ 是 merge coefficient。比如工程上可以直观理解成两个模型：
+
+$$
+\theta_{\text{final}}=\alpha\,\theta_{\text{instruction}}+(1-\alpha)\,\theta_{\text{aesthetic}}
+$$
+
+这样最后只得到**一个模型**，推理成本和单个 checkpoint 一样，不是两个模型 ensemble。<mark class="hl-trick">作者认为这样可以中和不同 SFT variant 各自的 bias，让最终模型在多个能力维度上更稳定、更鲁棒</mark>；论文的措辞是它 *"effectively **smooths the loss landscape**, neutralizing individual biases"*。
+
+::: tip 最准确的表述（建议直接记住这句）
+> **Z-Image 从同一 backbone 训练多个偏向不同能力的 SFT variants，然后在参数空间做线性插值，得到最终单一模型，以缓和 instruction following、aesthetic 等能力之间的 trade-off。具体 merge 权重和 variant 数量未公开。**
+:::
+
+::: info 为什么这东西可能有效（理解，非论文披露）
+因为几个 SFT variant 都是从**同一个 backbone** 出发，只是在相近的高质量分布上往不同方向微调，所以它们在参数空间里通常不会离得特别远。于是做 interpolation 有机会落在一个同时保留多种能力的区域，<mark class="hl-trick">而不是把两个完全无关的模型生硬平均</mark>。这也是为什么"同 backbone 初始化"这个前提是关键——若各 variant 来自不同预训练轨迹，插值会落在损失盆地的中间区域，通常直接崩掉。
+:::
+
+::: warning 论文未公开的关键细节
+- **训练了几个 SFT variant** —— 未给；
+- **每个 variant 的数据配比** —— 未给；
+- **$\alpha_i$ 的具体取值或搜索方法** —— 未给；
+- **是否要求 $\sum_i\alpha_i=1$** —— 未说明（注意：$\theta_{\text{final}}=\sum_i\alpha_i\theta_i$ 这个写法本身允许 $\sum\alpha_i\neq1$，那样等价于额外缩放了合并权重，**但论文没表态**）；
+- **是否有比 linear interpolation 更复杂的 merging 算法**（如 task arithmetic、AdaMerging）—— 未提及，尽管引用的 [75, 93] 里 [93] 正是 merging 文献中的经典工作。
+:::
+
+::: info 原文补充（笔记核对时添加，论文 §4.4 可查）
+- **"high variance" 的归因很明确**：论文把预训练分布高方差直接归因于 *"the **noisy nature of web-scale data**"*，这也是为什么 SFT 的定位是"换监督分布"而非"加正则"。
+- **长尾遗忘的具体表述**：*"catastrophic forgetting, particularly for **long-tail concepts that are prone to being overshadowed by dominant modes** during convergence"* —— 论文明确把风险定位在长尾，而不是整体能力退化。
+- **概念平衡依赖 §2.3 的设施**：*"a dynamic resampling strategy guided by **world knowledge topological graph in Section 2**"* —— 与 §2.3 的 semantic-level sampling weight 是同一套机制，只是 §4.4 换到 SFT 阶段使用。**§2.3 与 §4.4 是同一设施在两个阶段的复用。**
+- **与 §2.3 的一处措辞差异**：§2.3 用的是 BM25 分数参与算 "semantic-level sampling weight"（含图谱层级关系），§4.4 简化为 BM25 算 "rarity scores"。两处描述粒度不同，论文未统一。
+- **Model merging 的目标函数写得很克制**：论文用 **"Pareto-optimal"** 和 **"without complex inference routing"** 来定位，意思就是"用一次离线插值换掉推理期的条件路由系统"——这在工程上是很实际的理由（部署时不想挂多模型路由）。
 :::
