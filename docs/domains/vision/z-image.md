@@ -635,7 +635,7 @@ $$
 
 首先是 <mark class="hl-trick">**hybrid parallelization strategy**</mark>。Z-Image 并不是整个模型统一使用一种并行方式，而是分模块处理。<mark class="hl-trick">VAE 和 Text Encoder 在训练过程中保持 frozen，只负责 forward，因此它们没有梯度和 optimizer state 的大额显存开销，所以使用普通 **Data Parallelism（DP）** 即可</mark>：每张 GPU 都保留完整模块副本，不同 GPU 处理不同的数据。<mark class="hl-trick">真正需要更新的是大规模 DiT backbone，它的参数、梯度和 optimizer states 会占据大量显存，因此使用 **FSDP2**</mark>。FSDP2 的核心就是把这些训练状态 shard 到不同 GPU 上，而不是让每张 GPU 都保存完整副本，从而降低单卡显存压力。
 
-除了模型状态，训练时另一个显存大户是 **activation**。正常情况下，forward 经过每一层时产生的中间 activation 都要保存，backward 时再用这些中间结果计算梯度。对于 DiT 来说，层数多、图像 token 序列又长，这部分显存会非常大。因此 Z-Image 对所有 DiT layers 都采用 <mark class="hl-trick">**Gradient Checkpointing**</mark>：只保存一部分关键中间节点，其余 activation 不保留，等 backward 真正需要时再重新执行对应的一段 forward。它本质上是在做：
+除了模型状态，训练时另一个显存大户是 <mark class="hl-trick">**activation**</mark>。正常情况下，forward 经过每一层时产生的中间 activation 都要保存，backward 时再用这些中间结果计算梯度。<mark class="hl-trick">对于 DiT 来说，层数多、图像 token 序列又长，这部分显存会非常大</mark>。因此 Z-Image 对所有 DiT layers 都采用 <mark class="hl-trick">**Gradient Checkpointing**</mark>：只保存一部分关键中间节点，其余 activation 不保留，等 backward 真正需要时再重新执行对应的一段 forward。它本质上是在做：
 
 $$
 \boxed{\ \text{更多计算} \rightarrow \text{更少 activation 显存}\ }
@@ -645,7 +645,7 @@ $$
 
 Z-Image 还对 DiT blocks 使用了 <mark class="hl-trick">**`torch.compile`**</mark>。<mark class="hl-trick">这个东西解决的不是显存切分，而是运行效率</mark>。普通 PyTorch eager execution 会把很多操作逐个调度到 GPU，存在 Python 调度、kernel launch 等额外开销；`torch.compile` 会尝试把计算图编译优化，把可以融合的操作合并起来，减少这些调度开销。因此它的目标可以简单理解为：<mark class="hl-trick">**同样的 DiT forward/backward，尽可能让 GPU 更高效地执行，提高整体训练 throughput。**</mark>
 
-第二部分是 Z-Image 针对 **mixed-resolution training** 做的优化。图像分辨率和宽高比不同，经过 VAE 后得到的 image token 数量也不同，也就是说每个样本的 sequence length 差别可能非常大。如果一个 batch 里同时放一个很短的序列和一个很长的序列，为了能够并行计算，短序列通常需要 padding 到最长序列长度，这样大量计算实际上都浪费在 padding token 上。Z-Image 因此会<mark class="hl-trick">根据 metadata 里的 height 和 width，提前估计每个样本的 sequence length，然后把长度相近的数据分到同一个 batch，这就是 **sequence-length-aware batch construction**</mark>。
+第二部分是 Z-Image 针对 <mark class="hl-trick">**mixed-resolution training**</mark> 做的优化。图像分辨率和宽高比不同，经过 VAE 后得到的 image token 数量也不同，<mark class="hl-trick">也就是说每个样本的 sequence length 差别可能非常大</mark>。如果一个 batch 里同时放一个很短的序列和一个很长的序列，为了能够并行计算，短序列通常需要 padding 到最长序列长度，<mark class="hl-trick">这样大量计算实际上都浪费在 padding token 上</mark>。Z-Image 因此会<mark class="hl-trick">根据 metadata 里的 height 和 width，提前估计每个样本的 sequence length，然后把长度相近的数据分到同一个 batch，这就是 **sequence-length-aware batch construction**</mark>。
 
 在此基础上，他们又做了 <mark class="hl-trick">**dynamic batch sizing**</mark>。<mark class="hl-trick">长序列 batch 使用较小的 batch size，避免 OOM；短序列就可以使用更大的 batch size，避免 GPU 显存和计算资源闲置</mark>。因此可以简单记成：
 
