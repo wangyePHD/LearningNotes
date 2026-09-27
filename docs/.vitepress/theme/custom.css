@@ -61,3 +61,20 @@
   max-width: 100%;
   border-radius: 8px;
 }
+
+/* 7. 关键结论黄色高亮（<mark class="hl-key">）：亮/暗色下均保证可读的高亮效果 */
+mark.hl-key {
+  background-color: #ffe066;
+  color: #1f2328;
+  padding: 0.1em 0.25em;
+  margin: 0 0.05em;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 600;
+}
+
+.dark mark.hl-key {
+  background-color: #ffd43b;
+  color: #1f2328;
+}

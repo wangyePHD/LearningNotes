@@ -351,7 +351,7 @@ $$
 
 第一条是 **Mixed Editing with Expert Models**。他们先定义一套编辑任务 taxonomy，然后用不同的 task-specific expert model 去生成高质量编辑数据。关键点在于，他们不满足于"一对图只学一个编辑动作"，而是会把多个编辑操作合并进同一个 pair，形成 mixed-editing data。比如同一张图里既换背景、又改颜色、再增加物体，这样一条样本就能同时教模型多个操作，提高训练效率。论文明确说，这样可以让模型从一个 composite pair 里学习多个 editing task，而不是分别准备很多单任务 pair。
 
-第二条也是这一节最有特点的，是 **Efficient Graphical Representation**。对于同一个 input image，他们先生成多个不同编辑版本。然后这些版本之间可以继续两两组合，构造新的 source-target pair。论文的意思是：原始图和 $N$ 个编辑版本之间，不只是有 $N$ 对关系，还可以通过不同 edited versions 之间的组合进一步扩增 pair 数量。这样一来，一组已经生成好的编辑结果可以被反复重组，不需要重新调用 expert model，就能把训练数据规模继续放大。与此同时，这种重组天然会产生 mixed-editing pair，也会产生 inverse pair。作者特别强调 inverse pair 的意义：可以让"真实、未失真的图"作为 target，从而提升数据质量。
+第二条也是这一节最有特点的，是 **Efficient Graphical Representation**。对于同一个 input image，他们先生成多个不同编辑版本。然后这些版本之间可以继续两两组合，构造新的 source-target pair。论文的意思是：原始图和 $N$ 个编辑版本之间，不只是有 $N$ 对关系，还可以通过不同 edited versions 之间的组合进一步扩增 pair 数量。这样一来，一组已经生成好的编辑结果可以被反复重组，不需要重新调用 expert model，就能把训练数据规模继续放大。与此同时，这种重组天然会产生 mixed-editing pair，也会产生 inverse pair。<mark class="hl-key">作者特别强调 inverse pair 的意义：可以让"真实、未失真的图"作为 target，从而提升数据质量。</mark>
 
 第三条是 **Paired Images from Videos**。预定义编辑任务的缺点是分布太人工、编辑类型有限，所以 Z-Image 又从大规模视频里取自然相邻或相关 frame。因为同一段视频里的不同帧往往共享主体、场景或风格，它们天然就有一定的 editing relation。论文再用 CN-CLIP 计算 frame pair 的语义相似度，筛掉关系太弱的 pair。这样得到的数据有三个优势：任务类型更丰富、很多 pair 天然包含多个同时变化的因素，而且规模更容易扩展。
 
