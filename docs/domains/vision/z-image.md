@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Distillation` `RLHF`
 > **更新时间**：2026-09-26
 > **参考来源**：[Z-Image: An Efficient Image Generation Foundation Model with Single-Stream Diffusion Transformer (arXiv:2511.22699v5)](https://arxiv.org/abs/2511.22699) · [arXiv HTML 全文](https://arxiv.org/html/2511.22699v5) · [GitHub: Tongyi-MAI/Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [HuggingFace](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) · [ModelScope](https://modelscope.cn/models/Tongyi-MAI/Z-Image-Turbo)
-> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training ｜ §5 Evaluation（笔记随学习逐节增补）
+> **精读进度**：§1 Introduction ✅ ｜ §2 Data Infrastructure ✅（2.1–2.5）｜ §3 Image Captioner ✅（总览 + 3.1–3.3 全）｜ §4 Model Training 进行中（4.1 ✅，4.2–4.8 待展开）｜ §5 Evaluation
 
 ---
 
@@ -529,4 +529,102 @@ $$
 - **Step1 复用 §3.1 的 OCR-inclusive caption**：论文写 Step1 是 *"generate a comprehensive, **OCR-inclusive** caption for both the source and target images respectively"* —— 所以文字变化是被**显式**纳入差异分析的，这也是为什么文字编辑（§2.5 的 rendering 路线）能有精确监督。
 - **与 §2.5 是一条闭环**：§2.5 用渲染系统造出 source/target 像素对，§3.3 用这三步为它们生成 instruction 文本。**前者保证像素级 ground-truth，后者保证语言级 ground-truth**，两条路线的产物在这里汇合。
 - **一个论文未讨论的依赖**：Step2 的差异质量取决于 Step1 caption 的质量。若 captioner 漏掉了某个细微变化（§3.1 承认密集文字场景会漏字），**这个变化在后续两步里就彻底不可见了** —— 误差被前置步骤静默传递。这是 CoT 式 pipeline 的共性风险，论文没有分析。
+:::
+
+---
+
+## 4. Model Training（论文 §4） { #sec-4-training }
+
+> 本节是全文最重的一节，8 个小节，按流水线顺序：
+>
+> | 小节 | 内容 | 配图 |
+> | :--- | :--- | :--- |
+> | §4.1 | 架构 S3-DiT | Fig. 10 架构图 |
+> | §4.2 | 训练效率优化（纯工程） | 无 |
+> | §4.3 | 预训练（Flow Matching） | 无 |
+> | §4.4 | SFT 三件套 | 无 |
+> | §4.5 | 少步蒸馏 D-DMD / DMDR | Fig. 13 蒸馏对照 |
+> | §4.6 | RLHF（DPO → GRPO） | Fig. 14 RLHF 对照 |
+> | §4.7 | Z-Image-Edit 继续训练 | 无 |
+> | §4.8 | Prompt Enhancer | Fig. 15 PE 可视化 |
+>
+> **真实流水线顺序（Fig. 11 坐标重建）**：低分辨率预训练 → Omni 预训练 → SFT → **少步蒸馏** → **RLHF**；编辑分支从 SFT 处向下分出（Continued PT → SFT for Editing）。
+
+### 4.1 Architecture
+
+Z-Image 的主干是一个 **6.15B 参数的 Scalable Single-Stream Diffusion Transformer（S3-DiT）**。文本侧使用 **Qwen3-4B** 作为 text encoder，图像侧使用 **Flux VAE** 把 RGB 图像编码成 latent；只有在 image editing 任务中，才额外加入 **SigLIP 2** 提取 reference image 的高层语义特征。整个模型采用 single-stream 设计：不同模态先分别经过很轻量的 modality-specific processor，再把 text token、image VAE token，以及 editing 场景中的 semantic token 拼接成同一个序列，送入统一 Transformer backbone。这样做的目的，是让不同模态在每一层里直接交互，同时提高参数利用率。
+
+S3-DiT 的具体规模是 **30 层、hidden dimension 3840、32 个 attention heads、FFN intermediate dimension 10240，总参数 6.15B**。每种输入模态先经过由 2 个 Transformer block 构成的轻量 processor 做初步对齐，然后进入统一主干。为了保证训练稳定，模型使用 **QK-Norm、Sandwich-Norm 和 RMSNorm**；条件信息会被投影成 scale 和 gate 去调制 Attention / FFN。这个条件投影还采用 low-rank 形式，即共享一个 layer-agnostic down-projection，再接每层自己的 up-projection，以降低额外参数量。
+
+在位置编码上，Z-Image 使用 **3D Unified RoPE**。图像 token 使用空间坐标，文本 token 沿 temporal 维度递增。对于 image editing，reference image 和 target image 的空间 RoPE 坐标是对齐的，也就是说 reference 左上位置和 target 左上位置保持空间对应；但两张图在 temporal 维度上额外加入一个 unit interval offset，从而让模型知道"这两个 token 虽然空间位置对应，但属于不同图像角色"。因此 RoPE 同时承担了两个作用：保持 source-target 的空间对应关系，同时区分 reference 和 target。
+
+editing 场景里还有一个非常关键的设计，就是 **reference 和 target 使用不同的 diffusion time-conditioning**。Z-Image 使用 flow matching：
+
+$$
+x_t=t\,x_1+(1-t)\,x_0
+$$
+
+其中 $x_1$ 是 clean image，$x_0$ 是 Gaussian noise，因此在它的定义里：
+
+$$
+t=1 \Rightarrow \text{clean image}, \qquad t=0 \Rightarrow \text{pure noise}
+$$
+
+因此在 editing 训练时，reference image 始终作为干净条件输入：
+
+$$
+t_{\text{ref}}=1
+$$
+
+而 target image 正常参与 flow-matching 加噪：
+
+$$
+t_{\text{target}}\in[0,1]
+$$
+
+Figure 10 里明确画出了 reference 的 $t=1$，target 的 $t\in[0,1]$。模型实际看到的可以抽象成：
+
+$$
+\big[\ \text{text tokens},\ \text{clean reference tokens}(t=1),\ \text{noisy target tokens}(t)\ \big]
+$$
+
+然后根据 clean reference 和编辑指令，去预测 noisy target 的 velocity。
+
+所以这里实际上有两套机制共同区分 reference / target：
+
+$$
+\boxed{\ \text{3D RoPE}\ }
+$$
+
+负责"**空间对齐 + 图像角色区分**"；
+
+$$
+\boxed{\ t_{\text{ref}}=1,\quad t_{\text{target}}\in[0,1]\ }
+$$
+
+负责"**clean condition + noisy generation target 的区分**"。
+
+整个 4.1 最后可以压成：
+
+$$
+\boxed{
+\text{Qwen3-4B}+\text{Flux VAE}+\text{SigLIP2(edit only)}
+\rightarrow \text{Single-Stream S3-DiT}
+}
+$$
+
+::: tip 最值得记住的三个核心设计
+**单流统一处理多模态 token；3D RoPE 保持 reference-target 的空间对应并区分角色；editing 中 reference 固定 $t=1$，target 随机采样 $t\in[0,1]$，从而把"条件图"和"需要生成的图"明确分开。**
+:::
+
+![Z-Image Fig.10：S3-DiT 架构总览。左侧为模态处理器（Text Processor←Qwen3-4B、Image Processor←Noised VAE Embedding、Semantic Processor←SigLip-2 Embedding 仅编辑用），各自带 Timestep Condition 嵌入，经 Embed 后 ⊕ 拼接成统一序列进入主干。中部为 ×N 重复的 Single-Stream Attention Block 与 FFN Block。右侧放大两个 block 内部：Attention Block 为 RMS Norm → Scale → Q-Norm/K-Norm → U-RoPE（仅作用于 Q 与 K）→ Multi-head Self-Attention → Zero-init. Gate → 残差；FFN Block 为 RMS Norm → Scale → Feed Forward → RMS Norm → Zero-init. Gate → 残差。底部两行是输入示例：# Z-Image 行「文字 prompt + 单张目标图，t = [0,1]」；# Z-Image-Edit 行「两张 reference 图 t = 1 + 编辑指令 + 目标图 t = [0,1]」。](/zimage-fig10-architecture.png)
+
+::: info 原文补充（笔记核对时添加，论文 §4.1 可查）
+- **Table 2 完整配置**：除你列的 5 项外还有 RoPE 频率三元组 $(d_t,d_h,d_w)=(32,48,48)$，即 3D RoPE 在时间/高/宽三个轴上用不同频率。
+- **引文出处**：single-stream MM-DiT 范式引 [18]（SD3 系），3D Unified RoPE 引 [58, 78]，Qwen3-4B 引 [85]，Flux VAE 引 [34]，SigLIP 2 引 [69]，低秩条件投影思路引 [1]。
+- **Fig. 10 揭示了正文没写的 block 内部顺序**（已放大核对）：**Scale 调制的是归一化之后的输入**（adaLN 式），而 **Zero-init. Gate 位于 block 输出侧、残差相加之前**。即 $h' = h + g\odot F(\mathrm{Norm}(h)\odot(1+s))$，且 $g^{(0)}=0$ ⇒ 初始为恒等映射。这是小模型稳定性的关键一环。
+- **U-RoPE 只作用于 Query 与 Key**，不作用于 Value —— 图中 U-RoPE 框只接在 Q、K 两条路上。
+- **编辑态有两个独立的 Timestep Condition 嵌入**：Fig. 10 中 Timestep Condition 出现两次，各带一个 Embed —— 一个恒为 $t=1$ 服务 reference，一个随机 $t\in[0,1]$ 服务 target。这就是「两套机制」在实现上的落点。
+- **editing 的 token 序列比 T2I 多一段**：编辑态序列为 $[\text{SigLip 语义}\oplus\text{VAE ref}(t{=}1)\oplus\text{文本}\ldots\oplus\text{含噪 VAE target}]$，即 reference 同时经过 SigLip-2（取抽象语义）和 VAE（取像素细节）两条路，而 target 只走 noised VAE。
+- **teacher 的推理开销**：§4.5 明确 *"our standard SFT model requires approximately **100 NFEs**"*，Turbo 压到 8 NFE（约 1/12.5）。**注意论文全文没有出现「50 步」这种表述**，不要把 CFG 的两次前向和步数混算。
 :::
