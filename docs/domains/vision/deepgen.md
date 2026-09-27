@@ -299,7 +299,7 @@ DeepGen **没有公开**更细的：数据过滤规则、质量打分、去重�
 :::
 
 ::: info Table 8 值得单独记住的三件事
-1. <mark class="hl-trick">**editing 数据两阶段逐字复用**（同一批 6.6M），SFT 阶段没为 editing 引入任何新数据源 —— 这在多阶段训练里并不常见。
+1. <mark class="hl-trick">**editing 数据两阶段逐字复用**</mark>（同一批 6.6M），SFT 阶段没为 editing 引入任何新数据源 —— 这在多阶段训练里并不常见。
 2. <mark class="hl-trick">**internal data 是绝对主力**</mark>：SFT generation 的 10M/11M 来自内部双语数据，公开子集只占 295K。所以「仅用 50M 样本」这个说法的可复现性主要取决于那 10M 内部数据，外部无法获得。
 3. <mark class="hl-trick">**Pre-Training 的 35M 全部是公开 web-scale 图文对</mark>（text-to-image-2M / LAION / Megalith / RedCaps / CC-12M，合计精确等于 35M），这部分是完全可复现的。
 :::
