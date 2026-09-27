@@ -126,20 +126,11 @@ DeepGen 的数据设计和 Z-Image 很不一样。它没有重点讲复杂的数
 
 ### 4.2 General Editing
 
-<mark class="hl-trick">**General Editing 的数据组织更值得记，因为它基本就是一张开源 editing 数据地图**</mark>。DeepGen 收集的是 <mark class="hl-trick">**image–instruction–image triplets**</mark>：
+<mark class="hl-trick">**General Editing 的数据组织更值得记，因为它基本就是一张开源 editing 数据地图**</mark>。DeepGen 收集的是 <mark class="hl-trick">**image–instruction–image triplets**</mark>，**九个数据源**：
 
-| 数据源 | 规模 |
-| :--- | ---: |
-| GPT-Image-Edit | 1.5M |
-| X2I2 | 1.6M |
-| UniWorld-Edit set | 1.2M |
-| NHR-Edit | 720K |
-| Pico-Banana | 250K |
-| Nano-banana-consist | 150K |
-| ShareGPT-4o-Image-Edit set | 50K |
-| OpenGPT4o-Image-Edit set | 40K |
-| <mark class="hl-trick">in-house editing samples（中英文）</mark> | 1.1M |
-| **合计（Table 8）** | **≈ 6.6M** |
+GPT-Image-Edit 1.5M ｜ X2I2 1.6M ｜ UniWorld-Edit set 1.2M ｜ NHR-Edit 720K ｜ Pico-Banana 250K ｜ Nano-banana-consist 150K ｜ ShareGPT-4o-Image-Edit set 50K ｜ OpenGPT4o-Image-Edit set 40K ｜ <mark class="hl-trick">in-house editing samples（中英文）1.1M</mark> → **合计 ≈ 6.6M**
+
+逐条明细与引用编号见 [§4.6 附录 Table 8 完整数据明细](#sec-4-6-table8)。
 
 <mark class="hl-key">最关键的一点：这 **6.6M editing 数据既用于 Alignment Pre-training，也继续用于 SFT**。</mark>也就是说 <mark class="hl-trick">DeepGen 不是先只做 generation、后面再加 editing，而是一开始对齐阶段就让模型见 generation + editing，两种任务在后续 SFT 里再继续联合训练</mark>。
 
@@ -207,6 +198,110 @@ DeepGen **没有公开**更细的：数据过滤规则、质量打分、去重�
 - **Table 8 的一个细节**：in-house 数据都标了 †，论文注明 *"† denotes covering both **Chinese and English** prompts"* —— 即内部数据是**双语**的。
 - **规模对照（论文正文给出）**：DeepGen 全程 **~50M samples**，对比 **LongCat-Image 1.2B**、**HunyuanImage 3.0 5B**。这是它"小模型对抗大模型"的核心论据之一。
 - **Fig. 4 顺带给出了完整基准清单**（后面 §5 会用到）：General Generation → UniGenBench / GenEval / DPG Bench；Reasoning Generation → CoreBench Reason / WISE；Text Rendering → CVTG-2K；General Editing → ImgEdit / GEdit-EN；Reasoning Editing → UniREditBench / RISE。
+:::
+
+### 4.6 附录 Table 8 完整数据明细（逐数据集） { #sec-4-6-table8 }
+
+附录 Table 8 是**全部数据配比的唯一权威出处**（正文只给部分数字）。原表为 4 列（Stage / Task / Data source / Size），此处**按数据集逐条拆开**，并附求和校验。
+
+原表结构：
+
+| Stage | Task | Data source | Size |
+| :--- | :--- | :--- | ---: |
+| Pre-Training | General Generation | text-to-image-2M [30], LAION-Aesthetic-6M [31], Megalith-10M [32], RedCaps-5M [33], CC-12M [34] | 35M |
+| Pre-Training | General Editing | NHR-Edit [38], GPT-Image-Edit [39], ShareGPT-4o-Image-Edit [35], OpenGPT4o-Image-Edit [37], Nano-banana-consist [40], Pico-Banana [41], X2I2 [12], UniWorld-Edit set [17], in-house editing data† | 6.6M |
+| Supervised Fine-Tuning | General Generation | BLIP-3o [7], ShareGPT-4o-Image [35], Echo-4o-Image [36], OpenGPT4o-Image [37], Self-Banana-50K, in-house generation data† | 11M |
+| Supervised Fine-Tuning | General Editing | （与 Pre-Training 同一份，见下） | 6.6M |
+| Supervised Fine-Tuning | Reasoning Generation | UniReason-T2I set [42] | 150K |
+| Supervised Fine-Tuning | Reasoning Editing | UniReason-Edit set [42] | 100K |
+| Supervised Fine-Tuning | Text Rendering | General text rendering, poster design†, Chinese poem | 560K |
+
+> 论文注明：*"† denotes covering both **Chinese and English** prompts"* —— 带 † 的内部数据与 poster design 均为**双语**。
+
+#### ① Pre-Training / General Generation = 35M
+
+| # | 数据集 | 引用 | 规模 |
+| :-: | :--- | :-: | ---: |
+| 1 | text-to-image-2M | [30] | 2M |
+| 2 | LAION-Aesthetic-6M | [31] | 6M |
+| 3 | Megalith-10M | [32] | 10M |
+| 4 | RedCaps-5M | [33] | 5M |
+| 5 | CC-12M | [34] | 12M |
+| | **明细合计** | | <mark class="hl-key">**35M**</mark> |
+| | **Table 8 报告值** | | **35M** ✅ 完全吻合 |
+
+#### ② General Editing = 6.6M（**Pre-Training 与 SFT 两阶段复用同一份**）
+
+| # | 数据集 | 引用 | 规模 |
+| :-: | :--- | :-: | ---: |
+| 1 | X2I2 | [12] | 1.6M |
+| 2 | GPT-Image-Edit | [39] | 1.5M |
+| 3 | UniWorld-Edit set | [17] | 1.2M |
+| 4 | <mark class="hl-trick">in-house editing data†</mark> | — | 1.1M |
+| 5 | NHR-Edit | [38] | 720K |
+| 6 | Pico-Banana | [41] | 250K |
+| 7 | Nano-banana-consist | [40] | 150K |
+| 8 | ShareGPT-4o-Image-Edit set | [35] | 50K |
+| 9 | OpenGPT4o-Image-Edit set | [37] | 40K |
+| | **明细合计** | | 6.610M |
+| | **Table 8 报告值** | | **6.6M** ✅ 吻合（四舍五入） |
+
+<mark class="hl-key">**值得注意的是这份 editing 清单在 Pre-Training 与 SFT 两阶段逐字相同、规模也相同** —— 即 6.6M 编辑数据被完整复用两遍，不是"预训练用一部分、SFT 再补新的"。这与 §4.5 公式里 editing 项写两次 6.6M 是一致的。</mark>但也意味着 <mark class="hl-trick">DeepGen 在 SFT 阶段并没有为 editing 引入任何新数据源</mark>。
+
+#### ③ SFT / General Generation = 11M
+
+| # | 数据集 | 引用 | 规模 |
+| :-: | :--- | :-: | ---: |
+| 1 | <mark class="hl-trick">in-house generation data†</mark> | — | 10M |
+| 2 | Echo-4o-Image | [36] | 100K |
+| 3 | BLIP-3o | [7] | 60K |
+| 4 | Self-Banana-50K | — | 50K |
+| 5 | ShareGPT-4o-Image | [35] | 45K |
+| 6 | OpenGPT4o-Image | [37] | 40K |
+| | **明细合计** | | <mark class="hl-key">**10.295M**</mark> |
+| | **Table 8 报告值** | | **11M** ⚠️ <mark class="hl-trick">**差 0.705M**</mark> |
+
+<mark class="hl-key">**① 差额 0.705M**</mark>：公开子集只有 295K，剩下全靠 10M 内部数据。<mark class="hl-trick">Table 8 的 11M 比明细之和大出约 705K，论文未解释这一差额</mark>，不要自行补。
+
+<mark class="hl-key">**② 命名不一致**</mark>：§4 正文写 *"we synthesize approximately 50k high-clarity photorealistic images ... using **Nano Banana**"*，而 Table 8 写的是 *"**Self-Banana-50K**"*。<mark class="hl-trick">两者规模都是 50K，应指同一批，但命名不一致，论文未说明</mark>。
+
+#### ④ SFT / Reasoning + Text Rendering
+
+| # | 任务 | 数据集 | 引用 | 规模 |
+| :-: | :--- | :--- | :-: | ---: |
+| 1 | Reasoning Generation | UniReason-T2I set | [42] | 150K |
+| 2 | Reasoning Editing | UniReason-Edit set | [42] | 100K |
+| 3 | Text Rendering | General text rendering | — | （正文 500K） |
+| 4 | Text Rendering | poster design† | — | （正文 60K，含 application-oriented） |
+| 5 | Text Rendering | Chinese poem | — | （同上 60K 内） |
+| | **Text Rendering 合计** | | | **560K** ✅ 与正文 500K+60K 吻合 |
+
+#### ⑤ 总量核对
+
+| 口径 | 数值 |
+| :--- | ---: |
+| Pre-Training（35M + 6.6M） | 41.60M |
+| SFT（11M + 6.6M + 150K + 100K + 560K） | 18.41M |
+| <mark class="hl-key">**Table 8 两阶段直接相加**</mark> | <mark class="hl-key">**60.01M**</mark> |
+| 若扣除两阶段复用的 6.6M editing | 53.41M |
+| <mark class="hl-key">**论文 Intro 声称**</mark> | <mark class="hl-key">**~50M samples**</mark> |
+
+::: danger Table 8 加总是 60M，但论文反复声称 ~50M
+<mark class="hl-key">**这是本文档中最大的一处数字不自洽**</mark>：Table 8 逐条相加得 <mark class="hl-key">**60.01M**</mark>；即便扣除两阶段复用的 6.6M editing，仍有 <mark class="hl-key">**53.41M**</mark>，<mark class="hl-trick">无论怎么算都对不上 "~50M"</mark>。
+
+这个数字是论文**最核心的对外论据**（"仅用 ~50M 样本即超越 80B / 1.2B / 5B 样本的模型"），所以差额值得警惕。可能的解释（<mark class="hl-trick">以下均为推断，论文未说明，不可作为事实引用</mark>）：
+
+- "~50M" 可能只统计了 <mark class="hl-trick">unique images</mark> 而非样本对/triplet（editing triplet 与 generation pair 共享图片时会被重复计数）；
+- 可能排除了某类数据（如 6.6M editing 或 10M in-house）；
+- 也可能 "~50M" 是取整后的粗略说法。
+
+<mark class="hl-key">**引用 "~50M samples" 这个卖点时请注明：与附录 Table 8 的明细求和存在约 7–10M 的差距，论文未给出解释。</mark>
+:::
+
+::: info Table 8 值得单独记住的三件事
+1. <mark class="hl-trick">**editing 数据两阶段逐字复用**（同一批 6.6M），SFT 阶段没为 editing 引入任何新数据源 —— 这在多阶段训练里并不常见。
+2. <mark class="hl-trick">**internal data 是绝对主力**</mark>：SFT generation 的 10M/11M 来自内部双语数据，公开子集只占 295K。所以「仅用 50M 样本」这个说法的可复现性主要取决于那 10M 内部数据，外部无法获得。
+3. <mark class="hl-trick">**Pre-Training 的 35M 全部是公开 web-scale 图文对</mark>（text-to-image-2M / LAION / Megalith / RedCaps / CC-12M，合计精确等于 35M），这部分是完全可复现的。
 :::
 
 ## 5. Experiments
