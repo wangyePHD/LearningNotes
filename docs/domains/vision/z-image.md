@@ -715,7 +715,9 @@ $$
 
 第一阶段是 <mark class="hl-trick">**Low-resolution Pre-training**</mark>。这个阶段非常纯粹：<mark class="hl-trick">只做 **$256\times256$ 的 text-to-image generation**</mark>。目标不是追求最终高清效果，而是用较低计算成本先把最基础的东西学出来，包括 cross-modal alignment、基本视觉知识、各种 concepts、styles、compositions。论文明确说，<mark class="hl-trick">这一阶段占了整个 pre-training compute 的一半以上</mark>，因为作者认为<mark class="hl-trick">模型的大部分 foundational visual knowledge，包括 **Chinese text rendering**，其实都可以在低分辨率阶段先学到</mark>。
 
-然后进入 <mark class="hl-trick">**Omni-pre-training**</mark>。这里的"Omni"主要指三个维度。第一个是 <mark class="hl-trick">**Arbitrary-Resolution Training**</mark>：<mark class="hl-trick">不再固定 $256$，而是把原始图像通过 resolution-mapping function 映射到预定义的 training resolution range</mark>，允许不同分辨率和宽高比一起训练。这样可以<mark class="hl-trick">减少强行 downsample 带来的信息损失</mark>，也为最后支持大约 1K–1.5K 分辨率做准备。
+然后进入 <mark class="hl-trick">**Omni-pre-training**</mark>。这里的"Omni"主要指三个维度。而且 Omni-pre-training 本身<mark class="hl-trick">**是多阶段（multiple stages）推进的**</mark>——论文原文 *"the omni-pre-training phase is conducted in multiple stages"*，并明确说是到<mark class="hl-trick">"最后一个阶段完成（upon completion of the final stage）"后</mark>模型才具备 1K–1.5K 的任意分辨率能力。<mark class="hl-trick">具体分几个阶段、每阶段各承担什么设置，论文没有披露</mark>。
+
+第一个是 <mark class="hl-trick">**Arbitrary-Resolution Training**</mark>：<mark class="hl-trick">不再固定 $256$，而是把原始图像通过 resolution-mapping function 映射到预定义的 training resolution range</mark>，允许不同分辨率和宽高比一起训练。这样可以<mark class="hl-trick">减少强行 downsample 带来的信息损失</mark>，也为最后支持大约 1K–1.5K 分辨率做准备。
 
 第二个是 <mark class="hl-trick">**Joint Text-to-Image and Image-to-Image Training**</mark>。这点很重要：<mark class="hl-trick">Z-Image 不是先把 T2I foundation model 完整训完，再单独从头搞 editing，而是在 omni-pretraining 阶段就已经把 image-to-image task 混进来了</mark>。这里使用前面 2.5 构建的大规模、自然的、弱对齐 image pairs，让模型在大规模 pretrain compute 下<mark class="hl-trick">提前学"两个图像之间的关系"</mark>。论文明确说，这给后续 editing 提供了很好的 initialization，而且他们观察到这种联合预训练**没有明显损害 T2I 性能**。
 
@@ -743,7 +745,7 @@ $$
 - **引用出处**：flow matching 引 [44, 48]；logit-normal 采样 *"Following SD3 [18]"*；dynamic time shifting *"as used in Flux [34]"*；caption 重要性引 [4]。**采样器超参（logit-normal 的均值/标准差、time shifting 的分辨率映射指数）论文一个都没给。**
 - **"一半以上"精确是 50.9%**：Table 1 里低分辨率预训练 147.5K / 预训练总计 290K。注意论文写的是 *"over half of our total **pre-training** compute"*，**是预训练内部占比，不是全流程占比**（全流程口径是 47.0%）。引用时注意别混。
 - **原文有一处笔误**：该段写 *"As shown in **Figure 1**, this phase accounts for over half..."*，但这个数字在 **Table 1** 里，Figure 1 是写实效果 showcase。
-- **Omni-pre-training 是多阶段的，不是单阶段**：原文 *"the omni-pre-training phase is conducted in **multiple stages**. Upon completion of the **final stage**, the model becomes capable of..."* —— 但**具体分几阶段、每阶段多久完全没披露**。
+- **Omni-pre-training 是多阶段的（见正文）**：阶段数、每阶段的分辨率范围与任务配比、每阶段训练多久——**全部未披露**。这是 §4.3 复现缺口的一部分。
 - **任意分辨率的动机不止省算力**：原文列了三条 —— 学 cross-scale visual information、*"mitigates information loss caused by downsampling to a fixed resolution"*、*"improves overall data efficiency"*。
 - **I2I 混训是 Z-Image-Edit 低成本的根源**：§4.7 的 edit 继续训练是"从 base model 继续训练"，而 base model 的编辑先验**正是本节种下的**。这解释了 §1.3 支柱③说的"摊薄重预训练预算、不需要独立昂贵阶段"。
 - **本节最大的复现性缺口**：预训练**数据量（图像数）、batch size、学习率、优化器、阶段划分、训练时长对应的迭代步数——全部未公开**。相比 §1.2 的 Table 1 只给了算力总量，这里的信息密度低得多。
