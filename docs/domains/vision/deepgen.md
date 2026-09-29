@@ -1,11 +1,11 @@
 # 轻量统一多模态模型 DeepGen 1.0 (SCB + 三阶段训练 + MR-GRPO)
 
 > **标签**：`Vision` `Unified Model` `VLM-DiT` `Flow Matching` `RL` `GRPO` `Data-centric`
-> **更新时间**：2026-09-27
+> **更新时间**：2026-09-29
 > **参考来源**：[DeepGen 1.0: A Lightweight Unified Multimodal Model for Advancing Image Generation and Editing (arXiv:2602.12205v2)](https://arxiv.org/abs/2602.12205) · [GitHub: DeepGenTeam/DeepGen](https://github.com/DeepGenTeam/DeepGen) · [HuggingFace: DeepGenT](https://huggingface.co/DeepGenT) · [Datasets](https://huggingface.co/datasets/DeepGenTeam/DeepGen-1.0)
 > **原文**：本地 `Papers/DeepGen.pdf`（21 页，正文 18 页 + 附录 A/B）
 > **精读重点**：§3 Training（data train）+ §3.3 RL + §4 Data
-> **精读进度**：§4 Data ★ ✅ ｜ §3.1 Alignment Pre-Training ✅ ｜ §3.2 Joint SFT ✅ ｜ **§3.3 MR-GRPO ★ ✅** ｜ §2 Architecture ｜ §5 Experiments（§5.3.2 RL 消融已随 §3.3 记入）｜ §6 Conclusion（笔记随学习逐节增补）
+> **精读进度**：§4 Data ★ ✅ ｜ §3.1 Alignment Pre-Training ✅ ｜ §3.2 Joint SFT ✅ ｜ **§3.3 MR-GRPO ★ ✅**（Eq. 2–7 全部核对）｜ §5.3.2 RL 消融 ✅ ｜ §2 Architecture ｜ §5.1/§5.2 ｜ §6 Conclusion（笔记随学习逐节增补）
 
 ---
 
@@ -144,7 +144,7 @@ $$
 | w/o Velocity KL | 0.87 | 87.32 (−0.43) | 7.02 (−0.03) | 32.47 (−2.59) | 75.07 (−0.62) |
 | w/o Auxiliary SFT Loss | 0.87 | 87.40 (−0.35) | 6.99 (−0.06) | 33.33 (−1.73) | 74.33 (−1.36) |
 
-<mark class="hl-trick">**掉点最狠的一列恰恰是 UniGenBench (Text)**：去掉 reward-wise norm 后 text score 掉 2.88 分，远超 GenEval / DPGBench 的 0.01–0.02。<mark class="hl-key">说明多奖励场景下，text rendering 这类"由单一高方差 OCR reward 主导"的目标恰恰是最容易被其他 reward 挤掉的 —— 这正是解耦归一化要保护的对象。</mark>曲线（Fig. 6a）显示：换成跨 reward 的 joint normalization，<mark class="hl-trick">前 600 steps 与 baseline 几乎无差，约 600 steps 后差距开始明显拉大，1,000 steps 终值明显落后</mark>。这也意味着 <mark class="hl-key">**RL 训得越久，advantage 归一化方式的影响越大**</mark>。
+<mark class="hl-trick">**掉点最狠的一列恰恰是 UniGenBench (Text)**：去掉 reward-wise norm 后 text score 掉 2.88 分，远超 GenEval / DPGBench 的 0.01–0.02。</mark><mark class="hl-key">说明多奖励场景下，text rendering 这类"由单一高方差 OCR reward 主导"的目标恰恰是最容易被其他 reward 挤掉的 —— 这正是解耦归一化要保护的对象。</mark>曲线（Fig. 6a）显示：换成跨 reward 的 joint normalization，<mark class="hl-trick">前 600 steps 与 baseline 几乎无差，约 600 steps 后差距开始明显拉大，1,000 steps 终值明显落后</mark>。这也意味着 <mark class="hl-key">**RL 训得越久，advantage 归一化方式的影响越大**</mark>。
 
 #### 3.3.2 GRPO 目标与 velocity-space KL
 
@@ -195,7 +195,7 @@ $$
 
 <mark class="hl-trick">Table 10 明确写 **SFT auxiliary frequency = Every step**，即 $\mathcal L_{\rm SFT}$ 每一步都算，不是周期性插入。</mark>消融（Table 7 / Fig. 6）：去掉后 <mark class="hl-key">**约 300 steps 起整体性能开始下降，到训练后期明显低于起始 checkpoint**；UniGenBench overall 从 75.69 掉到 **74.33**，text 从 35.06 掉到 **33.33**</mark>，DPGBench 87.75 → 87.40。Fig. 6(b) 显示 text rendering 的提升也更慢、更抖。
 
-<mark class="hl-key">**KL 与 SFT loss 是互补而非二选一**：论文明确说 *"The combination of KL regularization and auxiliary SFT loss provides **complementary** constraints"*。去掉 KL 的组（overall 75.07、text 32.47）掉点反而比去掉 SFT loss 的组（74.33 / 33.33）在 overall 上更小，说明 <mark class="hl-trick">**SFT loss 是主力，KL 是补充**</mark>，二者都不可省。
+<mark class="hl-key">**KL 与 SFT loss 是互补而非二选一**：论文明确说 *"The combination of KL regularization and auxiliary SFT loss provides **complementary** constraints"*。</mark>去掉 KL 的组（overall 75.07、text 32.47）掉点反而比去掉 SFT loss 的组（74.33 / 33.33）在 overall 上更小，说明 <mark class="hl-trick">**SFT loss 是主力，KL 是补充**</mark>，二者都不可省。
 
 #### 3.3.4 Noise-Preserving Stochastic Sampling
 
@@ -259,7 +259,7 @@ $$
 | 辅助 SFT 语料类别 | 采样权重 | 数据来源 |
 | :--- | :-: | :--- |
 | General T2I pairs | 1.0× | BLIP3-o、ShareGPT-4o、Echo-4o、OpenGPT-4o、GenEval、Self-Banana-50K |
-| <mark class="hl-trick">Text rendering pairs</mark> | <mark class="hl-key">**3.0×**</mark> | <mark class="hl-trick">*"to **match the emphasis on text rendering in the RL prompts**"* |
+| <mark class="hl-trick">Text rendering pairs</mark> | <mark class="hl-key">**3.0×**</mark> | <mark class="hl-trick">*"to **match the emphasis on text rendering in the RL prompts**"*</mark> |
 
 ::: danger 关键事实：DeepGen 的 RL 阶段完全没有 Edit 数据
 <mark class="hl-key">**RL prompt 只有 general T2I 和 text rendering 两类，auxiliary SFT corpus 里也**没有 editing triplet**（Appendix B 全文未出现任何 editing 数据源）。**</mark>
@@ -300,7 +300,7 @@ $$
 | DeepSpeed stage | ZeRO-2 |
 | Precision | BF16 |
 
-<mark class="hl-trick">RL 全程只有 **1,500 steps**、lr **2×10⁻⁶**、clip range **1×10⁻⁴** —— 三个数都指向同一件事：<mark class="hl-key">**这是一次极其保守的轻量级 RL 微调，不是长周期 RL。**</mark>这也解释了为什么辅助 SFT loss（$\lambda$ 同为 1×10⁻⁴）能在这么短的训练里起决定性作用 —— <mark class="hl-trick">当策略更新幅度本身很小时，分布锚定的相对权重就被放大了。</mark>对照 Stage 1/2 的 200K / 400K iterations，RL 只占训练总量的 <mark class="hl-trick">0.25%</mark>。
+<mark class="hl-trick">RL 全程只有 **1,500 steps**、lr **2×10⁻⁶**、clip range **1×10⁻⁴** —— 三个数都指向同一件事：</mark><mark class="hl-key">**这是一次极其保守的轻量级 RL 微调，不是长周期 RL。**</mark>这也解释了为什么辅助 SFT loss（$\lambda$ 同为 1×10⁻⁴）能在这么短的训练里起决定性作用 —— <mark class="hl-trick">当策略更新幅度本身很小时，分布锚定的相对权重就被放大了。</mark>对照 Stage 1/2 的 200K / 400K iterations，RL 只占训练总量的 <mark class="hl-trick">0.25%</mark>。
 
 ::: warning Timestep fraction = 0.6 的含义论文未解释
 Table 10 列出 **timestep fraction = 0.6**，<mark class="hl-key">**论文没有给出任何进一步定义或实现说明**</mark>。从 flow RL 的常见做法推测可能是"在时间轴上前 60% 的 timestep 上施加 GRPO 更新、后 40% 只做 SFT loss"，但这是**推断，论文未说明，不可作为事实引用**。
@@ -308,7 +308,7 @@ Table 10 列出 **timestep fraction = 0.6**，<mark class="hl-key">**论文没�
 
 #### 3.3.8 消融（§5.3.2，Table 7 + Fig. 6）
 
-三个消融变体，<mark class="hl-trick">**全部只训 1,000 steps**，其余配置完全相同，评测集为 UniGenBench（+ GenEval / DPGBench / GEdit-EN）：
+三个消融变体，<mark class="hl-trick">**全部只训 1,000 steps**</mark>，其余配置完全相同，评测集为 UniGenBench（+ GenEval / DPGBench / GEdit-EN）：
 
 | 变体 | 论文结论 | 定量表现 |
 | :--- | :--- | :--- |
@@ -391,6 +391,24 @@ $$
 5. <mark class="hl-trick">**RL prompt 分布与 auxiliary SFT 分布最好保持对应**</mark>（这里都是 text 3× / general 1×）。
 6. <mark class="hl-trick">**某种能力完全不进 RL 数据，就必然要警惕 RL 对它产生 trade-off**</mark> —— DeepGen 的 editing 就是活生生的例子（RISE 13.3 → 10.8）。
 :::
+
+#### 3.3.12 公式速查卡（Eq. 2–7 一页回顾）
+
+DeepGen §3.3 的全部数学内容就是下面 6 个式子。<mark class="hl-key">论文的 Eq. 1 属于 §2 的 SCB connector，RL 部分的编号是 Eq. 2 → Eq. 7 连续六式</mark>，复习时按这张表从左往右读一遍即可串起全流程。
+
+| # | 记号 | 公式 | 在流程中的位置 | 去掉会怎样 |
+| :-: | :--- | :--- | :--- | :--- |
+| <mark class="hl-trick">Eq. 2</mark> | $A_k^i$ | $\dfrac{R_k(x_0^i,h)-\operatorname{mean}_j R_k(x_0^j,h)}{\operatorname{std}_j R_k(x_0^j,h)}$ | reward 打完分之后、聚合之前 | text score <mark class="hl-trick">35.06 → 32.18</mark>，约 600 steps 后差距显形 |
+| <mark class="hl-trick">Eq. 2′</mark> | $\hat A^i$ | $\operatorname{BatchNorm}\big(\sum_k w_k A_k^i\big)$ | 聚合之后 | 论文未单列消融，随 Eq. 2 一起失效 |
+| <mark class="hl-trick">Eq. 3</mark> | $\mathcal L_{\rm GRPO}$ | $\mathbb E_h\big[\tfrac1G\sum_i\tfrac1T\sum_t\big(\min(r_t^i\hat A^i,\ \mathrm{clip}(r_t^i,1{-}\epsilon,1{+}\epsilon)\hat A^i)-\beta D_{\rm KL}\big)\big]$ | 整条 trajectory 上逐 step 更新 | 主目标本身 |
+| | $r_t^i(\theta)$ | $\dfrac{p_\theta(x_{t-\Delta t}^i\mid x_t^i,h)}{p_{\theta_{\rm old}}(x_{t-\Delta t}^i\mid x_t^i,h)}$ | Eq. 3 的 per-step importance ratio | 主目标本身 |
+| <mark class="hl-trick">Eq. 4</mark> | $D_{\rm KL}$ | $\lVert\hat v_\theta(x_t,t)-\hat v_{\rm ref}(x_t,t)\rVert_2^2$ | Eq. 3 括号内，**每个 step 各扣一次** | overall 75.69 → 75.07，DPGBench 87.75 → 87.32 |
+| <mark class="hl-trick">Eq. 5</mark> | $\mathcal L_{\rm total}$ | $(1-\lambda)\mathcal L_{\rm GRPO}+\lambda\mathcal L_{\rm SFT}$，$\lambda=10^{-4}$ | 每个 RL step 与 Eq. 3 同步计算 | overall 75.69 → **74.33**，约 300 steps 起就掉 |
+| <mark class="hl-trick">Eq. 6</mark> | $x_{t-\Delta t}$ | $\big(1-(t{-}\Delta t)\big)\hat x_0+(t{-}\Delta t)\cos\frac{\eta\pi}{2}\,\hat x_1+(t{-}\Delta t)\sin\frac{\eta\pi}{2}\,\epsilon$ | rollout 采样，$\eta=1.0$ | 退化为确定性 ODE，无法 exploration |
+| | $\hat x_0,\hat x_1$ | $\hat x_0=x_t-t\hat v_\theta$，$\hat x_1=x_t+(1-t)\hat v_\theta$ | Eq. 6 的预测 clean sample / noise | — |
+| <mark class="hl-trick">Eq. 7</mark> | $\log p_\theta$ | $-\lVert x_{t-\Delta t}-\mu_\theta(x_t,t)\rVert_2^2$ | 算 $r_t^i$ 时的 log-prob 近似 | 含 variance normalization 时小噪声段数值不稳 |
+
+<mark class="hl-key">**记忆锚点：Eq. 2 管"多 reward 怎么融合"，Eq. 3/4 管"策略怎么更新 + 别跑太远"，Eq. 5 管"别忘掉 SFT 学到的东西"，Eq. 6/7 管"怎么在 flow matching 上做有探索的采样"。**</mark>四个层次正好对应 §3.3.1 / §3.3.2-3 / §3.3.3 / §3.3.4 —— <mark class="hl-trick">Eq. 2 是 DeepGen 相对 Pref-GRPO 的真正增量，Eq. 5 是另一项增量，Eq. 4/6/7 都是并发引入的既有设计。</mark>
 
 ::: info §3.3 与本文档其他笔记的关系
 - <mark class="hl-trick">**§3.3.4 的 noise-preserving SDE 与 squared-distance log-prob 是 flow-matching RL 的通用底座</mark>，详见 [Flow-GRPO 综述](./image-rl-posttraining/flow-grpo-survey-2026.md)；DeepGen 自己标注为 [29] 的并行引入。

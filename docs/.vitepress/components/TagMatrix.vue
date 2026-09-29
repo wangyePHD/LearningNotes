@@ -122,8 +122,8 @@ const notesList = ref([
     link: '/domains/vision/deepgen',
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
-    date: '2026-09-27',
-    summary: '3B VLM + 2B DiT = 5B 统一生成/编辑/推理模型。SCB 从 6 个 VLM 层抽特征 + learnable think tokens 桥接；训练三阶段：只训 connector 的对齐预训练 → 解冻 DiT + VLM LoRA 的联合 SFT → MR-GRPO（多奖励解耦归一化 + velocity-space KL + auxiliary SFT loss + 噪声保持随机采样，仅训 1,500 steps）；仅 ~50M 样本即超越 80B HunyuanImage。',
+    date: '2026-09-29',
+    summary: '3B VLM + 2B DiT = 5B 统一生成/编辑/推理模型。SCB 从 6 个 VLM 层抽特征 + learnable think tokens 桥接；训练三阶段：只训 connector 的对齐预训练 → 解冻 DiT + VLM LoRA 的联合 SFT → MR-GRPO（Eq.2–7：多奖励解耦归一化 + velocity-space KL + auxiliary SFT loss + 噪声保持随机采样，仅训 1,500 steps；RL 数据无 Edit，RISE 13.3→10.8）；仅 ~50M 样本即超越 80B HunyuanImage。',
     tags: ['Vision', 'Unified Model', 'VLM-DiT', 'Flow Matching', 'RL', 'GRPO', 'DeepGen']
   },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
