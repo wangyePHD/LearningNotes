@@ -126,6 +126,15 @@ const notesList = ref([
     summary: '3B VLM + 2B DiT = 5B 统一生成/编辑/推理模型。SCB 从 6 个 VLM 层抽特征 + learnable think tokens 桥接；训练三阶段：只训 connector 的对齐预训练 → 解冻 DiT + VLM LoRA 的联合 SFT → MR-GRPO（Eq.2–7：多奖励解耦归一化 + velocity-space KL + auxiliary SFT loss + 噪声保持随机采样，仅训 1,500 steps；RL 数据无 Edit，RISE 13.3→10.8）；仅 ~50M 样本即超越 80B HunyuanImage。',
     tags: ['Vision', 'Unified Model', 'VLM-DiT', 'Flow Matching', 'RL', 'GRPO', 'DeepGen']
   },
+  {
+    title: '原生分辨率高效基模 Mage-Flow (Mage-VAE + Native MMDiT)',
+    link: '/domains/vision/mage-flow',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-10-03',
+    summary: '微软 4B 原生分辨率基模，tokenizer–backbone–系统三层协同：Mage-VAE（one-step diffusion 编解码 + anchor-latent KL，tokenization 成本降 >10×）+ Native-Resolution MMDiT（variable-length packing + per-sample 2D RoPE）+ 栈级 CUDA 融合（MFU 13.88%→29.28%，2.48×）。训练线：Data 10B→1.3B / Edit 90M→45M → progressive pretrain/SFT → Diffusion-NFT（T2I 20K prompts 单 reward 路由；Edit 30K + RationalRewards，Edit:Gen=4:1）→ 4-step D-DMD + adversarial guidance。Turbo 单 A100 1024² 出图 0.59s。',
+    tags: ['Vision', 'Diffusion', 'MMDiT', 'Flow Matching', 'VAE', 'RL', 'DiffusionNFT', 'Distillation', 'Efficiency']
+  },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
     title: '语义先行扩散范式 (SFD)',

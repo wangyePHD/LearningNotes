@@ -138,6 +138,7 @@ export default defineConfig({
             { text: '领域概览与路线图', link: '/domains/vision/' },
             { text: '单流扩散基模 Z-Image', link: '/domains/vision/z-image' },
             { text: '轻量统一多模态 DeepGen 1.0', link: '/domains/vision/deepgen' },
+            { text: '原生分辨率高效基模 Mage-Flow', link: '/domains/vision/mage-flow' },
             { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
             { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' }
           ]
