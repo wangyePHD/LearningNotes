@@ -27,7 +27,7 @@
 | :-: | :--- | :--- | :-: | :--- |
 | 1 | Data Collection & Curation | §4.1 (P17–18) + §4.2 (P18–19) | ★★★ | 🟢 §2.1 + §2.2 完整 |
 | 2 | Pre-training + SFT Recipe | §5 (P20) + §5.1 (P20) | ★★★ | 🟢 §3.1–3.2 完整 |
-| 3 | Diffusion-NFT Post-training | §5.2 (P21–24) | ★★★ | ⬜ |
+| 3 | Diffusion-NFT Post-training | §5.2 (P21–22) + Appendix D (P47–49) | ★★★ | 🟢 §4.1–4.4 完整 |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
 | 5 | Native-Resolution + Infrastructure | §3.2 / §3.3 (P13–16) | ★★☆ | ⬜ |
 | 6 | Mage-VAE | §3.1 (P10–13) | ★☆☆ | ⬜ |
@@ -746,21 +746,426 @@ $$
 
 ## 4. Diffusion-NFT Post-training ★
 
-### 4.1 Diffusion-NFT 机制：为什么不是 trajectory likelihood
+::: info 笔记小节 ↔ 论文章节对照（本节结构镜像论文 §5.2，Appendix D 的 reward 细节已插回对应位置）
+| 笔记层级 | 对应论文 | 段首粗体导语 | 页 |
+| :--- | :--- | :--- | :--- |
+| `### §4.1` | **§5.2** 导语段 | *（无粗体标题）* | P21 |
+| `### §4.2` | §5.2 第 1 段 | **`Text-to-image generation.`** | P21–22 |
+| `### §4.3` | §5.2 第 2 段 | **`Instruction-based editing.`** | P22 |
+| `### §4.4` | §5.2 第 3 段 | **`Diffusion-NFT objective.`** | P22 |
+| `### §4.5` | *无对应* | <mark class="hl-trick">**笔记自加**</mark>：全流程压缩与路线对照** | — |
 
-### 4.2 T2I RL：20K RL prompts 与三类路由
+<mark class="hl-key">**Appendix D 讲的是 §5.2 用到的四个 reward evaluator，笔记按你的要求把它们插回 §4.2 / §4.3 的对应位置，不另立小节。**</mark>
+:::
 
-### 4.3 Capability mixture 两阶段：1:1:1 → 2:4:1
+### 4.1 为什么用 Diffusion-NFT（论文 §5.2 导语段）
 
-### 4.4 Reward 配置
+Mage-Flow 从前一阶段得到两个 Base checkpoint：T2I 的 <mark class="hl-trick">**Mage-Flow-Base**</mark> 和 Editing 的 <mark class="hl-trick">**Mage-Flow-Edit-Base**</mark>。<mark class="hl-key">**这两个模型之后都用同一个 Diffusion-NFT 做 post-training。**</mark>
 
-### 4.5 Editing RL：30K edit prompts + RationalRewards + 4:1
+论文对它的定位有三点，全部是「不做什么」：
 
-### 4.6 与 DeepGen「RL 无 Edit」的对照
+<mark class="hl-trick">**Diffusion-NFT 直接作用在 flow-matching 模型的 forward process 上**</mark>，用在线生成样本做 <mark class="hl-key">**negative-aware fine-tuning**</mark>，<mark class="hl-trick">**requiring no likelihood estimation**</mark>，且 <mark class="hl-trick">**remaining compatible with arbitrary black-box samplers**</mark>。
 
-### 4.7 与已有 NFT 笔记的对照（FireRed / Swift-Image）
+$$
+\boxed{
+\begin{aligned}
+&\textbf{不需要}\ \text{像 GRPO/PPO 那样显式估计 reverse-process likelihood}\\
+&\textbf{不需要}\ \text{绑定某一种特定 sampler}
+\end{aligned}
+}
+$$
 
-### 4.8 本节小结与未公开细节
+<mark class="hl-key">**T2I 和 Editing 使用的是同一个 Diffusion-NFT objective**</mark>，但两边的 <mark class="hl-trick">**condition、data mixture 和 reward model 不同**</mark>。
+
+::: tip 先建立一个直觉：这和 DeepGen 的 MR-GRPO 不是一类东西
+<mark class="hl-trick">**DeepGen 的 MR-GRPO**</mark>：
+
+$$
+\text{rollout}\rightarrow\text{reward}\rightarrow\text{advantage}\rightarrow\text{policy ratio / GRPO update}
+$$
+
+<mark class="hl-key">**Mage-Flow 的 Diffusion-NFT**</mark>：
+
+$$
+\text{online rollout}\rightarrow\text{reward 判断哪些样本好/坏}\rightarrow\text{高分加强，低分抑制}\rightarrow\text{直接做 reward-weighted flow matching}
+$$
+
+<mark class="hl-trick">**所以虽然论文把它放在 RL / post-training 的语境里，但它的更新形式并不是我们刚在 DeepGen 里学到的 trajectory-level GRPO。**</mark><mark class="hl-key">**没有 importance ratio，没有 clipping，没有 group 内 advantage —— 它是 flow matching loss 被 reward 加权，而不是 policy gradient。</mark>
+:::
+
+### 4.2 Text-to-image generation.
+
+T2I 的 RL prompt pool <mark class="hl-key">**非常小，只有大约 20K prompts**</mark>，而且<mark class="hl-trick">**作者没有把它当成一个混在一起的 prompt pool，而是明确拆成三个 capability group**</mark>：
+
+$$
+\underbrace{10K}_{\text{text rendering}}
++
+\underbrace{4K}_{\text{aesthetic quality}}
++
+\underbrace{6K}_{\text{semantic understanding}}
+$$
+
+<mark class="hl-key">**每一个 prompt 都带一个 capability tag。这个 tag 不只是标注类别，而是直接决定这个 prompt 应该采用什么 evaluation rubric、送给哪个 reward evaluator。**</mark>
+
+$$
+\boxed{
+\text{一个 prompt}
+\rightarrow
+\text{一个 capability tag}
+\rightarrow
+\text{一个 reward evaluator}
+}
+$$
+
+<mark class="hl-key">**不同 evaluator 的 reward 不会在同一个 prompt 上做加和或平均。**</mark>论文原文措辞：<mark class="hl-trick">*"its reward is computed only by that evaluator and is **never summed or averaged across capabilities**"*</mark>。<mark class="hl-key">**这和 DeepGen 恰好相反 —— DeepGen 是同一张图同时算 preference + CLIP + OCR 再按权重聚合。**</mark>
+
+#### ① Text Rendering Reward — PaddleOCR-VL-1.5
+
+<mark class="hl-trick">**每一个 text-rendering prompt 都事先标注一个必须正确出现在生成图中的 target string 集合**</mark>：
+
+$$
+T=\{t_1,\ldots,t_n\}
+$$
+
+生成图片以后，PaddleOCR-VL-1.5 先识别图片中的文字。识别结果会<mark class="hl-trick">**按照换行和标点切成多个 segment，然后去掉空格、转成 lowercase，形成集合 $S$**</mark>。目标字符串也用同样方式 normalize，记为 $\tilde t$。
+
+对于某个 target $t$，<mark class="hl-key">**如果 normalized target 在任何 OCR segment 里完整作为 substring 出现，直接记 1 分**</mark>；如果没有完全匹配，就计算 target 和所有 OCR segment 之间最小的 <mark class="hl-trick">**character-level Levenshtein edit distance**</mark>，并将距离<mark class="hl-key">**最大截断为 target 长度**</mark>：
+
+$$
+d(t)=\min_{s\in S}\min\big(\mathrm{Lev}(s,\tilde t),\ |\tilde t|\big)
+$$
+
+然后得到（论文 Eq. 15）：
+
+$$
+p(t)=
+\begin{cases}
+1, & \tilde t\subseteq s\ \text{for some } s\in S\\[4pt]
+\max\big(1-d(t)/|\tilde t|,\ 0\big), & \text{otherwise}
+\end{cases}
+$$
+
+一个 prompt 最后的 OCR reward 就是所有 target 的平均：
+
+$$
+r_{\rm OCR}=\frac{1}{n}\sum_{i=1}^{n}p(t_i)\in[0,1]
+$$
+
+<mark class="hl-trick">**论文举的例子是目标文本 “First Place Winner”**</mark>，normalize 后是 `firstplacewinner`，长度 $|\tilde t|=16$：
+
+| 情况 | $d$ | 得分 |
+| :--- | :-: | ---: |
+| <mark class="hl-trick">完全识别正确</mark> | 0 | 1 |
+| <mark class="hl-trick">只少一个字符（`First Place Winer`）</mark> | 1 | $1-1/16\approx 0.94$ |
+| <mark class="hl-key">**完全没识别出来**</mark> | 截断到 16 | 0 |
+
+<mark class="hl-key">**把距离截断在 $|\tilde t|$ 的作用，是把「缺失或严重糊掉」的惩罚上限锁定为一个完整 target 的长度**</mark> —— <mark class="hl-trick">所以缺席的 target 得 0、完美渲染得 1，不会出现负分或超过 1 的分。</mark>
+
+<mark class="hl-trick">**PaddleOCR-VL-1.5 这里不使用 system prompt**</mark>，只输入图片和字面指令 <mark class="hl-key">**`OCR:`**</mark>，<mark class="hl-key">**temperature = 0 做 greedy decoding**</mark>。
+
+#### ② Aesthetic Quality Reward — Qwen3.5-27B
+
+<mark class="hl-trick">**它不是让 VLM 直接吐一个「8.7 分」，而是把审美质量拆成很多独立的 Yes/No binary criterion**</mark>，每个 criterion 单独问一次，<mark class="hl-key">**Yes = 1、No = 0，最后取均值作为 $[0,1]$ reward**</mark>。
+
+$$
+r_{\rm aes}=\frac{1}{N}\sum_{j=1}^{N}\mathbb{1}[\text{criterion}_j=\text{Yes}]
+$$
+
+<mark class="hl-key">**一个 criterion 如果对当前图根本不适用（例如图里没有手却检查 hand anatomy），按照约定直接记 1。**</mark>
+
+<mark class="hl-trick">**作者认为这样比一个不透明的整体打分更稳定，也更不容易 reward hacking**</mark>，附录原文：<mark class="hl-key">*"Grading quality as many focused yes/no items, rather than eliciting a single opaque score, yields a **stable and less reward-hackable signal**."*</mark>
+
+<mark class="hl-trick">**system prompt 明确要求「只输出 1 或 0，不要解释」**</mark>：*"return 1 if the image fully satisfies the criterion, or 0 if it clearly fails. **Do not explain or elaborate. Only output: 1 or 0.**"*
+
+<mark class="hl-trick">**Appendix D 公开的 aesthetic criteria**</mark>：
+
+| Criterion | 检查什么 |
+| :--- | :--- |
+| <mark class="hl-key">**Naturalness**</mark> | 看起来像真实照片，透视正确、阴影自然、光照物理合理 |
+| <mark class="hl-key">**Detail and Clarity**</mark> | 纹理、边缘、精细细节清晰连贯；主体无 smearing / noise / blur |
+| <mark class="hl-key">**No Artifacts**</mark> | 无可见畸变、水印、渲染 glitch、不可能的几何 |
+| <mark class="hl-trick">**Face and Eye Anatomy**</mark> | 双眼解剖正确：两个匹配瞳孔带虹膜、对称放置、无扭曲/重复/缺失、无不对称畸变 |
+| <mark class="hl-trick">**Hand and Finger Correctness**</mark> | 每只手恰好五根手指，无 fusion、无 extra/missing digit，关节结构与指长合理 |
+| <mark class="hl-trick">**Body Proportions and Limbs**</mark> | 四肢与躯干解剖合理：数量正确（2 arms + 2 legs）、关节活动合理、无多余/缺失肢体、头身比合理 |
+| <mark class="hl-trick">**Skin Texture Realism**</mark> | 皮肤纹理有自然变化（毛孔、细微色调差异），非塑料感/涂抹感/过度平滑 |
+| <mark class="hl-trick">**Pose Coherence**</mark> | 姿势物理合理：肢体不可能地穿插、重量分布合理、无漂浮肢体或扭曲关节 |
+
+<mark class="hl-key">**后五条都是「不可见则记 1」的条件式 criterion**</mark> —— <mark class="hl-trick">**这正是为什么 4K aesthetic prompt 只有 4K 条**</mark>：不是所有图都有人手/人脸，<mark class="hl-key">**大部分图只会命中前三条通用 criterion**</mark>。
+
+#### ③ Semantic Understanding Reward — Qwen3.5-27B
+
+<mark class="hl-trick">**也用同一个 Qwen3.5-27B，system prompt 和 binary criterion 机制与 aesthetic evaluator 相同**</mark>，但 <mark class="hl-key">**criterion 不再检查画质，而是检查 prompt 是否真正被执行**</mark>。
+
+<mark class="hl-key">**作者把 prompt 拆成细粒度的 yes/no alignment checks**</mark>，最后 reward 仍然是所有问题中回答 "yes" 的比例：
+
+| Criterion | 检查什么 |
+| :--- | :--- |
+| <mark class="hl-key">**Objects**</mark> | prompt 提到的每个物体是否都在，没有缺失 |
+| <mark class="hl-key">**Attributes**</mark> | 每个物体是否有指定的颜色、材质、形状、状态 |
+| <mark class="hl-key">**Counts**</mark> | 每个物体的**确切数量**是否正确，不多不少 |
+| <mark class="hl-key">**Spatial relations**</mark> | 物体之间的相对位置和排列是否符合 prompt |
+| <mark class="hl-key">**Actions and interactions**</mark> | 描述的动作、姿势、主体间交互是否正确呈现 |
+| <mark class="hl-key">**Scene and setting**</mark> | 背景、环境、整体构图是否匹配 prompt |
+| <mark class="hl-key">**Faithfulness**</mark> | <mark class="hl-trick">**图像是否没有 prompt 未要求的 hallucinated 物体/属性/改动**</mark> |
+
+<mark class="hl-key">**也就是说复杂 prompt 不是给一个整体 semantic score，而是拆成「对象有没有、属性对不对、数量准不准、空间关系是否满足、动作是否正确、场景是否匹配、有没有额外 hallucination」等可验证子问题。**</mark>
+
+<mark class="hl-trick">**附录给出的理由**</mark>：<mark class="hl-key">*"Decomposing alignment into fine-grained faithfulness checks gives a **dense, interpretable signal** for multi-object scenes."*</mark>
+
+<mark class="hl-key">**注意 `Faithfulness` 是反向 criterion**</mark> —— <mark class="hl-trick">**它惩罚的是「多画了东西」**</mark>。<mark class="hl-key">这是七个 criterion 里唯一一条「越少越好」的，加权平均时它天然对抗其他六条，起到抑制 hallucination 的作用。</mark>
+
+#### ④ Online rollout 与 per-reward-type normalization
+
+<mark class="hl-trick">**Global batch size 是 48，每个 optimizer step 中三个 capability group 的 prompt 都会出现。**</mark>
+
+<mark class="hl-trick">**每个 prompt 根据 tag 只送给一个 evaluator。**</mark>对于每个 prompt，当前 generator 采样一组候选图，<mark class="hl-trick">**采样使用 10 denoising steps + CFG guidance scale 5.0**</mark>。<mark class="hl-key">**论文没有公开这里每个 prompt 的 group size，所以不能自己补。**</mark>
+
+候选得到 reward 后，<mark class="hl-key">**因为 OCR、aesthetic、semantic 三个 evaluator 的 score distribution 不一样，作者不会把它们直接放在一起 normalize**</mark>，而是<mark class="hl-trick">**每个 reward type 单独归一化**</mark>：OCR 样本只和 OCR 样本比较，aesthetic 只和 aesthetic 比，semantic 只和 semantic 比。
+
+<mark class="hl-key">**归一化后得到论文称之为 optimality probability 的量**</mark>：
+
+$$
+r_i^{(s)}\in[0,1]
+$$
+
+<mark class="hl-trick">**后面直接送进 Diffusion-NFT loss。**</mark>
+
+<mark class="hl-key">**注意这个「按 reward type 分开归一化」和 DeepGen 的「per-reward 归一化」在动机上恰好相反**</mark>：
+
+| | DeepGen MR-GRPO | Mage-Flow Diffusion-NFT |
+| :--- | :--- | :--- |
+| 一个样本拿到几个 reward | <mark class="hl-trick">**3 个（Pref + CLIP + OCR）加权聚合**</mark> | <mark class="hl-key">**恰好 1 个**</mark> |
+| 归一化怎么做 | 每个 reward 先组内 norm，再加权，再 batch norm | <mark class="hl-key">**每个 reward type 各自在自己的样本群里 norm**</mark> |
+| 为什么 | <mark class="hl-trick">消除量纲差异，让高方差 reward 不主导梯度</mark> | <mark class="hl-key">**因为不同 evaluator 的分布不同，混在一起比较没有意义**</mark> |
+
+<mark class="hl-trick">**两者解决的是同一个技术问题（不同 reward 分布不可比），但选择了两条相反的路径**</mark>：<mark class="hl-key">**DeepGen 选择「都算，归一化后融合」；Mage-Flow 选择「只算一个，从源头避免混合」。**</mark>
+
+#### ⑤ 两阶段 curriculum：1:1:1 → 2:4:1
+
+T2I post-training 有一个<mark class="hl-trick">**非常明确的两阶段 curriculum**</mark>。
+
+| 阶段 | steps | mixture | text prompt 难度 |
+| :--- | ---: | :--- | :--- |
+| <mark class="hl-trick">**Stage 1**</mark> | <mark class="hl-key">**140**</mark> | <mark class="hl-key">$P_{\rm aes}:P_{\rm text}:P_{\rm sem}=1:1:1$</mark> | <mark class="hl-key">**容易、稳定的 OCR case**</mark>：single words、short phrases、simple signs、logos、short scene text |
+| <mark class="hl-trick">**Stage 2**</mark> | <mark class="hl-key">**60**</mark> | <mark class="hl-key">$P_{\rm aes}:P_{\rm text}:P_{\rm sem}=2:4:1$</mark> | <mark class="hl-trick">**明显变难**</mark>：complete sentences、dense captions、multi-line layouts、punctuation-rich text、complex scene 中嵌入的文字 |
+
+<mark class="hl-trick">**Stage 1 的目标是「先把 character / word-level text rendering 做稳，同时一起改善 visual quality 和 semantic alignment」**</mark>。
+
+<mark class="hl-key">**Stage 2 从 Stage 1 的 best checkpoint 继续训练**</mark>（不是从头），<mark class="hl-trick">**而且作者仍然保留 aesthetic 和 semantic prompts，是为了避免模型过度专门化成 OCR 模型**</mark>，<mark class="hl-key">**从而保住 general generation quality**</mark>。
+
+<mark class="hl-trick">**论文原文措辞**</mark>：<mark class="hl-key">*"**keeping all three groups present throughout**"*</mark>，以及 <mark class="hl-key">*"retaining aesthetic and semantic prompts throughout **prevents over-specialization to OCR** and **preserves the general generation quality** built up in the first stage."*</mark>
+
+$$
+\boxed{
+\text{Two stages} = 140 + 60 = 200\ \text{optimizer steps} \ \longrightarrow\ \textbf{Mage-Flow}
+}
+$$
+
+<mark class="hl-key">**「先简单后复杂」这个思路和 Z-Image 的 DPO prompt complexity curriculum 是同一类**</mark> —— <mark class="hl-trick">**先在容易的模式上把能力建立起来，再上高难度样本**</mark>。<mark class="hl-key">**而 Mage-Flow 把它用在了 RL 阶段，Z-Image 用在了 DPO 阶段**</mark>。
+
+### 4.3 Instruction-based editing.
+
+<mark class="hl-key">**Editing post-training 是 Mage-Flow 相比 DeepGen 特别值得看的地方：它真的给 Edit 做 RL / post-training，而且 Edit 和 Generation 继续混训。**</mark>
+
+Mage-Flow-Edit 从 <mark class="hl-trick">**Mage-Flow-Edit-Base**</mark> 开始，用两个 data stream：<mark class="hl-trick">**editing stream + generation stream**</mark>：
+
+$$
+\boxed{
+\text{Edit} : \text{Generation} = 4 : 1
+}
+$$
+
+<mark class="hl-trick">**也就是四次 editing update 对一次 generation update。**</mark>两条 stream <mark class="hl-key">**使用同一个 Diffusion-NFT objective、同一个 global batch size，以及与 T2I run 相同的 optimizer**</mark>。<mark class="hl-key">**论文这里没有进一步披露 optimizer 的具体种类和学习率，因此不能补。**</mark>
+
+#### ① Generation stream 的作用
+
+<mark class="hl-trick">**Generation stream 完全复用前面的 20K T2I RL prompt pool + capability-routed rewards。**</mark>
+
+它留在 editing post-training 中的目的非常明确：
+
+$$
+\boxed{
+\text{保住 text rendering + composition + open-ended generation ability}
+}
+$$
+
+<mark class="hl-key">**避免模型在持续适配 editing 的过程中把原本的 generation prior 忘掉。**</mark>
+
+<mark class="hl-key">**这和 §3.2② 里 generation pair 的作用是同一个机制**</mark> —— <mark class="hl-trick">**在 SFT 阶段用 35M/10M generation pairs 保住 generative prior，在 RL 阶段再用 20% 的 generation stream 继续保**</mark>。<mark class="hl-key">**从 SFT 一直贯穿到 post-training，生成能力是分两轮被显式保护的。**</mark>
+
+#### ② Editing stream：30K prompts 均匀采样
+
+<mark class="hl-trick">**Editing stream 来自大约 30K curated editing RL prompts。**</mark>这些 prompt <mark class="hl-key">**从前面 editing pre-training corpus 的不同 edit task 中均匀采样**</mark>，论文举出的类型包括：
+
+- <mark class="hl-trick">object replacement</mark>
+- <mark class="hl-trick">object removal</mark>
+- <mark class="hl-trick">background replacement</mark>
+- <mark class="hl-trick">spatial editing</mark>
+- <mark class="hl-trick">style transfer</mark>
+- <mark class="hl-trick">general instruction-based editing</mark>
+
+<mark class="hl-key">**均匀采样的目的就是防止某一种 edit operation 在 post-training gradient 里占据主导。**</mark>
+
+<mark class="hl-trick">**注意这是「均匀采样」而不是「按 §2.2④ 的 19-category taxonomy 加权」**</mark> —— <mark class="hl-key">**pre-training 阶段用 taxonomy 做 balancing，post-training 阶段反而回到均匀**</mark>。<mark class="hl-trick">论文未解释这个转变，引用时不要把两处的策略混为一谈。</mark>
+
+#### ③ RationalRewards
+
+<mark class="hl-trick">**Editing 的 reward model 不再用 T2I 那三个 evaluator，而是 RationalRewards**</mark> —— 一个 <mark class="hl-key">**reasoning reward model，先产生 multi-dimensional critique，再输出 scalar preference**</mark>。它看三样东西：
+
+$$
+(\text{source image},\ \text{instruction},\ \text{edited image})
+$$
+
+Main text 说它检查四个方面，<mark class="hl-trick">**Appendix D 把四项写得更精确，每项都是 1–4 分**</mark>：
+
+| Aspect | 含义 |
+| :--- | :--- |
+| <mark class="hl-key">**text faithfulness**</mark> | edit instruction 是否被执行（adherence to the edit instruction） |
+| <mark class="hl-key">**image faithfulness**</mark> | edit region 以外的 source content 是否被保留（preservation） |
+| <mark class="hl-key">**physical and visual quality**</mark> | 合理性和 artifact 情况 |
+| <mark class="hl-key">**text rendering**</mark> | 涉及文字编辑时文字是否可读；<mark class="hl-trick">**如果不涉及文字则标记 not applicable，不参与平均**</mark> |
+
+对于所有 applicable aspects，先求平均 $\bar a\in[1,4]$，再线性映射到 $[0,1]$（论文 Eq. 16）：
+
+$$
+r_{\rm edit}=\operatorname{clip}\Big(\frac{\bar a-1}{3},\ 0,\ 1\Big),
+\qquad
+\bar a=\frac{1}{|A|}\sum_{j\in A}a_j
+$$
+
+其中 $A$ 是 applicable aspects 的集合。
+
+<mark class="hl-key">**所以全部是 4 分得到 reward = 1，全部 1 分得到 reward = 0。**</mark>
+
+<mark class="hl-trick">**`not applicable` 这个约定和 §4.2② 的 aesthetic evaluator 是同一个思路**</mark> —— <mark class="hl-key">**不适用项不惩罚，而是从分母里去掉**</mark>，避免了「没要求改文字却因为没改而被扣分」这种虚假负信号。
+
+整个 editing joint post-training 一共训练 <mark class="hl-key">**300 optimizer steps**</mark>，最终得到：
+
+$$
+\boxed{\textbf{Mage-Flow-Edit}}
+$$
+
+::: warning 本段未公开的细节
+- <mark class="hl-trick">**optimizer 的具体种类和学习率未披露**</mark>（只说 "the same optimizer as the text-to-image run"，而 T2I 侧也没给）。
+- <mark class="hl-trick">**editing stream 的 group size 未公开**</mark>（与 T2I 侧同样缺失）。
+- <mark class="hl-trick">**30K curated editing RL prompts 的来源与筛选标准未说明**</mark> —— 只说 "uniformly sampled across edit tasks in the editing pre-training corpus"，<mark class="hl-key">**没有说是否就是 §2.2 的 45M retained 的子集**</mark>。
+- <mark class="hl-trick">**RationalRewards 的 backbone、critique 的具体格式、每个 aspect 1–4 分的判定标准全部未给**</mark>（只引 [83]）。<mark class="hl-key">**它是如何产生 reasoning 的、中间 critique 有多长，论文一律未说明**</mark>。
+- <mark class="hl-trick">**两阶段 SFT 里 45M → 20M 的选数标准，与这里 30K RL prompt 的选数标准，论文都没有给**</mark>。
+:::
+
+### 4.4 Diffusion-NFT objective.
+
+<mark class="hl-trick">**最后论文才统一解释 Diffusion-NFT 到底在优化什么。**</mark>对于任意 condition $c$：
+
+<mark class="hl-key">**当前 generator 先 online sample 一组 candidates；每个 candidate 用对应任务的 reward evaluator 打分；raw reward 在当前 prompt group 内归一化成 optimality probability $r_i^{(s)}\in[0,1]$，数值越大表示这个 sample 越 optimal。**</mark>
+
+<mark class="hl-trick">**然后 Diffusion-NFT 不做传统 GRPO advantage-ratio optimization，而是构造一个 reward-weighted flow-matching objective**</mark>：
+
+$$
+L_{\rm NFT}^{(s)}(\theta)=\mathbb E\Big[
+r_i^{(s)}\big\|v_\theta^+(x_{i,t},t,c)-v_{i,t}\big\|_2^2
++
+(1-r_i^{(s)})\big\|v_\theta^-(x_{i,t},t,c)-v_{i,t}\big\|_2^2
+\Big]
+$$
+
+其中：
+
+| 符号 | 含义 |
+| :--- | :--- |
+| <mark class="hl-trick">$v_{i,t}$</mark> | forward process 的 <mark class="hl-key">**target velocity**</mark> |
+| <mark class="hl-trick">$v_\theta^+$</mark> | Diffusion-NFT 定义的 <mark class="hl-key">**implicit positive policy**</mark> |
+| <mark class="hl-trick">$v_\theta^-$</mark> | Diffusion-NFT 定义的 <mark class="hl-key">**implicit negative policy**</mark> |
+
+<mark class="hl-key">**论文报告本身没有在这一节重新展开 $v^+$、$v^-$ 的内部定义，它直接引用 Diffusion-NFT 原论文 [14]。**</mark>
+
+<mark class="hl-key">**这个公式最应该理解的是它的两支行为**</mark>：
+
+$$
+\boxed{
+r\ \text{高} \ \Rightarrow\ \text{positive branch 权重大} \ \Rightarrow\ \text{把模型拉向这个好样本}
+}
+$$
+
+$$
+\boxed{
+r\ \text{低} \ \Rightarrow\ (1-r)\ \text{大} \ \Rightarrow\ \text{negative branch 权重大} \ \Rightarrow\ \text{抑制这个差样本}
+}
+$$
+
+论文自己就是这样概括的：<mark class="hl-trick">**positive branch pulls the model toward high-reward samples，negative branch suppresses low-reward samples。**</mark>
+
+<mark class="hl-key">**注意这个 loss 的形状：它始终是一个「回归到 target velocity」的平方误差，只是被 reward 拆成了两个权重不同的分支**</mark>。所以：
+
+- <mark class="hl-trick">**没有 importance ratio**</mark> → 不会有 ratio collapse / KL 崩塌问题
+- <mark class="hl-trick">**没有 clipping**</mark> → 没有 clip range 这个超参可调
+- <mark class="hl-trick">**没有 group 内 baseline / advantage**</mark> → $r_i^{(s)}$ 是归一化后的**绝对**质量，不是相对优势
+- <mark class="hl-trick">**不依赖 sampler**</mark> → 10 steps + CFG 5.0 采出来的样本可以直接用
+
+<mark class="hl-key">**这一节 T2I 与 Editing 的差别只有 condition 和 reward evaluator**</mark>：T2I 时 $c$ 就是 text prompt，reward 来自 <mark class="hl-trick">**OCR / Aesthetic / Semantic 中与 capability tag 对应的那一个**</mark>；Editing 时 $c$ 有两种情况 —— <mark class="hl-key">**当前是 generation stream 就还是用 T2I evaluator；是 editing condition 就用 RationalRewards 对 source image + instruction + edited result 评价**</mark>。
+
+::: warning 本节未公开的细节
+- <mark class="hl-trick">**$v_\theta^+$ 与 $v_\theta^-$ 的定义完全没有给出**</mark>，论文直接引 [14]（Diffusion-NFT 原论文）。<mark class="hl-key">**这是本节最大的实现层空白**</mark> —— 不知道 positive/negative policy 具体怎么构造，就无法复现这条 loss。
+- <mark class="hl-trick">**归一化得到 $r_i^{(s)}\in[0,1]$ 的具体函数未给**</mark>（是 min-max、rank-based 还是 sigmoid？），只说是 "normalized within each prompt group"。
+- <mark class="hl-trick">**每个 prompt 的 group size 未给**</mark>，而 $r_i^{(s)}$ 的质量直接依赖 group 内候选数量。
+- <mark class="hl-trick">**T2I 侧和 Editing 侧的 learning rate、KL / 正则项全部未给**</mark>。
+- <mark class="hl-trick">**200 steps（T2I）和 300 steps（Editing）的 token / 样本消耗量级未给**</mark>，只给 optimizer steps。<mark class="hl-key">按 §4.2④ 的 global batch 48 推算，T2I 全程约 9,600 个 prompt-condition，但 group size 未知，所以实际生成图数算不出来。</mark>
+:::
+
+### 4.5 §5.2 全流程压缩与路线对照（笔记自加）
+
+$$
+\boxed{
+\text{Mage-Flow-Base}
+\rightarrow
+20K\ \text{capability-tagged prompts}
+\rightarrow
+\text{OCR / Aesthetic / Semantic routing}
+\rightarrow
+\text{online rollout}
+\rightarrow
+\text{Diffusion-NFT}
+\rightarrow
+\textbf{Mage-Flow}
+}
+$$
+
+$$
+\boxed{
+\text{Mage-Flow-Edit-Base}
+\rightarrow
+4\!:\!1\ (\text{Edit}\!:\!\text{Gen})
+\rightarrow
+30K\ \text{Edit prompts}+\text{T2I prompts}
+\rightarrow
+\text{RationalRewards / T2I rewards}
+\rightarrow
+\text{Diffusion-NFT}
+\rightarrow
+\textbf{Mage-Flow-Edit}
+}
+$$
+
+| 阶段 | steps | prompt 来源 | reward | mixture |
+| :--- | ---: | :--- | :--- | :--- |
+| <mark class="hl-trick">T2I Stage 1</mark> | 140 | 20K capability-tagged | PaddleOCR-VL-1.5 / Qwen3.5-27B | <mark class="hl-key">1:1:1</mark> |
+| <mark class="hl-trick">T2I Stage 2</mark> | 60 | 同上，从 Stage 1 best ckpt 继续 | 同上 | <mark class="hl-key">**2:4:1**</mark> |
+| <mark class="hl-trick">Editing joint</mark> | 300 | 30K Edit + 20K T2I | RationalRewards / T2I 三件套 | <mark class="hl-key">**4:1**</mark> |
+
+::: tip 这一节最值得带走的五个工程思想
+1. <mark class="hl-trick">**T2I 不做 multi-reward 加权，而是 capability routing**</mark> —— 一个 prompt 只对应一个 evaluator，从源头消除量纲问题。
+2. <mark class="hl-trick">**不同 reward 分布分开 normalize**</mark> —— OCR 只和 OCR 比，aesthetic 只和 aesthetic 比，<mark class="hl-key">**而不是混在一起再归一化**</mark>。
+3. <mark class="hl-trick">**text rendering 使用「先简单后复杂」的 curriculum**</mark> —— 1:1:1 用 single word/logo 打底，2:4:1 再上 complete sentence / multi-line，<mark class="hl-key">**且全程保留另两组以防过专门化**</mark>。
+4. <mark class="hl-key">**Edit post-training 不单训 Edit，而是继续混 Generation（4:1）**</mark> —— <mark class="hl-trick">**这和 §3.2② SFT 阶段混 35M/10M generation pairs 是同一个防御思路，贯穿 SFT 与 RL 两轮**</mark>。
+5. <mark class="hl-trick">**Diffusion-NFT 通过正/负两条 flow-matching branch，让高 reward 被强化、低 reward 被压制**</mark> —— <mark class="hl-key">**它不是 policy gradient，所以没有 ratio / clip / KL 崩塌这一整套问题**</mark>。
+:::
+
+::: info 与你笔记里已有 NFT 笔记的关系
+- <mark class="hl-key">**§4.4 的 positive / negative 双 branch 与 DeepGen 的 velocity KL 形成有意思的对照**</mark>：DeepGen 用 $\beta\|\hat v_\theta-\hat v_{\rm ref}\|^2$ <mark class="hl-trick">**单向把模型拉住**</mark>；Diffusion-NFT 用 $(1-r)\|v_\theta^--v_{i,t}\|^2$ <mark class="hl-key">**主动把模型推离差样本**</mark>。<mark class="hl-trick">**后者是 repulsive，前者只是 attractive**</mark>。
+- <mark class="hl-key">**§4.2⑤ 的两阶段 capability mixture 与 Z-Image §4.6.2 的 DPO 双层 curriculum 同类**</mark>，但 Mage-Flow 把它用在 RL 阶段，Z-Image 用在 DPO 阶段。
+- 对照见 [FireRed-Image-Edit RL](./image-rl-posttraining/firered-image-edit-rl.md)、[Swift-Image RL](./image-rl-posttraining/swift-image-rl.md)、[算法 × 奖励 × 基模对比](./image-rl-posttraining/rl-comparison-2026.md)。
+:::
+
 
 ## 5. Few-step Distillation ★
 
