@@ -29,7 +29,7 @@
 | 2 | Pre-training + SFT Recipe | §5 (P20) + §5.1 (P20) | ★★★ | 🟢 §3.1–3.2 完整 |
 | 3 | Diffusion-NFT Post-training | §5.2 (P21–22) + Appendix D (P47–49) | ★★★ | 🟢 §4.1–4.4 完整 |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
-| 5 | Native-Resolution + Infrastructure | §3.2 / §3.3 (P13–16) | ★★☆ | ⬜ |
+| 5 | Native-Resolution + Infrastructure | §3.2 (P13–14) + §3.3 (P14–15) | ★★☆ | 🟢 §6.1–6.7 完整 |
 | 6 | Mage-VAE | §3.1 (P10–13) | ★☆☆ | ⬜ |
 | 7 | Ablation / Tricks 总结 | 全文 | ★★☆ | ⬜ |
 
@@ -1183,19 +1183,429 @@ $$
 
 ## 6. Native-Resolution MMDiT + Training Infrastructure ★
 
+::: info 本节主线
+<mark class="hl-trick">**Mage-Flow 这一节真正的主线不是「设计一个 MMDiT」，而是把「不同分辨率怎么高效混训」与「整个训练栈怎么跑得更快」放在一起设计。**</mark>
+
+$$
+\underbrace{
+\text{Native Resolution}\rightarrow\text{Variable-length Packing}\rightarrow\text{FlashAttention VarLen}\rightarrow\text{Per-sample RoPE}
+}_{\text{解决「多分辨率怎么高效混训」}}
+$$
+
+$$
+\underbrace{
+\text{Lightweight VAE}+\text{Stack-level CUDA Fusion}
+}_{\text{解决「整个训练 pipeline 怎么真正跑得快」}}
+$$
+
+<mark class="hl-key">**这正好对应论文的 Finding 2 和 Finding 3**</mark>，见 §6.7。
+:::
+
 ### 6.1 为什么不用传统 resolution bucket
+
+<mark class="hl-trick">**Mage-Flow 的生成 backbone 是一个 4B Native-Resolution Multimodal Diffusion Transformer，NR-MMDiT。**</mark>基础 block 沿用 SD3 的 MMDiT：<mark class="hl-trick">text token 和 image token 拼接后进入 joint self-attention</mark>，但 <mark class="hl-key">**text / image 两个模态分别保留自己的 normalization 和 projection layer**</mark>，以适应两种模态不同的统计分布；<mark class="hl-trick">**真正的跨模态交互发生在联合 self-attention 中**</mark>。
+
+<mark class="hl-key">**Mage-Flow 重点改的不是这个基础 MMDiT，而是传统的 resolution bucket training。**</mark>
+
+<mark class="hl-trick">**传统做法**：先定义有限数量的分辨率/长宽比 bucket（某些横图、竖图、方图尺寸），然后一张图片被分配到最接近的 bucket。<mark class="hl-key">一个 optimization step 通常只从一个 bucket 取数据，因此 batch 内所有 visual token grid 都有相同空间 shape</mark>，这样非常方便 batching。</mark>
+
+论文明确指出这种方式有<mark class="hl-key">**三个问题**</mark>：
+
+| # | 问题 | 说明 |
+| :-: | :--- | :--- |
+| 1 | <mark class="hl-trick">**bucket-quantization mismatch**</mark> | <mark class="hl-key">**真实图片的 resolution / aspect ratio 本来是连续分布**</mark>，硬塞进有限 bucket 会产生量化误差 |
+| 2 | <mark class="hl-trick">**aspect-ratio diversity 受限**</mark> | 一个 step 内只能看到同一个 bucket 的图，<mark class="hl-key">**每次 update 所见的 aspect ratio diversity 比较有限**</mark> |
+| 3 | <mark class="hl-trick">**极端尺寸无法自然覆盖**</mark> | 想支持很极端的宽图或长图，<mark class="hl-key">**必须提前专门增加对应 bucket，否则这种尺寸训练时根本没有自然覆盖**</mark> |
+
+所以 Mage-Flow 的核心想法是：
+
+$$
+\boxed{
+\text{不要把图片强行量化到少数 resolution bucket}
+}
+$$
+
+而是：
+
+$$
+\boxed{
+\text{直接保留 native resolution / aspect ratio}
+}
+$$
+
+<mark class="hl-key">**作者认为这样不仅是在「支持更多分辨率」，而是把 resolution diversity 本身变成 training signal。**</mark>灵感来自 <mark class="hl-trick">**NiT [10]**</mark>。
 
 ### 6.2 Native Packing：variable-length image + text token 混 pack
 
+<mark class="hl-trick">**问题**：不同图片保留 native resolution 后，经过 VAE 得到的 latent grid 尺寸自然也不一样，因此 visual token sequence 长度不同；prompt 长短也不一样，因此 text token sequence 长度也不同。</mark>
+
+Mage-Flow 的解决方案是 <mark class="hl-key">**Native Packing**</mark>。
+
+<mark class="hl-trick">**图片首先经过 Mage-VAE 得到 latent —— 16× spatial reduction、128 channels**，然后 latent grid 被 flatten 成 visual token sequence，再线性投影到 NR-MMDiT hidden dimension。</mark>由于图片尺寸不同：
+
+$$
+I_1\rightarrow L_1\ \text{image tokens},\qquad
+I_2\rightarrow L_2\ \text{image tokens},\qquad
+I_3\rightarrow L_3\ \text{image tokens}
+$$
+
+$$
+\text{通常}\qquad L_1\neq L_2\neq L_3
+$$
+
+<mark class="hl-key">**Mage-Flow 不把这些 token padding 到统一长度，也不要求它们来自同一个 resolution bucket，而是在一个 fixed token budget 下，把不同长度的 visual sequences 连续 pack 进同一个 batch。**</mark>Text 也是完全相同的思想：<mark class="hl-trick">不同长度的 prompt embedding 不统一 pad 到最大长度，而是也按照真实长度 pack。</mark>
+
+$$
+\boxed{
+[\,T_1,I_1;\ T_2,I_2;\ T_3,I_3;\ \cdots\,]
+}
+$$
+
+<mark class="hl-trick">**每个 $T_i$ 和 $I_i$ 长度都可以不同，只要整个 packed sequence 不超过当前设定的 token budget。**</mark>
+
+这和传统 bucket 最大的差异：
+
+$$
+\text{传统：一个 batch}\ \approx\ \text{一种 image shape}
+$$
+
+$$
+\boxed{
+\text{Mage-Flow：一个 batch}=\text{多种 native image size}+\text{多种 text length}
+}
+$$
+
+<mark class="hl-trick">**两个直接收益**</mark>：
+
+1. <mark class="hl-key">**短 prompt 不需要为了配合最长 prompt 填大量 padding**</mark>
+2. <mark class="hl-key">**图片不需要为了 batching 强行变成某几个固定 resolution，native latent grid 可以被完整保留下来**</mark>
+
+<mark class="hl-trick">**因此 single checkpoint 能自然泛化到 flexible output sizes**</mark>，论文展示的高度和宽度都可以落在 <mark class="hl-key">**512 ～ 2048**</mark>，包括 <mark class="hl-key">**512×2048、2048×512**</mark> 这样的极端比例。
+
+::: warning ⚠️ 这里最容易理解错的一点：fixed token budget 不是「把每张图补到固定 token 长度」
+<mark class="hl-trick">**fixed token budget 约束的是「一个 pack 内真实 token 的总数」，不是「单张图片的 token 长度」。**</mark>这两件事完全不同。
+
+**Padding 的做法**（假设 batch 里三张图分别是 100 / 300 / 600 token，最长 600）：
+
+$$
+100\rightarrow 600,\qquad 300\rightarrow 600,\qquad 600\rightarrow 600
+$$
+
+$$
+\text{GPU 实际看到的 slot 数}=3\times 600=1800
+$$
+
+$$
+\text{真正有效的 token}=100+300+600=1000
+$$
+
+<mark class="hl-key">**剩下 800 个都是 padding。**</mark>即使 attention mask 告诉模型「这些 padding 不是真的内容」，<mark class="hl-trick">**普通 padded batching 仍然会带来额外显存和计算组织开销**</mark>。
+
+**Packing 的做法**：
+
+$$
+\boxed{
+[\,I_1^{100}\ |\ I_2^{300}\ |\ I_3^{600}\,]
+}
+$$
+
+$$
+\text{总长度}=100+300+600=1000
+$$
+
+<mark class="hl-key">**没有把 100-token 的图片补成 600，也没有把 300 补成 600。**</mark>FlashAttention 的 variable-length kernel 再利用 cumulative offsets 告诉 attention「前 100 个属于 Sample 1，接下来 300 个属于 Sample 2，后面 600 个属于 Sample 3，<mark class="hl-trick">**不同 sample 之间不能互相 attention**</mark>」。
+
+$$
+\begin{aligned}
+\textbf{Padding:}\quad &[100,300,600]\ \rightarrow\ [600,600,600]\\[4pt]
+\textbf{Packing:}\quad &[100,300,600]\ \rightarrow\ [100\,|\,300\,|\,600]
+\end{aligned}
+$$
+
+<mark class="hl-trick">**前者核心是「为了方便 batching，把每个 sample 拉成一样长」；后者核心是「sample 长度随便不同，我只控制这一批真实 token 的总量」。**</mark>
+
+**由此推出一个实际后果：batch 中的图片数量是动态的。**
+
+$$
+\sum_i\big(L_{\text{text},i}+L_{\text{image},i}\big)\ \lesssim\ B_{\text{token}}
+$$
+
+<mark class="hl-trick">图片越大 visual token 越长，相同 token budget 下自然能装进去的样本就越少。</mark>小图多装几张、大图少装几张，<mark class="hl-key">**让每次 forward/backward 的 token 总工作量尽量接近，显存负载也更稳定**</mark> —— 固定「每 batch 8 张图」的话，8 张全是大图可能突然 OOM，8 张全是小图又吃不满 GPU。
+
+<mark class="hl-trick">**上面这条不等式是为了帮助理解而写的抽象表达，Mage-Flow 正文并没有把 packing policy 写成这个公式**</mark>；论文明确说的是 <mark class="hl-key">**fixed token budget + variable-length image/text sequences**</mark>。
+
+<mark class="hl-key">**这也解释了 Mage-Flow 为什么能做 native resolution**</mark>：以前为了让 batch shape 一致，最自然的方法就是把尺寸类似的图放进同一个 bucket；现在既然不同长度 token 可以直接 pack，$512\times512$、$1024\times512$、$512\times1536$ <mark class="hl-trick">就不需要先变成相同 shape 才能进入同一个 update</mark>。
+
+<mark class="hl-trick">**Table 4 的效率实验里给了一个具体配置：每个 GPU 一个 packed sample，每个 packed sample 固定 50,000 tokens。**</mark><mark class="hl-key">**但注意这是 Table 4 的 training-efficiency benchmark 配置，不能据此说 Mage-Flow 所有正式训练阶段永远固定 50K**</mark>（见 §6.7）。
+:::
+
 ### 6.3 FlashAttention variable-length kernel + per-sample 2D RoPE
+
+<mark class="hl-trick">**把不同样本直接拼起来以后，还有一个问题：attention 怎么知道哪些 token 属于 Sample A，哪些属于 Sample B？**</mark>总不能让 A 的 image token attention 到 B 的 prompt。
+
+<mark class="hl-key">**Mage-Flow 使用 FlashAttention 的 variable-length kernels。**</mark>论文写得很明确：packed text/image sequences 会携带 <mark class="hl-trick">**per-sample cumulative offsets**</mark>，FlashAttention 根据这些 offset 限制每个 sample 内部做 attention，<mark class="hl-key">**因此不需要显式构造一个巨大的 block-diagonal attention mask**</mark>。
+
+<mark class="hl-trick">**帮助理解的方式**</mark>（以下例子仅为说明结构，<mark class="hl-key">**论文明确披露的是 packed sequence + cumulative offsets + variable-length FlashAttention，并没有给出具体 token index**</mark>）：原本有三个样本
+
+$$
+S_1=[T_1,I_1],\qquad S_2=[T_2,I_2],\qquad S_3=[T_3,I_3]
+$$
+
+物理存储上把它们拼成 $[S_1,S_2,S_3]$，但同时告诉 attention：
+
+```text
+Sample 1: token 0 ~ 420
+Sample 2: token 421 ~ 524
+Sample 3: token 525 ~ ...
+```
+
+<mark class="hl-key">**于是内存里是连续的，计算上却仍然是各 sample 相互隔离。**</mark>
+
+#### 图片的空间位置：per-sample 2D RoPE
+
+<mark class="hl-trick">**Mage-Flow 给每个 sample 使用自己的 2D Rotary Positional Embedding（2D RoPE）**</mark>，也就是 visual token 保留其
+
+$$
+(h,w)
+$$
+
+<mark class="hl-key">**二维空间坐标。因此即使多张不同尺寸的图被物理 pack 到一长串 token 里，模型仍知道每个 visual token 在自己的 native image grid 中处于什么位置，从而保留原始 spatial layout。**</mark>
+
+所以这一套其实是<mark class="hl-trick">**三个各管一件事的机制**</mark>：
+
+$$
+\boxed{
+\text{Packing 解决「怎么装在一起」}
+}
+$$
+
+$$
+\boxed{
+\text{cumulative offsets 解决「attention 别跨样本」}
+}
+$$
+
+$$
+\boxed{
+\text{2D RoPE 解决「图片内部空间位置是什么」}
+}
+$$
+
+#### Editing 的扩展：3D RoPE $(h,w,f)$
+
+<mark class="hl-trick">**论文紧接着给 Editing 做了一个扩展，这个细节值得一起记。**</mark>T2I visual token 使用 $(h,w)$，而 Mage-Flow-Edit <mark class="hl-key">**为了区分 source / target image，把 2D RoPE 扩展成**</mark>：
+
+$$
+\boxed{(h,w,f)}
+$$
+
+<mark class="hl-key">**其中 $f$ 是 frame / image index，covering all source images and the target image。**</mark>
+
+<mark class="hl-key">**这样既保留 source-target 的空间对应关系，又告诉 shared attention 某个 token 属于哪张 source image 或 target image；训练 loss 只计算 target visual tokens。**</mark>
+
+<mark class="hl-trick">**这使得 Mage-Flow-Edit 可以直接从 Mage-Flow 初始化，不需要增加独立 editing module。**</mark>——<mark class="hl-key">**和 §3.1 里「editing branch 从 Mage-Flow-Base fork」是同一个设计取向：复用而不是新增模块**</mark>。
+
+<mark class="hl-trick">**Editing 侧的输入序列构成**</mark>（§3.2.2 原文）：Qwen3-VL 把 editing instruction 连同 source image 编码成多模态条件 $\tau$，Mage-VAE 把 source 和 target 图像编码成 $z_{\rm src}$ 和 $z_{\rm tgt}$，<mark class="hl-key">**NR-MMDiT 的输入序列是 $\tau$、$z_{\rm src}$ 和含噪的 target latent tokens 三者拼接**</mark>。
 
 ### 6.4 CFG cond/uncond 单次 packed forward
 
+<mark class="hl-trick">**Native Packing 不只用于训练，作者还把它用于 Classifier-Free Guidance inference。**</mark>
+
+普通 CFG 推理需要计算 conditional prediction 和 unconditional prediction，直观上就是同一个 noisy latent 分别跑 $\epsilon_{\rm cond}$ 和 $\epsilon_{\rm uncond}$，<mark class="hl-trick">**通常意味着两套条件对应两次计算**</mark>。
+
+Mage-Flow <mark class="hl-key">**直接利用 packing，把 conditional branch 和 unconditional branch 一起 pack，一次 forward 完成两边计算**</mark>，同时<mark class="hl-trick">**保持原来的 denoising trajectory 不变**</mark>。
+
+![Mage-Flow Table 3：packed CFG 推理效率（单张 NVIDIA A100）。](/mageflow-tab3-packed-cfg.png)
+
+| Model | Steps | Separate CFG | Packed CFG | Speedup |
+| :--- | ---: | ---: | ---: | ---: |
+| Mage-Flow-Base | 30 | 7.5089 s | 6.5159 s | <mark class="hl-key">**1.15×**</mark> |
+| Mage-Flow | 20 | 5.0076 s | 4.3680 s | <mark class="hl-key">**1.15×**</mark> |
+| Mage-Flow-Edit-Base | 30 | 11.5463 s | 10.5582 s | <mark class="hl-trick">**1.09×**</mark> |
+| Mage-Flow-Edit | 30 | 11.5985 s | 10.5475 s | <mark class="hl-trick">**1.10×**</mark> |
+
+<mark class="hl-trick">**因此这里不是那种「理论上能省一半」的夸张结论**，论文实际测到的是：</mark>
+
+$$
+\boxed{
+1.09\times\ \sim\ 1.15\times
+}
+$$
+
+<mark class="hl-key">**inference speedup。而且 editing 变体的收益（1.09–1.10×）明显低于 generation（1.15×）**</mark> —— <mark class="hl-trick">editing 的序列更长（三段拼接 $\tau$ + $z_{\rm src}$ + $z_{\rm tgt}$），cond/uncond 两分支的算力占比相对小一些，所以打包的边际收益更低。</mark>
+
+<mark class="hl-key">**这一节可以记成：Native Packing 不只是 data batching trick，同时还能复用到 CFG inference。**</mark>
+
 ### 6.5 Fused CUDA Kernels（Mage-VAE / Qwen3-VL / MMDiT）
+
+进入 §3.3 Training Infrastructure。<mark class="hl-trick">**作者指出真正反复执行、决定训练效率的主要有三个 module**</mark>：
+
+$$
+\boxed{
+\text{Mage-VAE}
++
+\text{Frozen Qwen3-VL}
++
+\text{4B NR-MMDiT}
+}
+$$
+
+<mark class="hl-trick">**它们最重的计算当然还是 convolution、matrix multiplication、attention，但真正拖慢训练的不只是 FLOPs。**</mark>每个 block 里面还有大量 <mark class="hl-key">**memory-bound operator chains**</mark>：
+
+$$
+\text{Normalization}
+\rightarrow
+\text{Adaptive Modulation}
+\rightarrow
+\text{RoPE}
+\rightarrow
+\text{Gating}
+\rightarrow
+\text{Activation}
+\rightarrow
+\text{Residual Add}
+$$
+
+<mark class="hl-trick">**如果这些操作全部是独立 CUDA kernel，那么 GPU 会不停</mark>：
+
+$$
+\text{读 activation}\rightarrow\text{算一点东西}\rightarrow\text{写回显存}\rightarrow\text{下一 kernel 再读}
+$$
+
+<mark class="hl-key">**同时还有大量 kernel launch overhead。论文认为这在 repeated blocks 中积累之后，会形成很大的实际吞吐损失。**</mark>
+
+所以作者针对三部分分别做 kernel fusion：
+
+| 模块 | fusion 的算子链 |
+| :--- | :--- |
+| <mark class="hl-trick">Mage-VAE</mark> | <mark class="hl-key">Normalization + Activation + Residual**</mark>（发生在 convolutional diffusion blocks 中） |
+| <mark class="hl-trick">Qwen3-VL</mark> | <mark class="hl-key">Adaptive Normalization + RoPE Application + Gated Residual Updates**</mark> |
+| <mark class="hl-trick">NR-MMDiT</mark> | 同上 |
+
+<mark class="hl-key">**关键不是「少几个 Python function」，而是 fused kernel 可以让中间结果尽量留在 on-chip memory**</mark>，而不是每一个小 operator 都重新写回、再从显存读出来；<mark class="hl-trick">**最后只把必要结果写回**</mark>。因此同时减少：
+
+$$
+\text{activation memory traffic}
+\qquad\text{和}\qquad
+\text{kernel launch overhead}
+$$
+
+::: warning 本节未公开的细节
+<mark class="hl-trick">**论文没有公开这些 custom CUDA kernels 的完整实现细节、具体 fusion graph 或底层 kernel configuration，因此这里不能进一步补。**</mark><mark class="hl-key">**这三个 fused kernel 是否开源、能否直接复用到自己的训练栈，论文未说明**</mark> —— 这是「co-design」里最难搬走的一环。
+:::
 
 ### 6.6 MFU 13.88% → 29.28% 与 2.48× step-time speedup
 
+<mark class="hl-trick">**Table 4 是这一节最有价值的 ablation。**</mark>实验统一在 <mark class="hl-key">**单个 8-GPU NVIDIA B200 node**</mark> 上，使用 <mark class="hl-key">**FlashAttention-4**</mark>。Global batch size = <mark class="hl-key">**8**</mark>，每个 GPU 一个 packed sample，每个 packed sample 固定为 <mark class="hl-key">**50,000 tokens**</mark>。
+
+![Mage-Flow Table 4：训练效率消融（单台 8-GPU B200，FlashAttention-4，global batch 8，每 GPU 一个 packed sample，每 sample 固定 50,000 tokens）。](/mageflow-tab4-training-efficiency.png)
+
+| 配置 | Memory / GPU | MFU | Step Time | Speedup |
+| :--- | ---: | ---: | ---: | ---: |
+| FLUX.2-VAE，无 fusion | 175.45 GB | <mark class="hl-trick">**13.88%**</mark> | <mark class="hl-trick">**1.9285 s**</mark> | 1.00× |
+| Mage-VAE，无 fusion | 175.47 GB | 17.44% | <mark class="hl-key">**1.3647 s**</mark> | <mark class="hl-key">**1.41×**</mark> |
+| + VAE Fuse | 175.47 GB | 17.41% | 1.3609 s | 1.42× |
+| + Text Fuse | 175.47 GB | 17.88% | 1.3258 s | 1.45× |
+| + DiT Fuse | <mark class="hl-key">**141.44 GB**</mark> | <mark class="hl-key">**29.28%**</mark> | <mark class="hl-key">**0.7775 s**</mark> | <mark class="hl-key">**2.48×**</mark> |
+
+#### 四个结果非常值得看
+
+**① 仅仅把 FLUX.2-VAE 换成 Mage-VAE，step time 就从 1.9285 s → 1.3647 s，直接获得 1.41× speedup。**
+
+$$
+\text{FLUX.2-VAE}\ \xrightarrow{\ \text{只换 tokenizer}\ }\ \text{Mage-VAE}:\quad 1.9285\,\text{s}\rightarrow 1.3647\,\text{s}
+$$
+
+<mark class="hl-key">**所以 tokenizer 本身的计算成本真的会影响大模型训练吞吐，并不是一个可以忽略的外围模块。**</mark>
+
+**② 但 Mage-VAE 自己再做 kernel fusion，收益其实很小**
+
+$$
+1.3647\,\text{s}\rightarrow 1.3609\,\text{s}
+$$
+
+<mark class="hl-trick">**Qwen3-VL fusion 也只是 $1.3609\,\text{s}\rightarrow 1.3258\,\text{s}$。**</mark><mark class="hl-key">**这两步加起来只把 MFU 从 17.44% 推到 17.88%，几乎可以忽略。</mark>
+
+**③ 真正最大的 jump 来自 NR-MMDiT fused kernels**
+
+$$
+1.3258\,\text{s}\rightarrow 0.7775\,\text{s}
+$$
+
+同时显存从 $175.47$ GB → $141.44$ GB，而 MFU 从约 17.9% 上升到 <mark class="hl-key">**29.28%**</mark>。
+
+<mark class="hl-key">**所以作者的结论非常明确：4B diffusion backbone 是整个 training step 的主要成本，repeated NR-MMDiT blocks 上的 kernel fusion 才是最大的系统优化收益来源。**</mark>
+
+<mark class="hl-trick">**注意 DiT fuse 是唯一同时降低显存的步骤**</mark>（$175.47\rightarrow141.44$ GB，降幅约 19.4%），<mark class="hl-key">**而 VAE / Text fuse 的显存是 175.45 → 175.47 GB，反而微增 0.02 GB**</mark>。<mark class="hl-trick">**这说明只有主干上的 fusion 才有能力通过减少中间激活来省显存**</mark>，外围模块的 fusion 只省时间不省显存。
+
+#### MFU 是什么
+
+<mark class="hl-trick">**MFU = Model FLOP Utilization。**</mark>可以简单理解成：
+
+> GPU 理论上能做那么多 FLOPs，你实际有多少比例真正花在模型有效计算上。
+
+原始系统只有 <mark class="hl-trick">**13.88%**</mark>，最终做到 <mark class="hl-key">**29.28%**</mark>。
+
+<mark class="hl-key">**并不代表模型 FLOPs 变多了，而是 GPU 少花时间在 memory movement、kernel launch、各种低效等待上。**</mark>
+
+最终：
+
+$$
+1.9285\,\text{s}\rightarrow 0.7775\,\text{s}\qquad\Longleftrightarrow\qquad
+\boxed{
+2.48\times\ \text{end-to-end step-time speedup}
+}
+$$
+
 ### 6.7 本节小结与未公开细节
+
+#### 论文自己的两条 Finding
+
+<mark class="hl-trick">**Finding 2**</mark>（§3.2.1）：
+
+> *"Native-resolution packing **turns resolution diversity into a training signal**: removing the single-bucket restriction allows each update to mix heterogeneous image sizes and aspect ratios, improving resolution flexibility while also enabling efficient packed CFG inference."*
+
+<mark class="hl-trick">**Finding 3**</mark>（§3.3）：
+
+> *"Efficient native-resolution generation requires **co-designing the model and the training system**: lightweight tokenization reduces the arithmetic cost, while **stack-level kernel fusion removes memory-bound overhead** that would otherwise dominate repeated VAE, text-encoder, and MMDiT blocks."*
+
+<mark class="hl-key">**这两条本质上就是我给这一节写的主线两句话**</mark>：<mark class="hl-trick">**resolution diversity 本身可以成为训练信号；而高效 native-resolution training 不能只改模型结构，tokenizer、batching 和 CUDA kernel 都得一起 co-design。</mark>
+
+#### 真正该带走的不是「他们用了 FlashAttention」
+
+$$
+\boxed{
+\text{不要只问模型能不能支持任意分辨率，}
+\quad
+\text{要问 variable-length batch 到底怎么组织、attention 怎么跑、GPU 有没有真正吃满。}
+}
+$$
+
+<mark class="hl-trick">**以及最基础的那一句区分**</mark>：
+
+$$
+\boxed{
+\text{Padding 是「每张样本补齐」；Packing 是「真实 token 拼起来，总量受预算控制」。}
+}
+$$
+
+<mark class="hl-key">**fixed token budget 控制的是整个 pack 的总长度，不是单张图片的 token 长度。**</mark>
+
+::: warning 本节未公开的细节
+- <mark class="hl-trick">**native packing 的具体 packing algorithm / bin-packing policy**</mark> —— 未公开。<mark class="hl-key">**这是复现 native-resolution 训练时最需要但最拿不到的东西**</mark>：论文只说 "packed into a single contiguous batch under a fixed token budget"，<mark class="hl-trick">**没有说是 first-fit、best-fit 还是按长度排序后顺序填充</mark>。
+- <mark class="hl-trick">**训练中 native resolution 是怎样采样出来的**</mark> —— 未说明。<mark class="hl-key">**图片的宽高从哪个分布采、是否与 §2.1 Table 5 的 aspect ratio [0.1, 10.0] 约束一致，论文未交代**</mark>（Table 5 是**数据筛选**阶段的约束，训练时的采样策略是另一回事）。
+- <mark class="hl-trick">**不同 resolution 的 token budget 分配策略**</mark> —— 未公开。
+- <mark class="hl-trick">**custom CUDA kernel 的代码级 fusion 细节**</mark> —— 未公开，也未说明是否随代码发布。
+- <mark class="hl-trick">**NR-MMDiT 的 layer number、hidden size、head number 等完整 architecture config**</mark> —— **本节完全未披露**，只说 "4B-parameter" 和沿用 SD3 的 MMDiT block 设计。
+- <mark class="hl-trick">**正式训练各阶段用的 token budget 是否都是 50,000**</mark> —— Table 4 的 50K 是 <mark class="hl-key">**benchmark 配置，不代表正式训练配置**</mark>，论文未给正式训练的数值。
+- <mark class="hl-trick">**Qwen3-VL 的具体型号这里写的是 4B-Instruct**</mark>（§3.2.2 原文 *"a frozen Qwen3-VL-4B-Instruct [13] text encoder"*），<mark class="hl-key">**而 §5.2 Appendix D 里的两个 judge 是 Qwen3.5-27B**</mark> —— <mark class="hl-trick">**文本编码器（4B）与 reward judge（27B）是两个不同角色，不要混淆**</mark>。
+:::
+
+::: info 与你笔记里已有内容的关系
+- <mark class="hl-key">**Native packing 与 Cosmos 3 的 74K token packing 属于同一类思路**</mark>，但 Cosmos 3 面向视频（三种分辨率 tier + FSDP 下的 stream 选择），Mage-Flow 面向 2D 图像（连续宽高比）。
+- <mark class="hl-key">**2D RoPE 不是 Mage-Flow 的发明</mark> —— 你笔记里 `z-image.md` 提到 Z-Image 也用 3D RoPE 的时间维偏移区分 reference / target token，与 §6.3 的 $(h,w,f)$ 是同一族做法。
+- <mark class="hl-key">**Table 4 的「backbone 才是大头」这个结论，可以直接对照你 `docs/infra/` 里的 CUDA 内存层级笔记**</mark> —— memory-bound operator chain 正是 activation memory traffic 的来源。
+:::
 
 ## 7. Mage-VAE ★
 
