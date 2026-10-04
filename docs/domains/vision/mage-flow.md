@@ -25,7 +25,7 @@
 
 | # | 主题 | 论文位置 | 优先级 | 状态 |
 | :-: | :--- | :--- | :-: | :--- |
-| 1 | Data Collection & Curation | §4.1 (P17–18) + §4.2 (P18–19) | ★★★ | 🟡 §2.1–2.2 |
+| 1 | Data Collection & Curation | §4 (P16–19) | ★★★ | 🟡 §2.1 ①② |
 | 2 | Pre-training + SFT Recipe | §5.1 (P20–21) | ★★★ | ⬜ |
 | 3 | Diffusion-NFT Post-training | §5.2 (P21–24) | ★★★ | ⬜ |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
@@ -37,30 +37,32 @@
 
 ## 2. Data Collection and Curation ★
 
-::: info 笔记小节 ↔ 论文章节逐段对照（本节结构严格镜像论文 §4.1 / §4.2）
-论文这两节的段落由**粗体导语**划分，本笔记的小节标题即采用同样的导语，因此可以逐段对照：
+::: info 笔记小节 ↔ 论文章节对照（本节结构镜像论文 §4）
+笔记的 `###` 层级对应论文的**节**，笔记的 `####` 层级对应论文 §4.x 内部的**粗体段标题**，因此论文的每个段落都能在笔记里找到同名位置：
 
-| 笔记小节 | 论文章节与段首粗体导语 | 论文页 | 状态 |
+| 笔记层级 | 对应论文 | 论文段首粗体导语 | 页 |
 | :--- | :--- | :--- | :--- |
-| §2.1 | §4.1 导语段（无粗体导语，以 *"The Mage-Flow generation corpus is built from..."* 起） | P17 | 🟡 部分 |
-| §2.2 | §4.1 **`Sample-level filtering.`** | P17 | 🟡 部分 |
-| §2.3 | §4.1 **`Cross-sample deduplication.`** | P17 | ⬜ |
-| §2.4 | §4.1 **`Multi-granularity captioning.`** | P18 | ⬜ |
-| §2.5 | §4.1 **`Concept-aware synthesis and balancing.`** | P18 | ⬜ |
-| §2.6 | §4.2 导语段（以 *"The Mage-Flow-Edit corpus consists of..."* 起） | P18 | ⬜ |
-| §2.7 | §4.2 **`Editing data synthesis.`** | P19 | ⬜ |
-| §2.8 | §4.2 **`VLM-based dataset filtering.`** | P19 | ⬜ |
-| §2.9 | §4.2 **`Edit-type tagging and balancing.`** | P19 | ⬜ |
-| §2.10 | <mark class="hl-trick">**笔记自加，非论文章节**</mark> | — | ⬜ |
+| `### §2.1` | **§4.1** T2I 数据 | *（导语段，无粗体标题）* | P17 |
+| └ `####` | §4.1 第 1 段 | **`Sample-level filtering.`** | P17 |
+| └ `####` | §4.1 第 2 段 | **`Cross-sample deduplication.`** | P17 |
+| └ `####` | §4.1 第 3 段 | **`Multi-granularity captioning.`** | P18 |
+| └ `####` | §4.1 第 4 段 | **`Concept-aware synthesis and balancing.`** | P18 |
+| `### §2.2` | **§4.2** Edit 数据 | *（导语段，无粗体标题）* | P18 |
+| └ `####` | §4.2 第 1 段 | **`Editing data synthesis.`** | P19 |
+| └ `####` | §4.2 第 2 段 | **`VLM-based dataset filtering.`** | P19 |
+| └ `####` | §4.2 第 3 段 | **`Edit-type tagging and balancing.`** | P19 |
+| `### §2.3` | *无对应* | <mark class="hl-trick">**笔记自加**：本节小结与未公开细节清单**</mark> | — |
+
+::: warning 两节各有一段「没有粗体标题」的开场段
+<mark class="hl-trick">**论文 §4.1 与 §4.2 的第一段都没有粗体导语**</mark>：§4.1 以 *"The Mage-Flow generation corpus is built from roughly 10B raw image–text pairs..."* 起，§4.2 以 *"The Mage-Flow-Edit corpus consists of (source image, edit instruction, target image) triples..."* 起。
+
+<mark class="hl-key">**它们是各节的总览段，不是独立小节**</mark>，所以笔记里直接放在对应 `###` 的开头，<mark class="hl-trick">**不另立 `####`**</mark> —— 这样论文的四个（§4.1）和三个（§4.2）粗体段标题在笔记里就是同名的 `####`，可以逐个对读。
 :::
 
-::: warning 为什么 §2.1 与 §2.6 是「导语段」
-<mark class="hl-trick">**论文这两节各有一段没有粗体导语的开场段**</mark>，它们的内容分别是总览数字与 Fig. 10 流程概述，<mark class="hl-key">**在笔记里被显式标为「导语段」以免和论文的粗体段落数对不上**</mark>。
+### 2.1 T2I 数据：10B raw pairs → ~1.3B curated pairs（论文 §4.1）
 
-所以：<mark class="hl-trick">**论文 §4.1 = 1 导语段 + 4 个粗体段，笔记 §2.1–§2.5；论文 §4.2 = 1 导语段 + 3 个粗体段，笔记 §2.6–§2.9**</mark>。总计论文 10 段（含 2 个导语段），笔记 §2.1–§2.9，另加 §2.10 为笔记自加。
-:::
+#### ① 导语段：四大阶段与收缩比（论文 §4.1 无粗体标题的开场段）
 
-### 2.1 总览：10B raw image–text pairs → ~1.3B curated pairs
 
 Mage-Flow 的 generation 语料来自约 <mark class="hl-trick">**10B raw image–text pairs**</mark>（大规模开源数据集聚合），经**四大阶段** curation 后保留约 <mark class="hl-key">**1.3B high-quality image–text pairs**</mark>，再从中采样各阶段的 pre-training 子集。
 
@@ -85,7 +87,8 @@ $$
 流程是**严格串行**的：**filter → dedup → captioning → synthesis**。这意味着 <mark class="hl-key">**去重是在 captioning 之前做的**</mark> —— 用的是原始 web caption，不是 VLM 重写后的 caption。这是有意义的工程选择：<mark class="hl-trick">先用便宜的 SSCD 描述符把 10B 砍掉一大半，再让昂贵的 Qwen3-VL-32B 跑剩下的 1.3B</mark>。如果顺序反过来（先 caption 再 dedup），VLM 的推理成本会按 10B 的量级计。
 :::
 
-### 2.2 Sample-level filtering（`Sample-level filtering.`）
+#### ② Sample-level filtering.（论文 §4.1 第 1 段粗体导语）
+
 
 #### 阶段一内部还有两层：先文件层面，再图像内容
 
@@ -264,22 +267,24 @@ $$
 
 <mark class="hl-trick">表面上这是矛盾的。但解法不在 §2.2，而在于 §2.5 —— concept-aware synthesis 里的 synthetic text-rendering 数据，以及 concept-aware sampling 对分布的修正。</mark><mark class="hl-key">**§2.2 先把现象立起来，§2.5 再解释原因，中间不要提前引用结论，否则会把两节的分析揉在一起。</mark>
 :::
+#### ③ Cross-sample deduplication.（论文 §4.1 第 2 段粗体导语）
 
-### 2.3 Cross-sample deduplication（`Cross-sample deduplication.`）
+#### ④ Multi-granularity captioning.（论文 §4.1 第 3 段粗体导语）
 
-### 2.4 Multi-granularity captioning（`Multi-granularity captioning.`）
+#### ⑤ Concept-aware synthesis and balancing.（论文 §4.1 第 4 段粗体导语）
 
-### 2.5 Concept-aware synthesis and balancing（`Concept-aware synthesis and balancing.`）
+### 2.2 Edit 数据：~90M raw triples → ~45M retained（论文 §4.2）
 
-### 2.6 总览：~90M raw triples → ~45M retained（§4.2 导语段）
+#### ① 导语段：90M 组成、~50M 开源 + ~40M 自合成（论文 §4.2 无粗体标题的开场段）
 
-### 2.7 Editing data synthesis（`Editing data synthesis.`）
+#### ② Editing data synthesis.（论文 §4.2 第 1 段粗体导语）
 
-### 2.8 VLM-based dataset filtering（`VLM-based dataset filtering.`）
+#### ③ VLM-based dataset filtering.（论文 §4.2 第 2 段粗体导语）
 
-### 2.9 Edit-type tagging and balancing（`Edit-type tagging and balancing.`）
+#### ④ Edit-type tagging and balancing.（论文 §4.2 第 3 段粗体导语）
 
-### 2.10 本节小结与未公开细节（笔记自加，非论文章节）
+### 2.3 本节小结与未公开细节（笔记自加，非论文章节）
+
 
 ## 3. Pre-training and Supervised Fine-tuning ★
 
