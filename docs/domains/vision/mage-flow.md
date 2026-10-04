@@ -26,7 +26,7 @@
 | # | 主题 | 论文位置 | 优先级 | 状态 |
 | :-: | :--- | :--- | :-: | :--- |
 | 1 | Data Collection & Curation | §4.1 (P17–18) + §4.2 (P18–19) | ★★★ | 🟢 §2.1 + §2.2 完整 |
-| 2 | Pre-training + SFT Recipe | §5.1 (P20–21) | ★★★ | ⬜ |
+| 2 | Pre-training + SFT Recipe | §5 (P20) + §5.1 (P20) | ★★★ | 🟢 §3.1–3.2 完整 |
 | 3 | Diffusion-NFT Post-training | §5.2 (P21–24) | ★★★ | ⬜ |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
 | 5 | Native-Resolution + Infrastructure | §3.2 / §3.3 (P13–16) | ★★☆ | ⬜ |
@@ -567,17 +567,182 @@ $$
 ### 2.3 本节小结与未公开细节（笔记自加，非论文章节）
 
 
-## 3. Pre-training and Supervised Fine-tuning ★
+## 3. Training ★
 
-### 3.1 T2I Progressive Curriculum 总览
+::: info 笔记小节 ↔ 论文章节对照（本节结构镜像论文 §5 / §5.1）
+| 笔记层级 | 对应论文 | 论文段首粗体导语 | 页 |
+| :--- | :--- | :--- | :--- |
+| `### §3.1` | **§5** 导语段 | *（无粗体标题）* | P20 |
+| `### §3.2` | **§5.1** Pre-training and Supervised Fine-tuning | — | P20 |
+| └ `#### ①` | §5.1 第 1 段 | **`Text-to-image generation.`** | P20 |
+| └ `#### ②` | §5.1 第 2 段 | **`Instruction-based editing.`** | P20 |
+| └ `#### ③` | *无对应* | <mark class="hl-trick">**笔记自加**：§5.1 全流程压缩**</mark> | — |
+:::
 
-### 3.2 逐阶段递进：resolution / quality / threshold / reweighting
+### 3.1 训练总览（论文 §5 导语段）
 
-### 3.3 Editing 两阶段混合训练
+<mark class="hl-trick">**Mage-Flow 的 generation 和 editing 共用同一套基础训练范式**</mark>：都在 <mark class="hl-key">**Mage-VAE latent space**</mark> 里训练，也都使用同一个 <mark class="hl-key">**4B Native-Resolution MMDiT backbone**</mark>，优化目标都是 <mark class="hl-trick">**rectified flow**</mark>。
 
-### 3.4 为什么 Edit 训练要混 Generation，比例怎么配
+<mark class="hl-key">**两者真正不同的地方主要有两个：conditioning format 不同，data mixture 不同**</mark>：
 
-### 3.5 本节小结与未公开细节
+| 任务 | Conditioning |
+| :--- | :--- |
+| <mark class="hl-trick">Text-to-image generation</mark> | 只依赖 text prompt |
+| <mark class="hl-trick">Instruction-based editing</mark> | <mark class="hl-key">**同时依赖 editing instruction 和 source image(s)**</mark> |
+
+整体 pipeline 在 Figure 11 里分成三阶段：先通过 <mark class="hl-trick">**progressive pre-training + SFT**</mark> 得到 Base checkpoint；然后用 <mark class="hl-trick">**Diffusion-NFT**</mark> 做 post-training 得到 aligned model；最后通过 <mark class="hl-trick">**few-step distillation**</mark> 得到 Turbo 版本。
+
+![Mage-Flow Fig.11：Mage-Flow 训练 pipeline 总览。左侧两个蓝色框 `Low-Resolution Pre-training` → `Native-Resolution Pre-training`，进入上排虚线框 `Text to Image Generation`：`Supervised Fine-tuning` → **`Mage-Flow-Base`** → `Text-to-Image Post-training` → **`Mage-Flow`** → `4-step Distillation` → **`Mage-Flow-Turbo`**。**从 `Mage-Flow-Base` 向下引出一条箭头**进入下排虚线框 `Image Editing`：`Editing Continue Training` → **`Mage-Flow-Edit-Base`** → `Editing and Text-to-Image Post-training` → **`Mage-Flow-Edit`** → `4-step Distillation` → **`Mage-Flow-Edit-Turbo`**。](/mageflow-fig11-training-pipeline.png)
+
+整个模型族因此是两条分支：
+
+$$
+\text{Mage-Flow-Base}
+\rightarrow
+\text{Mage-Flow}
+\rightarrow
+\text{Mage-Flow-Turbo}
+$$
+
+$$
+\text{Mage-Flow-Base}
+\rightarrow
+\text{Mage-Flow-Edit-Base}
+\rightarrow
+\text{Mage-Flow-Edit}
+\rightarrow
+\text{Mage-Flow-Edit-Turbo}
+$$
+
+<mark class="hl-key">**Editing branch 不是从头重新训练，而是从已经训练好的 Mage-Flow-Base fork 出来继续适配。**</mark>Figure 11 里那条从 `Mage-Flow-Base` 向下引出的箭头就是明确证据 —— <mark class="hl-trick">**分叉点发生在 SFT 之后、任何 post-training 之前**</mark>。
+
+<mark class="hl-trick">**这个分叉点的位置是有讲究的**</mark>：Base 已经完成了全部的视觉-语言对齐与画质收敛，editing branch 直接继承全部成果，<mark class="hl-key">**只需学「如何把编辑指令作用到已有生成能力上」，而不必重新学生成**</mark>。
+
+### 3.2 Pre-training and Supervised Fine-tuning（论文 §5.1）
+
+#### ① Text-to-image generation.
+
+<mark class="hl-trick">**Mage-Flow 的 T2I 采用非常典型的 progressive curriculum，论文明确分成三段 pre-training 再接一段 SFT。**</mark>
+
+| 阶段 | 数据量 | 分辨率 | 目标 |
+| :--- | ---: | :--- | :--- |
+| <mark class="hl-trick">**Pre-train 1**</mark> | <mark class="hl-key">**1.2B**</mark> filtered and recaptioned pairs | <mark class="hl-trick">**固定 256×256**</mark> | <mark class="hl-key">**以低计算成本学 broad visual–language alignment**</mark> |
+| <mark class="hl-trick">**Pre-train 2**</mark> | <mark class="hl-key">**600M**</mark> subset（更高质量） | <mark class="hl-trick">**512-pixel native-aspect-ratio**</mark> | 每个样本保持约 512×512 的 pixel budget，但<mark class="hl-trick">**尽量保留原始 aspect ratio**</mark> |
+| <mark class="hl-trick">**Pre-train 3**</mark> | <mark class="hl-key">**300M**</mark> subset（更干净） | <mark class="hl-trick">**1024-pixel native-aspect-ratio**</mark> | <mark class="hl-key">**增强 fine details、layout fidelity、text rendering、aesthetic quality**</mark> |
+| <mark class="hl-trick">**SFT**</mark> | <mark class="hl-key">**150M**</mark> high-quality subset | 1024-pixel native-aspect-ratio | 产出 <mark class="hl-key">**Mage-Flow-Base**</mark> |
+
+$$
+\boxed{
+1.2B@256^2
+\rightarrow
+600M@512\ \text{native aspect ratio}
+\rightarrow
+300M@1024\ \text{native aspect ratio}
+}
+$$
+
+<mark class="hl-trick">**三阶段都使用同一个 rectified-flow objective（同样在 Mage-VAE latent space 里），同时 resolution、data quality 和 concept-aware reweighting strength 都逐步增强。**</mark>
+
+<mark class="hl-key">**这和 §2.1 的数据过滤是完全对应的**</mark>：<mark class="hl-trick">**256 阶段数据最宽（Table 5 里 aesthetic 只要 ≥4.5、watermark 放宽到 <0.5），512 更干净（≥5.5 / <0.3），1024 再进一步提高（≥6.0 / <0.1），SFT 最严（≥6.5 / <0.05）**</mark>。
+
+<mark class="hl-key">**换句话说，Table 5 那张阈值表就是这三个阶段的数据说明书**</mark> —— 它不只定义了「怎么筛」，也定义了「每个训练阶段用多严的筛子」。
+
+SFT 阶段的过滤器比 pre-training 更严，明确列出为 <mark class="hl-trick">**stricter aesthetic, alignment, watermark, OCR, and duplication filters**</mark>，同时 <mark class="hl-key">**increased weights for capability-targeted data**</mark>。
+
+<mark class="hl-trick">**注意 SFT 列表里多了一个 pre-training 没有的过滤器：`duplication`**</mark>。<mark class="hl-key">**这是唯一一处论文暗示 SFT 阶段额外做了去重的迹象，但 §4.1 只讲了 sample-level filtering，cross-sample dedup 是独立的一步，没有说它是否按阶段分级**</mark> —— 引用时不能假设 dedup 只在 SFT 阶段做。
+
+::: warning 本段未公开 / 论文自身的问题
+- <mark class="hl-trick">**论文这里有一处交叉引用错误**</mark>：§5.1 原文写 *"As shown in **Table 5**, pre-training contains three stages"*，<mark class="hl-key">**但 Table 5 是 §4.1 的 sample-level filtering 阈值表，不包含任何训练阶段信息**</mark>。<mark class="hl-trick">我核对了全部 19 张表，**三段 pre-training 的 1.2B / 600M / 300M 只在正文里，论文没有任何一张表列出它们**</mark>（附录 Table 18 是另一个模型 Mage-Flow-SciForma 的微调 mixture，与此无关）。
+- <mark class="hl-trick">**三个 subset 之间的关系未说明**</mark>：论文<mark class="hl-key">**没有说这三个 subset 是互斥集合，也没有明确说 600M 和 300M 是否严格嵌套于前一阶段**</mark>，因此<mark class="hl-key">**不能自行假设 300M ⊂ 600M ⊂ 1.2B**</mark>。数据量从 1.2B 降到 600M 再到 300M，但这个下降是「筛得更严」还是「换了一批数据」<mark class="hl-trick">**论文未说明</mark>。
+- <mark class="hl-trick">**每段各训练多少 steps / tokens 未给**</mark> —— 只有数据量，没有训练步数、batch size 或 token 数。
+- <mark class="hl-trick">**三段之间是 continue 还是 restart 未说明**</mark> —— 论文只说 "we move to"，是从 256² 的 checkpoint 继续，还是重新初始化。
+:::
+
+#### ② Instruction-based editing.
+
+<mark class="hl-trick">**Editing model 直接从 Mage-Flow-Base 初始化，并采用两阶段 adaptation。**</mark>
+
+| 阶段 | Editing triples | Generation pairs | 比例 | 目标 |
+| :--- | ---: | ---: | :-: | :--- |
+| <mark class="hl-trick">**Stage 1**</mark> | <mark class="hl-key">**35M**</mark> | <mark class="hl-key">**35M**</mark> | <mark class="hl-trick">**1:1**</mark> | <mark class="hl-key">**适应 source-conditioned instruction following，同时保留从 Base 继承的 visual prior 和 open-ended synthesis capability**</mark> |
+| <mark class="hl-trick">**Stage 2**</mark> | <mark class="hl-key">**20M**</mark> | <mark class="hl-key">**10M**</mark> | <mark class="hl-trick">**2:1**</mark> | <mark class="hl-key">**进一步提升 editing fidelity 和 robustness**</mark> |
+
+$$
+\boxed{
+35M\ \text{editing triples}
++
+35M\ \text{generation pairs}
+}
+$$
+
+$$
+\boxed{
+20M\ \text{editing triples}
++
+10M\ \text{generation pairs}
+}
+$$
+
+<mark class="hl-trick">**两阶段里 multi-image editing samples 都非常少，不超过 editing data 的 0.5%**</mark>，绝大多数仍是 single-image editing。最终得到 <mark class="hl-key">**Mage-Flow-Edit-Base**</mark>。
+
+<mark class="hl-key">**这个地方很值得记，因为 Mage-Flow 明确展示了一个很实用的 recipe：编辑训练里始终混 generation data，而且越往后 Edit 比例越高。**</mark>第一阶段 1:1，第二阶段 2:1。
+
+<mark class="hl-trick">**作者给出的动机不是「辅助 loss」之类，而是非常明确的两句**</mark>：
+
+- <mark class="hl-key">**generation data 用来帮助保留原本的 generative prior 和 open-ended synthesis capability**</mark>
+- <mark class="hl-key">**editing data 则负责强化 source-conditioned editability**</mark>
+
+<mark class="hl-trick">**这个 1:1 → 2:1 的推进逻辑可以直接迁移**</mark>：第一阶段用等比混合让模型先「学会听指令」而不至于破坏原有的生成能力，第二阶段再把重心明确压向 editing。
+
+::: warning 本段未公开的细节
+- <mark class="hl-trick">**两阶段各训练多少 steps / epochs 未给**</mark>，也没有 learning rate。
+- <mark class="hl-trick">**这里的 35M / 20M editing triples 与 §2.2 的 45M retained 是什么关系未说明**</mark> —— 数字对不上（45M → 20M 是可能的子集，但论文没说是否为子集、也没说选用标准）。
+- <mark class="hl-trick">**这里的 35M / 10M generation pairs 与 §2.1 的 1.3B curated 是什么关系同样未说明**</mark>。
+- <mark class="hl-trick">**「更高质量」的 Stage 2 数据具体高在哪未说明**</mark> —— 只说 "higher-quality mixture"，没给筛选标准。
+- <mark class="hl-trick">**那 0.5% 的 multi-image editing 具体包含哪些任务未列举**</mark>。
+:::
+
+#### ③ §5.1 全流程压缩（笔记自加）
+
+$$
+\boxed{
+\text{T2I: }
+1.2B@256
+\rightarrow
+600M@512
+\rightarrow
+300M@1024
+\rightarrow
+150M\ \text{SFT@1024}
+\rightarrow
+\text{Mage-Flow-Base}
+}
+$$
+
+$$
+\boxed{
+\text{Editing: }
+35M_E+35M_G
+\rightarrow
+20M_E+10M_G
+\rightarrow
+\text{Mage-Flow-Edit-Base}
+}
+$$
+
+::: tip §5.1 与 §4.1 的对应关系（这一节最值得记的一条）
+<mark class="hl-key">**§4.1 定义了「每个阶段用多严的筛子」（Table 5），§5.1 定义了「每个阶段用多少数据、在什么分辨率上训」。两者是一套 curriculum 的两个侧面，必须对着读。**</mark>
+
+| 阶段 | 数据量（§5.1） | Aesthetic-V2.5（§4.1 Table 5） | Watermark（§4.1 Table 5） |
+| :--- | ---: | ---: | ---: |
+| Pre-train 1 | 1.2B @ 256² | ≥4.5 | <0.5 |
+| Pre-train 2 | 600M @ 512 native | ≥5.5 | <0.3 |
+| Pre-train 3 | 300M @ 1024 native | ≥6.0 | <0.1 |
+| <mark class="hl-trick">SFT</mark> | <mark class="hl-trick">150M @ 1024 native</mark> | <mark class="hl-trick">**≥6.5**</mark> | <mark class="hl-trick">**<0.05**</mark> |
+
+<mark class="hl-trick">**数据量递减（1.2B → 600M → 300M → 150M）与筛子变严同步发生**</mark>，<mark class="hl-key">**这就是「progressive」二字的全部含义**</mark>：<mark class="hl-trick">**不是先学全量再精修，而是每一阶段就只喂「这一阶段该质量」的数据**</mark>。<mark class="hl-key">**这与 DeepGen 的 200K → 400K 单调递增正好相反**</mark> —— DeepGen 是阶段越长数据越多，Mage-Flow 是阶段越长数据越少越精。
+:::
+
 
 ## 4. Diffusion-NFT Post-training ★
 
