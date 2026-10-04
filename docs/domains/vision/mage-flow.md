@@ -25,7 +25,7 @@
 
 | # | 主题 | 论文位置 | 优先级 | 状态 |
 | :-: | :--- | :--- | :-: | :--- |
-| 1 | Data Collection & Curation | §4 (P16–19) | ★★★ | 🟡 §2.1 ①② |
+| 1 | Data Collection & Curation | §4.1 (P17–18) | ★★★ | 🟢 §2.1 完整 |
 | 2 | Pre-training + SFT Recipe | §5.1 (P20–21) | ★★★ | ⬜ |
 | 3 | Diffusion-NFT Post-training | §5.2 (P21–24) | ★★★ | ⬜ |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
@@ -52,6 +52,7 @@
 | └ `####` | §4.2 第 2 段 | **`VLM-based dataset filtering.`** | P19 |
 | └ `####` | §4.2 第 3 段 | **`Edit-type tagging and balancing.`** | P19 |
 | `### §2.3` | *无对应* | <mark class="hl-trick">**笔记自加**：本节小结与未公开细节清单**</mark> | — |
+:::
 
 ::: warning 两节各有一段「没有粗体标题」的开场段
 <mark class="hl-trick">**论文 §4.1 与 §4.2 的第一段都没有粗体导语**</mark>：§4.1 以 *"The Mage-Flow generation corpus is built from roughly 10B raw image–text pairs..."* 起，§4.2 以 *"The Mage-Flow-Edit corpus consists of (source image, edit instruction, target image) triples..."* 起。
@@ -61,217 +62,288 @@
 
 ### 2.1 T2I 数据：10B raw pairs → ~1.3B curated pairs（论文 §4.1）
 
-#### ① 导语段：四大阶段与收缩比（论文 §4.1 无粗体标题的开场段）
+#### ① 导语段：四步固定顺序与收缩比
 
-
-Mage-Flow 的 generation 语料来自约 <mark class="hl-trick">**10B raw image–text pairs**</mark>（大规模开源数据集聚合），经**四大阶段** curation 后保留约 <mark class="hl-key">**1.3B high-quality image–text pairs**</mark>，再从中采样各阶段的 pre-training 子集。
-
-| 阶段 | 作用（论文原话） |
-| :--- | :--- |
-| <mark class="hl-trick">Sample-level filtering</mark> | 移除损坏、低质、不安全或视觉上不适合的图像 |
-| <mark class="hl-trick">Cross-sample deduplication</mark> | 抑制近重复的视觉模式 |
-| <mark class="hl-trick">Multi-granularity captioning</mark> | 标准化文本监督 |
-| <mark class="hl-trick">Concept-aware synthesis</mark> | 补充长尾图像 |
+Mage-Flow 的 T2I 数据从大约 <mark class="hl-key">**10B raw image–text pairs**</mark> 开始，全部来自大规模开源数据集。<mark class="hl-trick">作者按照固定顺序进行四步处理</mark>：
 
 $$
 \boxed{
-\text{10B raw pairs}
-\xrightarrow{\ \text{filter} \to \text{dedup} \to \text{caption} \to \text{synthesis}\ }
-\text{1.3B curated pairs}\ (\text{保留率}\approx 13\%)
+\text{Sample-level Filtering}
+\rightarrow
+\text{Cross-sample Deduplication}
+\rightarrow
+\text{Multi-granularity Captioning}
+\rightarrow
+\text{Concept-aware Synthesis \& Balancing}
 }
 $$
 
+最终得到约 <mark class="hl-key">**1.3B high-quality image–text pairs**</mark>，后面的不同 pre-training stage 再从这个 curated corpus 中选择各自的数据子集。
+
+| 步骤 | 作者的定位 |
+| :--- | :--- |
+| <mark class="hl-trick">Filtering</mark> | 去掉坏图、低质图、不安全图和视觉不合适的图片 |
+| <mark class="hl-trick">Deduplication</mark> | 消除近重复视觉样本 |
+| <mark class="hl-trick">Captioning</mark> | 重新标准化文本监督 |
+| <mark class="hl-trick">Concept-aware synthesis</mark> | 补 raw web data 中天然缺少的长尾能力 |
+
 ![Mage-Flow Fig.8(a)：Text-to-Image 数据处理流水线。从左到右：10B 开源图像数据集 → **Sample-level Filtering**（分两层虚线框：File Information Filter 含 Broken / File Size / Resolution / Aspect ratio / Rotation；Image Content Filter 含 Saturation / Brightness / Grayscale / Blurry / Texture / Watermark / NSFW / Aesthetic / OCR / Entropy）→ **Cross-sample Deduplication** → **Multi-Granularity Captioning** → **Concept-aware Synthesis** → 右侧数据柱「~1.3B High-Quality Image-Text Data」。注意四阶段的**串行顺序**：filter 在 dedup 之前，synthesis 在最后。](/mageflow-fig8a-pipeline.png)
 
-::: warning Fig. 8(a) 里一个容易被略过的顺序细节
-流程是**严格串行**的：**filter → dedup → captioning → synthesis**。这意味着 <mark class="hl-key">**去重是在 captioning 之前做的**</mark> —— 用的是原始 web caption，不是 VLM 重写后的 caption。这是有意义的工程选择：<mark class="hl-trick">先用便宜的 SSCD 描述符把 10B 砍掉一大半，再让昂贵的 Qwen3-VL-32B 跑剩下的 1.3B</mark>。如果顺序反过来（先 caption 再 dedup），VLM 的推理成本会按 10B 的量级计。
-:::
+<mark class="hl-key">**这个串行顺序本身有成本含义**</mark>：<mark class="hl-trick">先用便宜的 SSCD 描述符把 10B 砍掉一大半，再让昂贵的 Qwen3-VL-32B 只 caption 剩下的 1.3B</mark>。若顺序反过来（先 caption 再 dedup），VLM 推理成本要按 10B 的量级计。
 
-#### ② Sample-level filtering.（论文 §4.1 第 1 段粗体导语）
+#### ② Sample-level filtering.
 
+<mark class="hl-trick">**作者首先对每一个 image–caption pair 独立处理**</mark>，先做 <mark class="hl-key">**file-information filtering**</mark>，再做 <mark class="hl-key">**image-content filtering**</mark>。
 
-#### 阶段一内部还有两层：先文件层面，再图像内容
-
-<mark class="hl-trick">**Fig. 8(a) 里 `Sample-level Filtering` 画成了一个带两层虚线框的大盒子 —— 这不是排版，是两级独立的过滤。**</mark>论文正文写得很明确：
-
-| 层 | 过滤器（Fig. 8(a) 方框数） | 判定依据 | <mark class="hl-trick">**是否需要解码像素**</mark> |
-| :--- | :--- | :--- | :--- |
-| <mark class="hl-trick">**File Information Filter**</mark> | **5 个**：Broken、File Size、Resolution、Aspect ratio、Rotation | <mark class="hl-key">**文件元数据 / header**</mark> | <mark class="hl-key">**否**</mark> |
-| <mark class="hl-trick">**Image Content Filter**</mark> | **10 个**：Saturation、Brightness、Grayscale、Blurry、Texture、Watermark、NSFW、Aesthetic、OCR、Entropy | <mark class="hl-key">**解码后的像素**</mark> | <mark class="hl-key">**是**</mark> |
-
-<mark class="hl-key">**论文的关键措辞是这一句**</mark>（§4.1, P17）：
-
-> *"File-information filters remove corrupted or near-empty files, images with insufficient resolution or pixel count, extreme aspect ratios, and samples with **incorrect orientation metadata**. **Image-content filters then score decoded images** for visual quality and safety."*
-
-<mark class="hl-trick">**`then`（顺序）+ `decoded`（必须先解码）这两个词是全部证据**</mark>：<mark class="hl-key">**第一层的 5 个过滤器全部只需要读文件头，第二层的 10 个必须真正解码像素才能打分**</mark>。
-
-- File size → 纯文件属性
-- Resolution / Aspect ratio → 图像 header 里就写着
-- Rotation → <mark class="hl-trick">**EXIF orientation 元数据**</mark>，论文说的 *"incorrect **orientation metadata**"* 就是它
-- Broken → header 解析失败即可判定
-
-$$
-\underbrace{\text{Broken, File Size, Resolution, Aspect ratio, Rotation}}_{\text{header 级，5 个}}
-\ \xrightarrow{\ \text{不解码}\ }\ 
-\underbrace{\text{Brightness, ..., Entropy}}_{\text{像素级，10 个}}
-$$
-
-<mark class="hl-key">**所以这个先后顺序是一次成本排序，不是逻辑分类**</mark>：<mark class="hl-trick">先用几乎零成本的元数据检查把大批样本挡掉，只有存活下来的才付「解码 + 打分」的代价</mark>。
-
-::: warning 「两层各自的淘汰量」论文完全没给
-<mark class="hl-trick">这是一个很反常的缺口**</mark>：论文交代了总收缩（10B → 1.3B），也交代了四阶段的顺序，<mark class="hl-key">**但从未说明这两层各自筛掉了多少**</mark>。
-
-$$
-\underbrace{10B}_{\text{raw}}
-\ \xrightarrow{\ \text{File Info 层}\ }\
-\underbrace{?}_{\text{论文未给}}
-\ \xrightarrow{\ \text{Image Content 层}\ }\
-\underbrace{?}_{\text{论文未给}}
-\ \xrightarrow{\ \text{dedup} \to \text{caption} \to \text{synthesis}\ }
-\underbrace{1.3B}_{\text{curated}}
-$$
-
-<mark class="hl-trick">**而这个数字恰恰决定了「元数据优先」这套设计值不值**</mark>：如果 File Info 层已经砍掉 90%，那"先便宜后昂贵"是对的；如果它只砍掉 20%，<mark class="hl-key">**真正的算力大头在 Image Content 层，而那一层反而没有可优化的顺序可言**</mark>。论文不写，读者就无法判断这个设计的收益量级。
-:::
-
-<mark class="hl-trick">**另一个值得注意的点：两层都有「防病态」性质的检查，但分工不同**</mark>。File Info 层管的是<mark class="hl-key">**文件层面的异常**</mark>（坏文件、空文件、方向元数据错）；Image Content 层的 entropy / texture 管的是<mark class="hl-trick">**内容层面的空洞与无意义**</mark>（near-empty images、texture-like non-semantic patterns）。<mark class="hl-key">**前者防的是"文件坏了"，后者防的是"文件没坏但内容没信息"**</mark> —— 后者用纯元数据检查是做不到的，所以两层不能互相替代。
-
-
-<mark class="hl-trick">**这一节的量级对照值得单独记**：10B → 1.3B 是约 <mark class="hl-key">**7.7 倍的收缩**</mark>，而 DeepGen 全程声称 ~50M 样本、Z-Image 是 314K H800·h 的量级。三家的数据哲学完全不同——<mark class="hl-key">**Mage-Flow 是"海量粗筛 + 严格阈值"，DeepGen 是"少而精 + 内部数据"**</mark>，而 10B 这个起点决定了它必须依赖自动化阈值（Table 5），因为人工不可能审 10B。</mark>
-
-<mark class="hl-trick">**这一步的性质：逐条独立判断，不看其他样本。**</mark>论文原文 *"We first filter each **image–caption pair independently**"* —— 所以它和 §2.3 的 cross-sample dedup 是两种不同性质的过滤：<mark class="hl-key">**这里是「这条样本自身好不好」，那里是「这条样本是不是别条的重复」**</mark>。
-
-过滤器分两层，共 <mark class="hl-trick">**15 个**</mark>（见 Fig. 8(a) 的方框数）：
-
-| 层 | 过滤器 | 论文给出的动机 |
-| :--- | :--- | :--- |
-| <mark class="hl-trick">File Information</mark><br>（5 个） | Broken、File Size、Resolution、Aspect ratio、Rotation | 移除损坏/近空文件、分辨率或像素数不足、极端宽高比、<mark class="hl-trick">**方向元数据错误的样本**</mark> |
-| <mark class="hl-trick">Image Content</mark><br>（10 个） | Brightness、Saturation、Grayscale、Blurry、Entropy、Texture、Watermark、OCR、Aesthetic、NSFW | 对**解码后**的图像打分 |
-
-<mark class="hl-key">**论文给每个 content filter 都写了一句理由，值得抄**</mark>：
-
-- brightness / saturation → 过曝、欠曝、<mark class="hl-trick">** unnaturally saturated**</mark>
-- grayscale / blurry → 近单色、低锐度
-- entropy / texture → <mark class="hl-trick">**抑制近空图像和「纹理样」的非语义模式**</mark>
-- watermark / aesthetic / OCR / NSFW → 带水印、低质、<mark class="hl-trick">**document-like**</mark>、不安全
-
-![Mage-Flow Table 5：四阶段 sample-level filtering 阈值完整表（论文 §4.1，P17）。九行四列：Pixel count、min(h,w)、Aspect ratio、File size、NSFW score 五行四阶段完全相同；**Watermark score** 0.5→0.3→0.1→0.05 与 **Aesthetic-V2.5 score** 4.5→5.5→6.0→6.5 是唯一逐阶段收紧的两行；OCR text-area ratio ≤0.3 与 OCR num. regions ≤5 也全程不变。](/mageflow-tab5-filter-thresholds.png)
-
-| 指标 | 256² | 512² | 1024² | SFT | 是否变化 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Pixel count $h\times w$ | ≥256² | ≥512² | ≥1024² | ≥1024² | <mark class="hl-trick">末段持平</mark> |
-| $\min(h,w)$ | ≥128 | ≥256 | ≥512 | ≥512 | <mark class="hl-trick">末段持平</mark> |
-| Aspect ratio | [0.1, 10.0] | [0.1, 10.0] | [0.1, 10.0] | [0.1, 10.0] | 冻结 |
-| File size | ≥1KB | ≥1KB | ≥1KB | ≥1KB | 冻结 |
-| NSFW score | ≤0.1 | ≤0.1 | ≤0.1 | ≤0.1 | 冻结 |
-| <mark class="hl-key">Watermark score</mark> | <mark class="hl-key">**<0.5**</mark> | <mark class="hl-key">**<0.3**</mark> | <mark class="hl-key">**<0.1**</mark> | <mark class="hl-key">**<0.05**</mark> | <mark class="hl-trick">**全程收紧 10×**</mark> |
-| <mark class="hl-key">Aesthetic-V2.5 score</mark> | <mark class="hl-key">**≥4.5**</mark> | <mark class="hl-key">**≥5.5**</mark> | <mark class="hl-key">**≥6.0**</mark> | <mark class="hl-key">**≥6.5**</mark> | <mark class="hl-trick">**全程 +2.0**</mark> |
-| OCR text-area ratio | ≤0.3 | ≤0.3 | ≤0.3 | ≤0.3 | 冻结 |
-| OCR num. regions | ≤5 | ≤5 | ≤5 | ≤5 | 冻结 |
-
-#### 九行里只有两行在动
-
-<mark class="hl-trick">**这是本节最重要的观察**：Table 5 看起来是一张「逐阶段收紧」的表，<mark class="hl-key">**但真正随阶段变化的只有 Watermark 和 Aesthetic-V2.5 两行**</mark>。</mark>其余七行四阶段逐字相同。
-
-$$
-\text{Watermark: } 0.5 \to 0.05 \ (\text{10× 收紧}) \qquad \text{Aesthetic: } 4.5 \to 6.5 \ (+2.0)
-$$
-
-<mark class="hl-key">**Table 5 的 caption 把这个意图写成了四个词**：*"higher resolution, **stronger aesthetics**, **lower watermark probability**, and cleaner image content"*</mark> —— <mark class="hl-trick">四个词里只有两个（aesthetics、watermark）有对应的可动阈值</mark>，"higher resolution" 靠前两行实现，而 "cleaner image content" <mark class="hl-key">**没有任何一行在动</mark>。
-
-::: warning "cleaner image content" 这一项在表里是空的
-<mark class="hl-trick">论文 caption 承诺了四个收紧方向，但 Table 5 只能兑现两个半。</mark>
-
-| caption 承诺 | 对应行 | 状态 |
-| :--- | :--- | :--- |
-| higher resolution | Pixel count、$\min(h,w)$ | <mark class="hl-key">✅ 逐阶段收紧（但 SFT 段持平）</mark> |
-| stronger aesthetics | Aesthetic-V2.5 | <mark class="hl-key">✅ 逐阶段收紧</mark> |
-| lower watermark probability | Watermark score | <mark class="hl-key">✅ 逐阶段收紧</mark> |
-| <mark class="hl-trick">cleaner image content</mark> | <mark class="hl-trick">**无对应行**</mark> | <mark class="hl-trick">**未兑现**</mark> |
-
-<mark class="hl-key">**"cleaner image content" 本该由 brightness / saturation / blurry / grayscale / entropy / texture 这六个 filter 承担，但它们一个阈值都没公开**</mark>（见下）。所以这一项在表里是空的 —— <mark class="hl-trick">不是"不需要收紧"，是"没告诉你收紧到哪"</mark>。
-:::
-
-#### Table 5 只覆盖了 15 个过滤器中的 7 个
-
-<mark class="hl-trick">**把 Fig. 8(a) 的方框和 Table 5 的行对一遍，会发现一个论文没提的缺口**</mark>：
-
-| Fig. 8(a) 过滤器 | Table 5 是否有阈值 |
+| 层 | 过滤内容 |
 | :--- | :--- |
-| Resolution | <mark class="hl-key">✅ Pixel count + $\min(h,w)$ 两行</mark> |
-| Aspect ratio | ✅ |
-| File Size | ✅ |
-| NSFW | ✅ |
-| Watermark | ✅ |
-| Aesthetic | ✅ |
-| OCR | <mark class="hl-key">✅ text-area ratio + num. regions 两行</mark> |
-| <mark class="hl-trick">**Broken**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Rotation**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Saturation**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Brightness**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Grayscale**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Blurry**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Entropy**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
-| <mark class="hl-trick">**Texture**</mark> | <mark class="hl-trick">**❌ 无**</mark> |
+| <mark class="hl-trick">**文件层面**</mark> | corrupted / near-empty files、分辨率或 pixel count 不够、极端 aspect ratio、<mark class="hl-trick">**orientation metadata 错误**</mark> |
+| <mark class="hl-trick">**图像内容层**（decode 后）</mark> | brightness、saturation、grayscale、blur、entropy、texture、watermark、aesthetic、OCR、NSFW |
 
-$$
-\underbrace{15}_{\text{Fig.8(a) 的过滤器}} = \underbrace{7}_{\text{Table 5 给了阈值}} + \underbrace{8}_{\text{完全没有阈值}}
-$$
+各 filter 的动机：
 
-<mark class="hl-key">**8 个没有阈值公开的过滤器，恰好就是论文唯一给了文字动机的那批**</mark> —— brightness、saturation、grayscale、blurry、entropy、texture 六个，论文都写了"移除过曝/欠曝/近单色/低锐度/近空/纹理样"的说明，<mark class="hl-trick">**但一个数字都没给**</mark>。
+- <mark class="hl-trick">brightness / saturation</mark> → 去过曝、欠曝和异常高饱和
+- <mark class="hl-trick">grayscale / blurry</mark> → 去近单色和低清晰度
+- <mark class="hl-trick">entropy / texture</mark> → <mark class="hl-key">**压制接近空白、以及纯纹理缺少真实语义内容的图片**</mark>
+- <mark class="hl-trick">watermark / aesthetic / OCR / NSFW</mark> → 分别去水印、低质量、<mark class="hl-key">**document-like**</mark>、unsafe samples
 
-<mark class="hl-key">**这意味着 Table 5 的可复现性是残缺的**：你能精确复现 watermark、aesthetic、resolution、NSFW、OCR 这五类过滤，<mark class="hl-trick">但「图像内容是否干净」这个维度整体缺失</mark>。</mark>而 §2.6 会看到 concept-aware synthesis 的合成图最容易被判 aesthetic 虚高 —— <mark class="hl-key">**恰好落在这 8 个没有阈值的过滤器里**</mark>。
+<mark class="hl-trick">**这里不是所有 filter 都是简单的 true/false**，作者明确说很多都是 <mark class="hl-key">**score + threshold**</mark></mark>。而且阈值随着训练不断变严格：
 
-#### $\min(h,w)$ 单独成行不是冗余
+| Filter | 256² | 512² | 1024² | SFT |
+| :--- | ---: | ---: | ---: | ---: |
+| Pixel count $h\times w$ | ≥256² | ≥512² | ≥1024² | ≥1024² |
+| $\min(h,w)$ | ≥128 | ≥256 | ≥512 | ≥512 |
+| Aspect ratio | [0.1, 10] | [0.1, 10] | [0.1, 10] | [0.1, 10] |
+| File size | ≥1 KB | ≥1 KB | ≥1 KB | ≥1 KB |
+| NSFW | ≤0.1 | ≤0.1 | ≤0.1 | ≤0.1 |
+| <mark class="hl-trick">Watermark</mark> | <mark class="hl-key">**&lt;0.5**</mark> | <mark class="hl-key">**&lt;0.3**</mark> | <mark class="hl-key">**&lt;0.1**</mark> | <mark class="hl-key">**&lt;0.05**</mark> |
+| <mark class="hl-trick">Aesthetic-V2.5</mark> | <mark class="hl-key">**≥4.5**</mark> | <mark class="hl-key">**≥5.5**</mark> | <mark class="hl-key">**≥6.0**</mark> | <mark class="hl-key">**≥6.5**</mark> |
+| OCR text-area ratio | ≤0.3 | ≤0.3 | ≤0.3 | ≤0.3 |
+| OCR region number | ≤5 | ≤5 | ≤5 | ≤5 |
 
-<mark class="hl-trick">**分辨率门槛被写成两行，看起来冗余，其实是一道防病态宽高比的独立闸门**</mark>：
+![Mage-Flow Table 5：四阶段 sample-level filtering 阈值完整表（论文 §4.1，P17）。](/mageflow-tab5-filter-thresholds.png)
 
-$$
-h\times w \ge 1024^2 \quad \text{但同时}\quad \min(h,w) \ge 512
-$$
+因此作者真正采用的是一种 <mark class="hl-key">**progressive filtering**</mark>：<mark class="hl-trick">**256² 阶段不追求把数据洗到极致，而是保留 broad visual coverage**</mark>；随着 512² → 1024² → SFT，逐渐提高 resolution / aesthetic 要求、降低 watermark 容忍度，让数据越来越 clean。
 
-<mark class="hl-key">**光看总像素数会漏掉极端全景图**</mark>：一张 $512\times 2048$ 的图有 1048576 像素 $>1024^2$，但 <mark class="hl-trick">$\min(h,w)=512$</mark> <mark class="hl-trick">**恰好**</mark> 踩线（这里刚好通过）；而 $256\times 4096$ 像素数更多，$\min$ 边却只有 256，<mark class="hl-key">会被 $\min$ 那一行拦下</mark>。
+<mark class="hl-trick">**注意九行里只有 Watermark 和 Aesthetic-V2.2 在动</mark>，其余七行四阶段不变；<mark class="hl-key">**Resolution 门槛在 1024² 段停住（SFT 不再提高），只有质量门槛继续收紧**</mark> —— 所以 SFT 是一次纯质量筛选，不是分辨率升级。
 
-<mark class="hl-trick">**这一行的存在正好和 Aspect ratio 冻结在 [0.1, 10.0] 形成互补**</mark>：宽高比允许 1:10 到 10:1，但总像素和短边同时设卡，<mark class="hl-key">**保证「允许极端比例」不等于「允许极端尺寸」</mark>。对照 Mage-Flow 主打的 native-resolution 能力（512–2048 任意宽高），<mark class="hl-trick">数据侧的短边下限 $\min(h,w)\ge 512$ 正好对应它推理侧要服务的最窄档位</mark>。
+::: warning 本段未公开的细节
+<mark class="hl-trick">**brightness、saturation、grayscale、blur、entropy、texture 虽然论文说用了，但具体模型、计算公式和 threshold 没公开**</mark>。<mark class="hl-key">这六个恰好是 Table 5 里没有对应行的部分</mark> —— 把 Fig. 8(a) 的 15 个过滤器与 Table 5 的行对一遍，会发现只有 7 个过滤器有公开阈值。
 
-#### SFT 段的分辨率门槛不再提高
-
-<mark class="hl-trick">**Pixel count 和 $\min(h,w)$ 都在 1024² 段停住，SFT 段与 1024² 完全相同</mark>（都是 ≥1024² / ≥512）。
-
-$$
-\text{分辨率门槛: } 256 \to 512 \to 1024 \to \textbf{1024 (停)}
-\qquad
-\text{质量门槛(aesthetic): } 4.5 \to 5.5 \to 6.0 \to \textbf{6.5 (继续涨)}
-$$
-
-<mark class="hl-key">**所以 SFT 阶段是一次纯质量筛选，不再是一次分辨率升级。**</mark>这个设计与 §3.1 的 progressive curriculum 里 SFT 仍在 1024² 训练是自洽的 —— <mark class="hl-trick">既然 SFT 不引入更高分辨率的数据，门槛自然不需要再提高</mark>。
-
-::: tip 本节可以带走的四条
-1. <mark class="hl-trick">**Table 5 是三家里唯一完整的过滤阈值表**</mark>（Z-Image、DeepGen 都没有），可直接抄的产物。
-2. <mark class="hl-key">**真正在动的只有 watermark 和 aesthetic 两行</mark> —— 看这张表不要被"逐阶段收紧"的 caption 误导。
-3. <mark class="hl-trick">**$\min(h,w)$ 独立成行是为了防病态宽高比</mark>，与冻结的 aspect ratio [0.1, 10.0] 互补。
-4. <mark class="hl-key">**SFT 段分辨率门槛停住，只涨质量门槛</mark> —— SFT 是纯质量筛选。
+另外 <mark class="hl-trick">**"score + threshold" 超阈值之后的具体机制也没给**</mark>：是软权重、按概率采样还是分桶，论文未说明。
 :::
 
-::: warning 本节未公开 / 未兑现的细节
-- <mark class="hl-trick">**8 个过滤器没有任何阈值**</mark>：Broken、Rotation、Saturation、Brightness、Grayscale、Blurry、Entropy、Texture。其中六个论文写了文字动机但无数字。
-- <mark class="hl-trick">**"threshold-based rather than binary" 的具体机制**</mark>：论文原句 *"Many filters are threshold-based rather than binary"*。<mark class="hl-key">**超阈值不等于丢弃**</mark> —— 是软权重、还是改成按概率采样、还是分桶，<mark class="hl-trick">论文完全没说。这是本节最大的实现层空白</mark>，且它直接决定 Table 5 能否复现。
-- <mark class="hl-trick">**Aesthetic-V2.5 的取值范围未说明</mark>：阈值 4.5–6.5 暗示是 10 分制，但论文没写。<mark class="hl-key">同样没给这个打分器的具体版本/权重（是否公开权重）。</mark>
-- <mark class="hl-trick">**Watermark 检测器是什么**</mark>：只给分数阈值，没说是分类器、检测器还是某种水印概率模型。
-- <mark class="hl-trick">**OCR 两行为什么是两个指标**</mark>：text-area ratio ≤0.3 是文字面积占比，num. regions ≤5 是文字块数量上限。<mark class="hl-key">后者明显是 document-likeness 启发式</mark>，但论文没解释这个设计的意图，也没说两个阈值哪个起主导作用。
-- <mark class="hl-trick">**各过滤器之间是 AND 还是可配置组合**</mark>：论文只说 "filters remove ... images"，默认理解为全部同时生效，未说明是否可配。
+#### ③ Cross-sample deduplication.
+
+<mark class="hl-key">**Filtering 解决的是「单张图片好不好」，Deduplication 解决的则是「这张图片是不是已经在整个数据池里出现过」。**</mark>
+
+Mage-Flow 首先把每张通过过滤的图片输入 <mark class="hl-key">**SSCD（Self-Supervised Copy Detection）**</mark>，得到一个 copy-detection descriptor。
+
+::: info SSCD 原论文解决什么（arXiv:2202.10261）
+<mark class="hl-trick">**SSCD 的目标不是判断「两张图语义上是不是都包含一只狗」，而是判断它们是否来自同一张 2D image source**</mark> —— 即使其中一张经历过 JPEG 压缩、裁剪、resize、加文字等变化，仍希望找到它。
+
+SSCD 原论文也明确指出，<mark class="hl-key">**web-scale copy detection 最现实的方法就是把图片压成较短的 descriptor vector，再使用 approximate nearest-neighbor search**</mark>。这正是 Mage-Flow 选它而不选 CLIP 的理由：CLIP 对「内容相同但风格不同」的图会误判为重复，而 SSCD 是 copy-detection 专用，对裁剪/缩放更鲁棒。
+
+$$
+I_i \xrightarrow{\ \text{SSCD}\ } d_i
+$$
+
+其中 $d_i$ 是一个 dense vector。<mark class="hl-trick">SSCD 原论文中的代表性 ResNet-50 配置使用 **512-dimensional descriptor**</mark>，其方法包括 GeM pooling、linear projection 和 entropy regularization；论文实验中的 descriptor 还会做 <mark class="hl-trick">**whitening 和 L2 normalization**</mark>。
 :::
 
-::: info 留给 §2.5 的一个悬念
-<mark class="hl-trick">**本节刻意不解释一件事**：OCR 的两项阈值（text-area ratio ≤0.3、num. regions ≤5）四阶段完全冻结，<mark class="hl-key">而 Mage-Flow 把 text rendering 当作核心能力</mark></mark>（CVTG-2K 这类榜单是它的卖点）。
-
-<mark class="hl-trick">表面上这是矛盾的。但解法不在 §2.2，而在于 §2.5 —— concept-aware synthesis 里的 synthetic text-rendering 数据，以及 concept-aware sampling 对分布的修正。</mark><mark class="hl-key">**§2.2 先把现象立起来，§2.5 再解释原因，中间不要提前引用结论，否则会把两节的分析揉在一起。</mark>
+::: warning 这里是 SSCD 原论文的实现细节，不代表 Mage-Flow 的配置
+<mark class="hl-trick">**512-D / whitening / GeM 这些都是 SSCD 原论文的代表性配置**</mark>。<mark class="hl-key">**Mage-Flow 本身只说用了 SSCD copy-detection descriptor，没有进一步披露具体 variant**</mark> —— 不能假定它与原论文配置完全一致。
 :::
-#### ③ Cross-sample deduplication.（论文 §4.1 第 2 段粗体导语）
 
-#### ④ Multi-granularity captioning.（论文 §4.1 第 3 段粗体导语）
+然后才轮到 <mark class="hl-key">**FAISS**</mark>。
 
-#### ⑤ Concept-aware synthesis and balancing.（论文 §4.1 第 4 段粗体导语）
+::: info FAISS 解决什么（facebookresearch/faiss）
+<mark class="hl-trick">**FAISS 不是神经网络，它是一个专门做高维 dense-vector similarity search 和 clustering 的库**</mark>。官方定义就是 efficient similarity search of dense vectors。
+
+它的假设是每个实例已经变成向量并有一个 integer ID，可以根据 L2 distance 或 dot product 搜索；<mark class="hl-key">**归一化向量的 dot product 又可以直接用于 cosine similarity**</mark> —— 这正是 §③ 里 $\cos(d_i,d_j)>0.9$ 判据能成立的前提。
+
+FAISS 有不同 index，可以在搜索速度、搜索精度、显存/内存之间 trade-off；有些压缩索引能够扩展到 <mark class="hl-trick">**billions of vectors**</mark>，也支持 GPU。
+:::
+
+因此可以把 Mage-Flow 的 <mark class="hl-key">**descriptor index**</mark> 理解成：
+
+```text
+Image ID        SSCD descriptor
+-----------------------------------------
+image_00001  -> [d1, d2, ..., dD]
+image_00002  -> [d1, d2, ..., dD]
+image_00003  -> [d1, d2, ..., dD]
+...
+```
+
+<mark class="hl-trick">**FAISS index 真正负责的是右边的向量检索，Image ID 再对应回原始图片和质量信息**</mark>。<mark class="hl-key">**Mage-Flow 没有告诉我们到底用了 Flat、IVF、HNSW、PQ 还是哪一种，也没有公开 index 参数**</mark>，所以这一点不能补。
+
+有了这个 index 后，论文先做 <mark class="hl-trick">**within-dataset deduplication**</mark>。同一个 dataset 中，如果两张图的 SSCD descriptor cosine similarity：
+
+$$
+\cos(d_i,d_j)>0.9
+$$
+
+就把它们归入 duplicate group，<mark class="hl-key">**只留下 highest-quality representative**</mark>。特别大的 duplicate cluster 还会做 cap，以防 <mark class="hl-trick">**stock photos、banner、product layout 等 web template**</mark> 在训练数据里大量重复。
+
+接着再做 <mark class="hl-trick">**cross-dataset deduplication**</mark>。作者维护一个 <mark class="hl-key">**persistent descriptor index**</mark>：前面已经接受进入训练池的图片，其 SSCD descriptor <mark class="hl-trick">**不会处理完一个 dataset 就扔掉，而是一直保存在这个全局 index 里**</mark>。之后一个新的 dataset 进来时：
+
+$$
+\text{new image}
+\rightarrow
+\text{SSCD descriptor}
+\rightarrow
+\text{query persistent FAISS index}
+$$
+
+<mark class="hl-trick">如果它和历史已经接受图片的 similarity > 0.9，就拒掉**</mark>。这样才能避免<mark class="hl-key">**「LAION 里一张图，另一个 web dataset 里又出现同一张图」的跨数据源重复**</mark>。
+
+作者还另外维护一个 <mark class="hl-trick">**held-out benchmark index**</mark>。这个 index 里面<mark class="hl-key">**不是训练数据，而是最终 evaluation benchmark 中图像的 descriptors**</mark>。训练候选图片也会去和这个 index 做匹配，如果它和 evaluation image 太接近，就应该被排除，从而降低 <mark class="hl-key">**evaluation contamination / train-test leakage**</mark>。
+
+因此实际上有两个概念完全不同的 index：
+
+$$
+\boxed{
+\text{Persistent Training Index}\;\Longrightarrow\;\text{「这张图是不是训练库里已经有过？」}
+}
+$$
+
+$$
+\boxed{
+\text{Held-out Benchmark Index}\;\Longrightarrow\;\text{「这张图是不是和未来测试集中的图重复或高度近似？」}
+}
+$$
+
+::: warning 本段未公开的细节
+- <mark class="hl-trick">**held-out benchmark index 到底包含哪些 benchmark**</mark> —— 未公开。
+- <mark class="hl-trick">**benchmark matching 是否有独立的 similarity threshold**</mark> —— 论文只给了 0.9 一个数字，未说明是否对 benchmark 另设阈值。
+- <mark class="hl-trick">**"highest-quality representative" 的质量排序公式**</mark> —— 未公开（用什么打分器、是否就是 Aesthetic-V2.5，都没说）。
+- <mark class="hl-trick">**large duplicate cluster 的具体 cap 策略**</mark> —— 只说 capped，没说是随机采样还是按质量取 top-k。
+- <mark class="hl-trick">**两层各淘汰多少、两层的先后淘汰量**</mark> —— 与 §② 同样地，论文只给了总收缩（10B → 1.3B）。
+:::
+
+#### ④ Multi-granularity captioning.
+
+去完重复数据以后，Mage-Flow 再重新建立 text supervision。作者用 <mark class="hl-key">**Qwen3-VL-32B-Instruct**</mark> 给每张图片生成四种粒度的 caption，<mark class="hl-trick">**而且这四种不是单纯「长短不同」，而是负责不同信息**</mark>：
+
+$$
+\text{Phrase} \rightarrow \text{核心概念 / concept statistics}
+$$
+
+$$
+\text{Entity} \rightarrow \text{主要 object + attribute}
+$$
+
+$$
+\text{Composition} \rightarrow \text{spatial layout + object relation}
+$$
+
+$$
+\text{Photographic} \rightarrow \text{style + lighting + viewpoint + atmosphere + fine details}
+$$
+
+![Mage-Flow Fig.8(b)：Multi-Granularity Caption Framework。左侧两个输入图（鸽子 / 画框）经同一个 System Prompt（*"You are a world-class multi-granularity image captioning expert... produce a structured, detailed, and objective description"*）送给 Qwen，右侧对每张图输出四列：**Phrase**（如 `four pigeons, urban scene, wet pavement, puddle reflection, green fence, overcast lighting, concrete steps, muted colors`）、**Entity**（`Four pigeons standing in a large puddle on a paved surface.`）、**Composition**（街级视角描述 + 水面倒影 + 背景木栅栏与混凝土台阶的相对位置）、**Photographic**（`This is a photorealistic, outdoor street photography shot taken at eye level...`）。画框那例的 Photographic 甚至捕捉到了 `'MARIANNA'` 印刷体与 `'Tommy Thompson'` 脚本体两种字体。](/mageflow-fig8b-caption-granularity.png)
+
+<mark class="hl-trick">**Figure 8 给出的例子很典型**</mark>：同一张「水坑里的四只鸽子」图片，phrase caption 是一组高度浓缩的概念；entity caption 变成主体描述；composition caption 详细描述鸽子、水坑、围栏和楼梯之间的位置关系；photographic caption 又进一步描述 eye-level、overcast lighting、羽毛、反射和色调。<mark class="hl-key">**这就是多粒度 caption 的实际含义**</mark>。
+
+<mark class="hl-trick">**训练时会从不同 caption channel 中 sampling**</mark>，让模型既能处理短 prompt，也能处理更长、更具体的 prompt。对于 text-rich image，Qwen3-VL 还被明确要求<mark class="hl-key">**识别 visible text，并把它转换为 rendering instruction**</mark>。
+
+::: warning 本段未公开的细节
+<mark class="hl-trick">**论文没有公开四种 caption 的 sampling ratio**</mark>。<mark class="hl-key">**因此不能假设四类等概率**</mark> —— 而这个比例直接影响「模型见长 prompt 还是短 prompt」的分布，是不能靠猜的。
+
+同样未公开的还有完整 recaption system prompt 在正文中的所有实现细节。
+:::
+
+#### ⑤ Concept-aware synthesis and balancing.
+
+最后一步是在解决：<mark class="hl-key">**10B web 数据已经非常多了，为什么还要自己造数据？**</mark>
+
+原因是<mark class="hl-trick">**「大规模」不代表「能力覆盖均匀」**</mark>。作者明确发现 web corpus 中仍然缺少：
+
+<mark class="hl-trick">**long-text rendering、rare objects、uncommon attributes、structured layouts、under-represented styles。**</mark>
+
+因此他们主动构造 <mark class="hl-key">**targeted supplemental data**</mark>。Text rendering 会专门合成不同 <mark class="hl-trick">**fonts、layouts、languages、colors、backgrounds**</mark> 的图片；除此之外还额外构造 rare concepts 和 compositional cases。
+
+<mark class="hl-key">**这里有一个非常值得保留的工程原则：synthetic data 并不是生成出来直接进入训练。**</mark>所有 supplemental samples 还要<mark class="hl-trick">**重新经过和原数据相同的 filtering + quality-control pipeline，通过之后才 merge 进最终 curated corpus**</mark>。<mark class="hl-key">**这一点 Mage-Flow 写得比 DeepGen 明确 —— 后者用了 Gemini 2.5 Pro + Qwen-Image 合成，但没说是否过同一套过滤。</mark>
+
+接下来才是 <mark class="hl-key">**concept-aware balancing**</mark>。<mark class="hl-trick">**前面的 phrase-level captions 不只是训练 caption，它还有一个很重要的用途 —— 做 concept statistics**</mark>。作者根据这些 phrase-level captions 估计整个 merged corpus 的 concept distribution。
+
+![Mage-Flow Fig.9(a)：generation pre-training 数据的概念分布（太阳图，内环为大类，外环为细类）。**Object & Products 31.3%**（Apparel & Accessories 16.8% / Furniture 5.8% / Packaging 3.5% / Electronics 2.8% / Vehicles 2.4%）、**Scene & Place 26.1%**（Landscape 14.3% / Indoor 7.7% / Cityscape 4.0%）、**People 19.0%**（Person 7.2% / Appearance 6.2% / Portrait 5.7%）、**Living & Food 9.0%**（Food & Drink 4.1% / Plants 2.5% / Animals 2.4%）、**Design 8.8%**（Poster & UI 5.0% / Cartoon 2.1% / Art 1.8%）、**Synthetic 5.8%**（English Text 1.9% / Chinese Text 1.8% / Others 2.1%）。](/mageflow-fig9a-concept-dist.png)
+
+<mark class="hl-trick">**Figure 9(a) 展示的数据依旧是明显 long-tail**</mark>，其中 <mark class="hl-key">**Object & Products 约 31.3%、Scene & Place 约 26.1%、People 约 19.0%**</mark>，是最主要的几个大类；论文正文进一步强调 <mark class="hl-key">**Design 和 Synthetic 虽然占比不是最大的，但承担 layout、product-style、poster-style、text rendering 等重要专项能力**</mark>。
+
+<mark class="hl-trick">如果直接按原始 web frequency 随机采样，那么 head concepts 会不断占据 batch</mark>，例如普通 object、natural scenes、常见 photorealistic images 会远多于长尾概念。因此作者进行 <mark class="hl-key">**concept-aware sampling**</mark>，明确降低：
+
+- <mark class="hl-trick">**frequent objects**</mark>
+- <mark class="hl-trick">**natural scenes**</mark>
+- <mark class="hl-trick">**common photorealistic styles**</mark>
+
+对训练的支配，让 <mark class="hl-key">**capability-critical / long-tail concepts 得到更大的训练曝光率**</mark>。
+
+<mark class="hl-key">**这里需要非常明确地区分两个动作**</mark>：
+
+$$
+\boxed{
+\text{Concept-aware Synthesis}=\text{「原来样本不够}\ \to\ \text{主动增加数据」}
+}
+$$
+
+$$
+\boxed{
+\text{Concept-aware Sampling}=\text{「数据已经存在}\ \to\ \text{改变它被抽到的概率」}
+}
+$$
+
+<mark class="hl-trick">**比如 rare-object 数据本来只有 10 万张，你可以先 synthetic 到 100 万张，这是增加数据量**</mark>；<mark class="hl-key">**但训练时又让这 100 万张比常见的千万级 street/photo 数据更频繁地进入 batch，这是 sampling reweighting**</mark>。
+
+作者还明确说这个 balancing <mark class="hl-trick">**不是从头到尾固定**</mark>：随着训练从早期走向后期，一方面 filtering threshold 越来越严格，另一方面 <mark class="hl-key">**reweighting strength 也越来越强**</mark>。
+
+$$
+\boxed{
+\text{Early training}\ \approx\ \text{broad visual prior}
+\quad\xrightarrow{\ \text{逐阶段加强}\ }\quad
+\text{Later training}\ \approx\ \text{clean + capability-focused distribution}
+}
+$$
+
+这也正好和 <mark class="hl-trick">**256² → 512² → 1024² → SFT 的 filtering curriculum 对应起来**</mark>。
+
+::: warning 本段最关键的未公开细节
+<mark class="hl-trick">**Mage-Flow 没有公开 concept-aware sampling 的数学公式**</mark>，也没有公开各 concept 的具体 sampling weights、<mark class="hl-trick">**frequency → weight 的映射方式**</mark>以及每个 stage 的 reweighting strength。
+
+<mark class="hl-key">**因此像 inverse-frequency sampling、temperature sampling、$1/f^{\alpha}$ 之类都只能作为一般方法理解，不能写成 Mage-Flow 的实际实现。**</mark><mark class="hl-trick">这是本段唯一真正影响训练分布的旋钮，缺了它整个 balancing 就无法复现。</mark>
+:::
+
+#### ⑥ §4.1 全流程压缩（笔记自加）
+
+$$
+\boxed{
+10B\ \text{Raw Pairs}
+\rightarrow
+\text{单样本质量过滤}
+\rightarrow
+\text{SSCD Descriptor}
+\rightarrow
+\text{FAISS 全局近邻检索与去重}
+\rightarrow
+\text{Qwen3-VL 多粒度 Caption}
+\rightarrow
+\text{长尾专项数据合成}
+\rightarrow
+\text{再次 QC}
+\rightarrow
+\text{Concept-aware Sampling}
+\rightarrow
+1.3B\ \text{Curated Pairs}
+}
+$$
+
+::: tip 一句话记住 SSCD + FAISS 的分工
+> <mark class="hl-key">**SSCD 负责回答「图片应该怎样表示，才能识别经过裁剪、压缩、resize 等变化后的同源副本」；FAISS 负责回答「拿到几十亿个这种向量以后，怎么快速从里面找到最相似的几个」。**</mark>
+
+这才是 Mage-Flow 这一段 cross-sample deduplication 真正完整的含义 —— <mark class="hl-trick">**没有 SSCD，web 副本识别不出来；没有 FAISS，10B × 512 维的向量检索成本不可接受。**</mark>
+:::
+
 
 ### 2.2 Edit 数据：~90M raw triples → ~45M retained（论文 §4.2）
 
