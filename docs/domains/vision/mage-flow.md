@@ -25,7 +25,7 @@
 
 | # | 主题 | 论文位置 | 优先级 | 状态 |
 | :-: | :--- | :--- | :-: | :--- |
-| 1 | Data Collection & Curation | §4.1 (P17–18) | ★★★ | 🟢 §2.1 完整 |
+| 1 | Data Collection & Curation | §4.1 (P17–18) + §4.2 (P18–19) | ★★★ | 🟢 §2.1 + §2.2 完整 |
 | 2 | Pre-training + SFT Recipe | §5.1 (P20–21) | ★★★ | ⬜ |
 | 3 | Diffusion-NFT Post-training | §5.2 (P21–24) | ★★★ | ⬜ |
 | 4 | Few-step Distillation | §5.3 (P24–26) | ★★☆ | ⬜ |
@@ -347,13 +347,222 @@ $$
 
 ### 2.2 Edit 数据：~90M raw triples → ~45M retained（论文 §4.2）
 
-#### ① 导语段：90M 组成、~50M 开源 + ~40M 自合成（论文 §4.2 无粗体标题的开场段）
+#### ① 导语段：训练单元与 90M 来源构成
 
-#### ② Editing data synthesis.（论文 §4.2 第 1 段粗体导语）
+Mage-Flow-Edit 的基本训练单元是一个三元组：
 
-#### ③ VLM-based dataset filtering.（论文 §4.2 第 2 段粗体导语）
+$$
+(\text{source image},\ \text{edit instruction},\ \text{target image})
+$$
 
-#### ④ Edit-type tagging and balancing.（论文 §4.2 第 3 段粗体导语）
+也就是<mark class="hl-trick">**「原图 + 编辑指令 + 编辑后目标图」**</mark>。<mark class="hl-key">**这个三元组是 pair 级的 —— 质量判断的对象不是单张图，而是「这一组(source, instruction, target) 是否自洽」**</mark>，这是 editing 数据和 T2I 数据最本质的差别。
+
+作者一开始就给出规模：
+
+| 来源 | 规模 | 细分 |
+| :--- | ---: | :--- |
+| <mark class="hl-trick">开源 instruction-based editing datasets</mark> | <mark class="hl-key">**~50M**</mark> | — |
+| <mark class="hl-trick">内部合成数据</mark> | <mark class="hl-key">**~40M**</mark> | <mark class="hl-trick">**~10M low-level image-processing**</mark> + <mark class="hl-trick">**~30M general semantic-editing**</mark> |
+| <mark class="hl-key">**raw pool 合计**</mark> | <mark class="hl-key">**~90M triples**</mark> | |
+
+整个流程是<mark class="hl-trick">**先收集/合成 → 再做 VLM voting filter → 之后 edit-type tagging → 最后 category balancing**</mark>。
+
+#### ② Editing data synthesis.
+
+论文先讲这 40M 内部 synthetic 数据是怎么构成的。重点是那 <mark class="hl-key">**30M semantic-editing data**</mark>，<mark class="hl-trick">**它不是泛泛地「用模型造编辑数据」，而是有意识地覆盖真实用户会用到的 editing skills**</mark>。
+
+作者明确列出的能力包括：<mark class="hl-trick">**background replacement、color modification、material modification、tone transfer、style transfer、subject addition、subject removal、subject replacement、object-count change、motion change、viewpoint change、text editing、portrait retouching、old-photo restoration、global adjustment**</mark>。
+
+<mark class="hl-key">**也就是说，他们先从能力维度反推数据缺口，再专门造对应的 source–target pairs，而不是只依赖现成开源数据。**</mark>
+
+每一种 edit type 都有自己的 <mark class="hl-key">**type-specific synthesis pipeline**</mark>。论文明确说这些 pipeline 会组合几类现成技术：<mark class="hl-trick">**off-the-shelf generation、inpainting、segmentation、image processing，以及 template-based instruction generation**</mark>。
+
+这样做的目的有两个：
+
+1. <mark class="hl-key">**可以获得明确的 source–target 对应关系以及清晰的 editing instruction**</mark>
+2. <mark class="hl-key">**专门补那些在开源数据里数量少或者质量不稳定的 editing category**</mark>
+
+$$
+\boxed{
+\text{先定义需要的 Edit 能力}
+\rightarrow
+\text{针对每种能力设计合成 pipeline}
+\rightarrow
+(\text{source},\ \text{instruction},\ \text{target})
+}
+$$
+
+<mark class="hl-trick">**这里和 T2I 的 concept-aware synthesis 其实有相似思想：缺什么能力，就主动造什么数据。**</mark>§2.1⑤ 的 long-tail 概念补齐和这里的 edit capability 补齐，是同一个方法论在两个模态上的应用。
+
+::: warning 本段未公开的细节
+<mark class="hl-trick">**作者没有进一步公开每一种 edit type 具体用了哪个 generation / inpainting / segmentation 模型**</mark>，也<mark class="hl-trick">**没有公开 30M semantic 数据内部各类的原始合成比例**</mark>。<mark class="hl-key">注意这和 §2.1⑤ 是同一类缺口 —— T2I 侧没给 synthetic 占比，editing 侧连各类内部比例也没给。</mark>
+:::
+
+#### ③ VLM-based dataset filtering.
+
+有了 90M triples 后不能直接训练，因为 <mark class="hl-key">**editing pair 的「质量」比普通 T2I 更难判断**</mark>。作者明确指出 raw editing triples 常见的问题包括：
+
+| 问题 | 说明 |
+| :--- | :--- |
+| <mark class="hl-trick">**instruction 未被执行**</mark> | target 根本没有正确执行 instruction |
+| <mark class="hl-trick">**修改了不该变的区域**</mark> | 动了 unrelated regions |
+| <mark class="hl-trick">**source identity / layout 被无必要改变**</mark> | — |
+| <mark class="hl-trick">**引入明显 visual artifacts**</mark> | — |
+
+所以 Mage-Flow 使用 <mark class="hl-key">**3 个独立的 Qwen3.5-9B experts**</mark> 来做过滤。
+
+<mark class="hl-key">**这里有一个很关键的细节：三个 expert 不是完全相同的 judge。**</mark>每一个都有<mark class="hl-trick">**不同的 system prompt，而且评价 criteria 只部分重叠**</mark>，作者明确说这样设计是为了让三个判断 <mark class="hl-key">**"complementary rather than identical"**</mark>。
+
+每个 expert 同时看到：
+
+$$
+(\text{source image},\ \text{target image},\ \text{edit instruction})
+$$
+
+然后重点判断三个核心问题：
+
+1. <mark class="hl-trick">**requested edit 是否正确执行**</mark>
+2. <mark class="hl-trick">**unrelated regions 是否保留**</mark>
+3. <mark class="hl-trick">**最终 edited result 是否 visually plausible**</mark>
+
+<mark class="hl-trick">**Expert 首先输出 reasoning，然后系统把 reasoning 解析成 criterion-level assessment，最后通过预先设定的 threshold 转成 pass / fail。**</mark>
+
+![Mage-Flow Fig.10：Editing data filtering pipeline。左侧蓝色框 `~90M triples total` 分成 `~50M Open-source Editing Triples` 与 `~40M Synthesized In-house Triples`（后者再分 `~10M Low-level processing` / `~30M General semantic editing`）。中间橙色虚线大框 `VLM Voting`：三张叠放的 Qwen 卡片标 `Experts "You are an expert evaluator..."`，每张内含 `LLM Analyze → Result Parsing`，随后进入六边形 `Majority Vote (≥ 2/3 pass → admit)`。框内给了两个实例——**Pass Example**：`Replace the basket of bread with a vibrant bowl of fresh fruit`，三位 expert 打分 **Expert1: 10 / Expert2: 10 / Expert3: 6**（前两位判"perfectly done / matching pedestal, lighting, and shadows exactly"，第三位指出"bowl's shape and position differ, causing a mismatch in scale and placement"），结果 **✓ ADMIT**；**Fail Example**：`change the color of tree leaves to orange`，打分 **Expert1: 7 / Expert2: 4 / Expert3: 4**（意见包括"leaves on the left side have been changed while the rest remains green"、"partial coverage with visible artifacts"、"only partial recolor with visible hue mismatch and spill"），结果 **✗ DISCARD**。右侧纵向流程：`~45M Triples Survive (~20M open + ~25M synthetic)` → `Edit-type Tagging`（标注 *background, style, color, subject add/remove/replace...*）→ `Edit-category Balancing` → `Training Set`。](/mageflow-fig10-edit-filter-pipeline.png)
+
+$$
+\text{Triple}
+\rightarrow
+3\times\text{Qwen3.5-9B Expert}
+\rightarrow
+\text{Reasoning}
+\rightarrow
+\text{Result Parsing}
+\rightarrow
+\text{Pass / Fail}
+$$
+
+最后采用 <mark class="hl-key">**majority vote**</mark>：
+
+$$
+\boxed{
+\ge 2/3\ \text{experts pass} \Rightarrow \text{保留}
+}
+$$
+
+否则丢弃。<mark class="hl-key">**图里两个示例的对比很能说明问题**</mark>：Pass 那一例三位 expert <mark class="hl-trick">**对 scale / position 的判断并不完全一致**</mark>（第三位明确指出形状和位置有偏差），但总体多数通过；Fail 那一例因为<mark class="hl-trick">**存在绿色残留、partial recolor 和 visible artifacts**</mark>，多数 expert 判失败。
+
+<mark class="hl-key">**所以这套 voting 不是只看「有没有发生变化」，而是在联合判断 instruction execution + preservation + visual quality。**</mark>
+
+最终过滤非常狠：
+
+$$
+90M \rightarrow 45M
+$$
+
+$$
+50M\ \text{open-source} \rightarrow 20M \qquad\qquad 40M\ \text{synthetic} \rightarrow 25M
+$$
+
+<mark class="hl-trick">**注意两个来源的通过率差异很大**</mark>：open-source 只有 $20/50 = 40\%$ 存活，而 synthetic 高达 $25/40 = 62.5\%$。<mark class="hl-key">这个差异合乎直觉 —— 自合成数据的 target 是由 pipeline 按指令生成的，天然更「指令一致」；而开源数据的 source–target 配对质量参差不齐。</mark>
+
+::: warning 本段未公开的细节
+<mark class="hl-trick">**论文没有公开三个 expert 的完整 system prompts，也没有公开每个 criterion 的具体 threshold**</mark>。<mark class="hl-key">因此我们知道它是「三 expert + reasoning + criterion-level parsing + predefined threshold + majority voting」，但**不能进一步写出具体评分公式**</mark>。
+
+Fig. 10 里出现的是 10 / 6 / 7 / 4 这类整数分，但<mark class="hl-trick">**图上没有说明分数区间、量纲，也没有说明 threshold 落在哪里**</mark>，不能反推。
+:::
+
+#### ④ Edit-type tagging and balancing.
+
+过滤完的 45M 数据仍然存在另一个问题：<mark class="hl-trick">**不同 edit operation 的数量非常不均匀**</mark>。所以作者又人工定义了一个统一的 <mark class="hl-key">**19-category edit taxonomy**</mark>，要求所有保留下来的 editing data 最终都映射到这个统一 taxonomy。
+
+<mark class="hl-key">**但如果拿 VLM 给 45M triples 逐样本分类，成本太高，所以 Mage-Flow 做了一个很实用的工程简化：annotation unit 不是单条样本，而是根据原始 dataset 的组织方式决定。**</mark>
+
+| 原始数据组织方式 | annotation unit |
+| :--- | :--- |
+| <mark class="hl-trick">整个 dataset 只包含一种稳定的 editing operation</mark> | <mark class="hl-key">**整个 dataset 当一个 unit**</mark> |
+| <mark class="hl-trick">dataset 已划成语义一致的 sub-datasets</mark> | <mark class="hl-key">**每个 sub-dataset 当一个 unit**</mark> |
+| <mark class="hl-trick">数据里本身有明确的 edit-type field</mark> | <mark class="hl-key">**具有同一个 field value 的样本归成一个 unit**</mark> |
+
+最后再由<mark class="hl-trick">**人工把这些 units 映射到 19 个统一 category**</mark>。<mark class="hl-key">**这样就不用对 45M 张数据逐条跑分类器**</mark>。
+
+完成统一 taxonomy 后，作者对<mark class="hl-trick">**每个 constituent dataset 和每个 edit category 的 sampling rate**</mark>进行调整，目的是让最后的 training mixture 在 taxonomy 上覆盖得更广、更合理。作者明确说这样可以<mark class="hl-key">**避免高频操作 dominating gradient，同时保证 rare but important edit types 被充分采到**</mark>。
+
+<mark class="hl-key">**注意这里本质和前面 T2I concept-aware sampling 很像：不是简单删除头部数据，而是调训练时的 sampling rate。**</mark>§2.1⑤ 的 concept-aware sampling 和这里的 edit-category balancing 是同一个机制在两个模态上的落地。
+
+![Mage-Flow Fig.9(b)：editing pre-training 数据的分布（太阳图，内环为 coarse domain，外环为细类）。**Scene & Spatial 20.5%**（Viewpoint Shift 15.0% / Background Change 5.5%）、**Attribute Editing 20.3%**（Attribute Tweak 8.6% / Portrait Retouch 5.4% / Recolor 2.6% / Action & Pose 2.2% / Material Change 2.2%）、**Text Editing 18.6%**（Poster 6.2% / Other Text 5.5% / Text Replacement 4.5% / Text Addition 1.61% / Text Removal 0.87%）、**Object Editing 15.7%**（Object Removal 5.7% / Object Replacement 4.5% / Object Addition 4.2% / Count Change 1.3%）、**Global Stylization 10.4%**（Style Transfer 8.4% / Tone & Lighting 2.0%）、**Low Level 9.3%**（Other Low Level 4.4% / Depth Map 2.1%）、**Reference & Composition 5.0%**（Multi Reference 2.1% / Subject Extraction 2.0% / Composition 0.91% / Colorization 0.66% / Normal Map 0.63% / Canny Edge 0.61% / Old Photo 0.90%）。](/mageflow-fig9b-edit-dist.png)
+
+Figure 9(b) 展示 balance 后真正进入 pre-training 的编辑数据分布：
+
+| coarse domain | 占比 |
+| :--- | ---: |
+| <mark class="hl-trick">Scene & Spatial</mark> | <mark class="hl-key">**20.5%**</mark> |
+| <mark class="hl-trick">Attribute Editing</mark> | <mark class="hl-key">**20.3%**</mark> |
+| <mark class="hl-trick">Text Editing</mark> | <mark class="hl-key">**18.6%**</mark> |
+| <mark class="hl-trick">Object Editing</mark> | <mark class="hl-key">**15.7%**</mark> |
+| <mark class="hl-trick">Global Stylization</mark> | 10.4% |
+| <mark class="hl-trick">Low Level</mark> | 9.3% |
+| <mark class="hl-trick">Reference & Composition</mark> | 5.0% |
+
+更细的组成包括 <mark class="hl-trick">**Viewpoint Shift 15.0%、Background Change 5.5%、Attribute Tweak 8.6%、Portrait Retouch 5.4%、Style Transfer 8.4%、Poster 6.2%、Object Removal 5.7%**</mark> 等。
+
+<mark class="hl-trick">**值得注意的是 Viewpoint Shift 单独占 15.0%**</mark>，<mark class="hl-key">**与 Scene & Spatial 合计 20.5% 里的四分之三 —— 这是全图最大的单一细类</mark>。而 §2.1⑤ 的 T2I 侧最大细类是 Apparel & Accessories 16.8%（纯长尾污染），<mark class="hl-trick">**两边的「最大细类」性质完全不同：editing 侧的 Viewpoint Shift 是一个真实且高价值的编辑能力，T2I 侧的 Apparel 则不是**</mark>。
+
+::: warning 论文自身需要谨慎记录的地方：19 类与 Figure 9(b) 对不上
+<mark class="hl-trick">**正文明确说人工 taxonomy 是 19 edit categories，但 Figure 9(b) 又画出了 7 个 coarse domains 以及更多细分 label**</mark>，<mark class="hl-key">**图中的可见细分类数量并不能直接和「19」一一对应**</mark>。
+
+论文正文<mark class="hl-trick">**没有给出完整的「19 类名称列表及其和 Figure 9(b) 各层标签的映射关系」**</mark>，所以<mark class="hl-key">**这里不能擅自从饼图反推出那 19 类到底是哪 19 个**</mark>。我们只能准确记录：
+
+- <mark class="hl-trick">**存在一个手工定义的 19-category unified taxonomy**</mark>（正文原文）
+- <mark class="hl-trick">**Figure 9(b) 展示的是 balancing 后的数据组成**</mark>（图注原文）
+
+<mark class="hl-key">**这两句话都成立，但它们之间的映射关系论文没有给出**</mark> —— 这是引用时必须标注的边界。
+:::
+
+#### ⑤ §4.2 全流程压缩（笔记自加）
+
+$$
+\boxed{
+90M\ \text{Raw Editing Triples}
+=
+50M\ \text{Open}
++
+40M\ \text{Synthetic}
+}
+$$
+
+$$
+\downarrow
+$$
+
+$$
+\boxed{
+\text{Editing Data Synthesis}
+\rightarrow
+\text{3-Expert VLM Voting}
+\rightarrow
+45M\ \text{Retained}
+\rightarrow
+\text{19-category Tagging}
+\rightarrow
+\text{Sampling Balancing}
+}
+$$
+
+::: tip 这一节真正值得记住的一条
+<mark class="hl-key">**editing 数据不能像 T2I 一样只检查「图好不好」，还必须判断「指令有没有执行、该保留的区域有没有保留、source identity / layout 有没有被破坏、结果是否自然」。**</mark>
+
+所以 Mage-Flow 用 multi-VLM expert voting 做 <mark class="hl-trick">**pair-level QC**</mark>；之后再统一 taxonomy 和调采样比例，解决不同 edit capability 分布严重不均的问题。
+
+<mark class="hl-trick">**和 §2.1 的 T2I pipeline 对照着记，差异只在第二、三步**</mark>：
+
+| 步骤 | T2I（§2.1） | Editing（§2.2） |
+| :--- | :--- | :--- |
+| 单样本质量 | 15 个 filter 的 score + threshold | <mark class="hl-trick">**pair 级：instruction 执行 + 区域保留 + visual plausibility**</mark> |
+| 去重 | SSCD + FAISS，cos > 0.9 | <mark class="hl-key">**论文未提是否对 editing 也做去重**</mark> |
+| 平衡 | concept-aware sampling | edit-category sampling rate 调整 |
+| 共同点 | <mark class="hl-trick">**都不删头部数据，只调 sampling rate**</mark> | 同 |
+:::
+
 
 ### 2.3 本节小结与未公开细节（笔记自加，非论文章节）
 
