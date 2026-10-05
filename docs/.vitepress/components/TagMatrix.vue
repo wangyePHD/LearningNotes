@@ -135,6 +135,15 @@ const notesList = ref([
     summary: '微软 4B 原生分辨率基模，tokenizer–backbone–系统三层协同：Mage-VAE（one-step diffusion 编解码 + anchor-latent KL，tokenization 成本降 >10×）+ Native-Resolution MMDiT（variable-length packing + per-sample 2D RoPE）+ 栈级 CUDA 融合（MFU 13.88%→29.28%，2.48×）。训练线：Data 10B→1.3B / Edit 90M→45M → progressive pretrain/SFT → Diffusion-NFT（T2I 20K prompts 单 reward 路由；Edit 30K + RationalRewards，Edit:Gen=4:1）→ 4-step D-DMD + adversarial guidance。Turbo 单 A100 1024² 出图 0.59s。',
     tags: ['Vision', 'Diffusion', 'MMDiT', 'Flow Matching', 'VAE', 'RL', 'DiffusionNFT', 'Distillation', 'Efficiency']
   },
+  {
+    title: '图像基模训练 Playbook v1.0 (四篇技术报告蒸馏)',
+    link: '/domains/vision/training-playbook',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-10-04',
+    summary: '不是论文笔记而是方法论字典：Data Engine → Pretrain/SFT → Generation/Edit → Post-training/RL → Evaluation → 实验系统 → 工业项目闭环。核心主张是「先看分布再看算法」与「RL 失败时第一检查项往往不是 RL 公式」。含三张诊断表（Data / SFT / 全局症状）与 A/B/C 证据等级标注，末尾给出八格工具箱（数据问题→Data Engine、分布不对→SFT、能力到瓶颈→capability RL、RL 漂→SFT/KL/Replay、Edit 忘 Gen→Generation Replay、多 reward 打架→Normalization/Routing、高分辨率贵→Tokenizer/System、latent 不好学→重审 VAE）。',
+    tags: ['Vision', 'Playbook', 'Data-centric', 'Flow Matching', 'RL', 'GRPO', 'Distillation']
+  },
   // 2026-09-23 起隐藏非 SeFi 条目（方法 A：仅摘入口，文件保留）
   {
     title: '语义先行扩散范式 (SFD)',
@@ -290,6 +299,15 @@ const notesList = ref([
     date: '2026-09-27',
     summary: '计划即偏序 DAG；原子动作 A1/A2/A3 公理与 εN 误差累积给出粒度判据 N ≤ lnρ/lnq；Kahn 拓扑调度与关键路径并行上界；环检测与静默部分失败防御。',
     tags: ['Agent', 'Planning', 'AoT', 'DAG', 'Complexity', 'Tool Use']
+  },
+  {
+    title: '2026 年第 41 周研习周报：arXiv 视觉生成六大赛道雷达与月度技术演变',
+    link: '/reviews/2026-W41',
+    domain: '📅 研习复盘',
+    domainClass: 'domain-multi',
+    date: '2026-10-05',
+    summary: '周度全域扫描 + 月度演变归因：缩放轴迁移至步内计算深度/潜空间设计/动态条件；DMAD 与 Elastic Forcing 删除蒸馏 teacher；一步 latent 预测的均值识别缺陷与 planning 范围硬上限；GRPO 均匀优势被时间/空间/latent 三维击穿。',
+    tags: ['T2I', 'Diffusion DiT', 'Image Editing', 'Video Editing', 'World Model', 'GRPO', 'RLVR', 'Distillation', 'Weekly Review']
   },
   {
     title: '2026 年第 38 周研习周报：视频时空生成与算力工程闭环',

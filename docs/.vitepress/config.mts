@@ -98,6 +98,7 @@ export default defineConfig({
           text: '📅 研习复盘与时光机',
           items: [
             { text: '周报时光机总览', link: '/reviews/' },
+            { text: '2026年第41周复盘 (arXiv六赛道雷达)', link: '/reviews/2026-W41' },
             { text: '2026年第38周复盘 (视频/算力)', link: '/reviews/2026-W38' }
           ]
         }
@@ -139,6 +140,7 @@ export default defineConfig({
             { text: '单流扩散基模 Z-Image', link: '/domains/vision/z-image' },
             { text: '轻量统一多模态 DeepGen 1.0', link: '/domains/vision/deepgen' },
             { text: '原生分辨率高效基模 Mage-Flow', link: '/domains/vision/mage-flow' },
+            { text: '图像基模训练 Playbook v1.0', link: '/domains/vision/training-playbook' },
             { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
             { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' }
           ]
