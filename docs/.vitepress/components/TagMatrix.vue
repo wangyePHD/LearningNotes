@@ -141,7 +141,7 @@ const notesList = ref([
     domain: '🖼️ 图像视觉',
     domainClass: 'domain-vision',
     date: '2026-10-05',
-    summary: 'Qwen3-VL 作条件编码器 + MMDiT 联合建模 T2I 与指令编辑。数据按最终能力反向设计：Fig.5 给出 3 类 T2I 与 9 类单图编辑 + 3 类多图编辑（正文只写 6 项且与图不一致）。四类 Caption（General / Text / Knowledge / Structured）按 task type 与 image characteristic 路由，而非单一模板。六阶段数据 curriculum：256P T2I（8 个按「先便宜后昂贵」排序的过滤器）→ 256P 加 Edit → 512P 加 Synthetic → 512/1024P 收紧高分辨率质量（Quality/Aesthetic/Compression）→ 多分辨率共存至 2048P → SFT 复用算子加严阈值并做 Distribution Shaping。三轨 Data Flywheel 按失败原因路由。训练 700K→250K→10K 三段，T2I:TI2I 由 9:1 转为 7:3，lr 1e-4→2e-5→1e-5。',
+    summary: 'Qwen3-VL 作条件编码器 + MMDiT 联合建模 T2I 与指令编辑。数据部分四条增量：① Capability-driven data taxonomy（Fig.5 暴露 9 类单图编辑 + 3 类多图编辑）；② Task-specific supervision（四类 Caption 按 task type 与 image characteristic 路由）；③ Stage-aware curriculum（Fig.6 Sankey 六阶段：256P T2I 8 过滤器 → 256P 加 Edit → 512P 加 Synthetic → 512/1024P 收紧质量 → 多分辨率共存至 2048P → SFT Distribution Shaping）；④ Error-attribution Flywheel（Fig.7 闭环：bad case 先归因再路由到 Pretrain / RL / PE）。Data 章三张核心配图 Fig.5/6/7 已全部收录。结论：给的是设计原则而非可复现 recipe——阈值、sampling ratio、归因模型全部未公开。',
     tags: ['Vision', 'Unified Model', 'MMDiT', 'Flow Matching', 'RL', 'GRPO', 'Data-centric', 'Data Flywheel']
   },
   {
