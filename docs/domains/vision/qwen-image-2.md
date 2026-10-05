@@ -3,8 +3,8 @@
 > **标签**：`Vision` `Unified Model` `MMDiT` `Flow Matching` `RL` `GRPO` `Data-centric` `Data Flywheel`
 > **更新时间**：2026-10-05
 > **原文**：本地 `Papers/Qwen-image-2.0.pdf`（30 页，Qwen Team）
-> **精读重点**：§2 Data（四小节）→ §4 Training（三阶段 + RLHF + 蒸馏）
-> **精读进度**：§2 Data 全五小节 ✅ ｜ §3 ⬜ ｜ §4 ⬜ ｜ §5 ⬜
+> **精读重点**：§2 Data ✅ → §3.3 Prompt Enhancer ✅ → §4.1 Training Recipe ✅ → §4.2 RLHF / GRPO ✅
+> **精读进度**：§2 全五小节 ✅ ｜ §3.3 ✅ ｜ §4.1 ✅ ｜ §4.2 ✅ ｜ §3.1–3.2 ⬜ ｜ §4.3 ⬜ ｜ §5 ⬜
 > **已有相关笔记**：[Qwen-Image-2.0 RLHF 专辑](./image-rl-posttraining/qwen-image-2-rl.md)（RL 专题，spec 格式）｜ [图像基模训练 Playbook](./training-playbook.md)（跨论文方法论字典）
 
 ---
@@ -1414,7 +1414,7 @@ $$
 
 <mark class="hl-key">**这四步值得正式写进 [Image Foundation Model Training Playbook](./training-playbook.md)。**</mark>
 
-## 3. Architecture ⬜
+## 3. Architecture（§3.1–3.2 待填）
 
 ### 3.1 Variational AutoEncoder
 
@@ -1428,48 +1428,1091 @@ $$
 
 送入 Qwen-Image-2.0 block。架构为 MMDiT（引 Esser et al. 2024），text 与 image token 在**共享 backbone** 内处理。
 
-### 3.3 Prompt Enhancer
+### 3.3 Prompt Enhancer ★★★★
 
-<mark class="hl-trick">**PE 从 Qwen3.5-9B 初始化**</mark>，作为 T2I 与 TI2I **统一的** prompt enhancement 模型训练。
+<mark class="hl-trick">**这一节是全篇对工业落地最有增量的工具之一**</mark>。<mark class="hl-key">**它不是一个「把用户 prompt 改写得更长」的 LLM，而是一个专门训练、并且最终用图像生成质量做 RL 对齐的 prompt 重写模型**</mark>。
 
-<mark class="hl-key">**论文提到一个反直觉的设计**</mark>：编辑场景下「输入图本身已提供丰富视觉上下文」，因此<mark class="hl-trick">**用一个 MLLM 把长形式标注summarize 成简洁 editing prompt，以「avoid unnecessary stochastic degradation」**</mark>——即<mark class="hl-key">**编辑场景刻意不让 PE 长篇大论**</mark>。这一条与 [Playbook §1](./training-playbook.md) 的「caption 不是越长越好」是同一类判断。
+#### ① 动机：复杂任务的瓶颈在 specification，不在模型容量
 
-## 4. Training ⬜
+<mark class="hl-trick">**论文的判断是：对于复杂图像生成任务——**</mark>
+
+$$
+\text{infographics}
+\qquad
+\text{posters}
+\qquad
+\text{typographic layouts}
+\qquad
+\text{multi-panel storyboards}
+\qquad
+\text{data visualizations}
+$$
+
+<mark class="hl-trick">**生成质量同时取决于两件事：**</mark>模型的视觉合成能力，<mark class="hl-key">**以及 prompt 对以下四类信息的表达能力**</mark>：
+
+$$
+\boxed{
+\text{layout}
++
+\text{object relations}
++
+\text{visual hierarchy}
++
+\text{compositional intent}
+}
+$$
+
+<mark class="hl-key">**但真实用户 prompt 在「granularity 与 explicitness」上差异极大**</mark>——论文称之为 <mark class="hl-trick">**`a key bottleneck for high-complexity visual creation`**</mark>。因此 PE 的定位是一个独立的重写模块：
+
+$$
+\boxed{
+\text{PE} : \text{user queries of varying specificity}
+\;\rightarrow\;
+\text{structured, detail-rich prompts}
+}
+$$
+
+<mark class="hl-trick">**论文用的动词是 `converts`，目标是让下游生成器 `better capture the intended visual design across diverse tasks`**</mark>——<mark class="hl-key">**注意落脚点在「下游生成器能否消费」，不是「文本本身好不好」**</mark>，这个区别在 ⑥ 会变成 RL 的动机。
+
+#### ② 数据构造：逆向退化流水线（本节最值得学的一招）
+
+<mark class="hl-key">**作者不是去收集大量「短 prompt → 长 prompt」的人工改写对，而是从一条已经非常详细的 annotation 出发，反向制造真实用户可能输入的简短 prompt。**</mark>论文把这条流水线称为 <mark class="hl-trick">**`a reverse-engineering pipeline that atomically degrades fine-grained annotations`**</mark>。
+
+完整链条：
+
+$$
+\boxed{
+P_{\rm fine}
+\;\xrightarrow{\ \text{LLM 分类}\ }\;
+\text{category}
+\;\xrightarrow{\ \text{采样策略}\ }\;
+S'\subseteq S
+\;\xrightarrow{\ \text{施加}\ }\;
+P_{\rm short}
+}
+$$
+
+##### 第一步：用 LLM 做 task-aware 四分类
+
+给定一条详细标注 $P_{\rm fine}$，先用一个 LLM 把它分到四类生成任务之一：
+
+| 类别 | 论文原文 | 这一类的退化重点 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">General</mark> | General | 场景、光照、材质、构图 |
+| <mark class="hl-trick">Portrait</mark> | Portrait | 人像特征、肤质、光位 |
+| <mark class="hl-key">Text</mark> | Text | 文字内容与版面 |
+| <mark class="hl-key">Complex Text</mark> | Complex Text | 长文本、多分栏、复杂排版 |
+
+<mark class="hl-key">**论文明确说明了这个分类的作用**</mark>：<mark class="hl-trick">**`This task-aware classification ensures that the subsequent degradation process is semantically grounded and adapted to the characteristics of each prompt type`**</mark>——<mark class="hl-key">**即先分型再退化，退化才不会退到无关维度上**</mark>。
+
+::: warning 这四类与 §2.2 的四类 caption 不是同一套 taxonomy
+<mark class="hl-trick">**这是本篇最容易混淆的一点，论文没有解释两套分类的关系：**</mark>
+
+| | 分类 | 决定什么 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">**§2.2 Data Annotation**</mark> | General / **Text** / Knowledge / Structured | <mark class="hl-key">**监督表示形式**</mark>（写什么形状的 caption） |
+| <mark class="hl-trick">**§3.3 Prompt Enhancer**</mark> | General / Portrait / **Text** / **Complex Text** | <mark class="hl-trick">**施加哪些退化操作**</mark> |
+
+<mark class="hl-trick">**只有 `General` 与 `Text` 两项重合，`Knowledge` / `Structured` 在 PE 侧没有对应，`Portrait` / `Complex Text` 在 caption 侧没有对应。**</mark><mark class="hl-key">**引用时不要把这两套四分类混为一谈。**</mark>
+:::
+
+##### 第二步：从策略池采样并施加退化
+
+<mark class="hl-trick">**根据类别，从预定义的 strategy pool 中采出一组适用的退化策略**</mark>，记为 $S$。论文明确列出的三类策略：
+
+$$
+\boxed{
+\begin{aligned}
+&\text{Stylistic Simplification} && \text{（文体简化，去掉专业术语）}\\
+&\text{Colloquialization} && \text{（口语化）}\\
+&\text{Removal / Underspecification of Visual Details} && \text{（删除或弱化 } \textbf{lighting, texture, layout, background}\text{）}
+\end{aligned}
+}
+$$
+
+##### 第三步：把 stochasticity 塞进去，让分布贴近长尾
+
+<mark class="hl-key">**第三步是这一招真正的关键，论文措辞是 `To approximate the long-tail distribution of real-world user inputs, we introduce stochasticity into the degradation process`。**</mark>
+
+$$
+\boxed{
+\text{从 } S \text{ 中按预定义概率分布采样一个子集，然后施加，得到 } P_{\rm short}
+}
+$$
+
+<mark class="hl-key">**而且采样比例本身是可调的**：论文说通过调整 sampling proportions，这条流水线能产出</mark>
+
+$$
+\boxed{
+\text{varying difficulty}
+\qquad
+\text{varying ambiguity}
+\qquad
+\text{varying information density}
+}
+$$
+
+<mark class="hl-trick">**所以得到的不是一个「短 prompt 分布」，而是一个<mark class="hl-key">难度连续谱</mark>——从轻度口语化到几乎不含视觉信息。**</mark>
+
+#### ③ Inverse Reasoning CoT：退化操作的逆过程天然就是推理链
+
+<mark class="hl-trick">**这个设计最巧的地方在于：因为系统自己知道「从 $P_{\rm fine}$ 到 $P_{\rm short}$ 时到底删掉了什么」，所以这些退化操作反过来天然构成一条 inverse reasoning chain。**</mark>论文的论证是：
+
+$$
+\boxed{
+\forall s \in S:\quad s \text{ 移除了信息} \;\Longrightarrow\; s^{-1} \text{ 定义一条 prompt 恢复轨迹}
+}
+$$
+
+原文措辞：<mark class="hl-trick">**`its reverse defines a principled trajectory for prompt recovery and enrichment`**</mark>。论文称其为 <mark class="hl-key">**`a Chain-of-thought (CoT) for prompt enhancement`**</mark>。
+
+最终训练样本是一个三元组：
+
+$$
+\boxed{
+\left(P_{\rm short},\ \mathrm{CoT},\ P_{\rm fine}\right)
+}
+$$
+
+<mark class="hl-key">**论文明确说这个三元组让模型同时学到两件事**</mark>：增强后的 prompt 本身，**以及底层的 intent-expansion 过程**——原文举例是 <mark class="hl-trick">**`inferring lighting, material, spatial, and stylistic cues from the remaining attributes`**</mark>。
+
+<mark class="hl-trick">**所以 PE 不是学「把短 prompt 抄成长 prompt」，而是学一条从模糊需求逐步恢复视觉意图的 reasoning trajectory。**</mark>
+
+#### ④ T2I 与 Editing 的构造方式不同，这是本节最重要的判断
+
+<mark class="hl-key">**逆向退化流水线只用于 T2I。论文对 Editing 给的是完全不同的做法**</mark>：
+
+$$
+\boxed{
+\begin{aligned}
+\text{T2I} &: \text{stochastic degradation（从 } P_{\rm fine} \text{ 退化到 } P_{\rm short}\text{）}\\
+\text{TI2I} &: \text{MLLM summarize（把 long-form annotation 总结为 concise editing prompt）}
+\end{aligned}
+}
+$$
+
+<mark class="hl-trick">**论文给出的理由是**</mark> <mark class="hl-key">**`where the input image already provides rich visual context`**</mark>，因此 Editing 侧 <mark class="hl-trick">**`avoiding unnecessary stochastic degradation`**</mark>。
+
+<mark class="hl-key">**这背后是很本质的一个区别**</mark>：
+
+$$
+\boxed{
+\begin{aligned}
+\text{T2I 的 PE} &: \text{适度补充视觉细节} \\
+\text{Editing 的 PE} &: \boxed{\text{Instruction Preservation}}
+\end{aligned}
+}
+$$
+
+<mark class="hl-trick">**因为用户说「把杯子变红」，你不能为了「增强 prompt」顺便把背景、光照、构图全部重新设计。**</mark><mark class="hl-key">**这是 Generation 与 Editing 在 Prompt Engineering 上最本质的一条区别。**</mark>
+
+<mark class="hl-trick">**对照 [Playbook §3](./training-playbook.md) 的 catastrophic forgetting 讨论：Editing 侧的 PE 面临的是同一类风险——过强的条件改写会破坏原有条件。**</mark>
+
+#### ⑤ PE Training：Qwen3.5-9B 初始化 + SFT → RL 两阶段
+
+<mark class="hl-trick">**PE 模块初始化自 Qwen3.5-9B（引 Team, 2026），并作为 T2I 与 TI2I 统一的 prompt enhancement 模型训练**</mark>——论文用 `a unified prompt enhancement model for both image generation and image editing`。
+
+$$
+\boxed{
+\text{SFT}
+\;\rightarrow\;
+\text{RL}
+}
+$$
+
+##### Stage 1：SFT
+
+<mark class="hl-trick">**SFT 用标准 next-token prediction objective，学的三项能力论文写得很明确**</mark>：
+
+$$
+\boxed{
+\text{Intent Preservation}
++
+\text{Scene Enrichment}
++
+\text{Compositional Organization}
+}
+$$
+
+<mark class="hl-key">**而 T2I 与 Editing 在 SFT 阶段的侧重不同**</mark>，论文用 `While...` 明确对比：
+
+| | 侧重 |
+| :--- | :--- |
+| <mark class="hl-trick">Generation prompt</mark> | <mark class="hl-key">`require richer visual elaboration`</mark> |
+| <mark class="hl-trick">Editing prompt</mark> | <mark class="hl-key">**`demand faithful instruction preservation and sensitivity to the existing visual context`**</mark> |
+
+##### Stage 2：RL（这是 PE 真正的差异化之处）
+
+<mark class="hl-key">**论文指出 SFT 的根本局限，措辞很直接**</mark>：
+
+> <mark class="hl-trick">**`Since SFT relies on static textual references and cannot directly optimize downstream image quality`**</mark>
+
+<mark class="hl-key">**也就是说：SFT 只能告诉 PE「你写得像不像 $P_{\rm fine}$」，却无法回答「这条增强后的 prompt 最后是不是真的让图生成得更好」。**</mark>因此第二阶段引入 <mark class="hl-key">**基于 GRPO 的 RL**</mark>。
+
+<mark class="hl-trick">**注意这一处 GRPO 的引用是 `GRPO (Shao et al., 2024)`，即 DeepSeekMath 的原始 GRPO**</mark>——<mark class="hl-key">**与 §4.2 主模型 RLHF 引用的 Flow-GRPO / GRPO-Guard / DiffusionNFT 不是同一套，见 §4.2⑤**</mark>。
+
+##### PE 的 RL 回路
+
+$$
+P_{\rm short}
+\;\rightarrow\;
+\text{Prompt Enhancer}
+\;\rightarrow\;
+P_{\rm enhanced}
+\;\rightarrow\;
+\boxed{\text{Frozen Image Generator}}
+\;\rightarrow\;
+I_{\rm generated}
+\;\rightarrow\;
+\text{Reward}
+$$
+
+<mark class="hl-key">**注意这里被冻结的是图像生成器，被更新的是 PE。**</mark>论文说 PE `generates candidate enhanced prompts, which are fed into a frozen image generator, and is optimized with rewards combining...`。
+
+Reward 由三部分组成：
+
+$$
+\boxed{
+R_{\rm PE} = R_{\rm visual\ consistency}^{\rm MLLM}
+\;+\;
+R_{\rm aesthetic}^{\rm MLLM}
+\;+\;
+R_{\rm textual\ constraint}^{\rm rule\text{-}based}
+}
+$$
+
+<mark class="hl-trick">**注意论文的措辞是 `rewards combining`，它没有写出任何求和公式，也没有给三者权重**</mark>，<mark class="hl-key">**上面的加号是帮助理解的记法，不是论文公式**</mark>。<mark class="hl-trick">**完整 reward prompt 与权重均未公开。**</mark>
+
+<mark class="hl-key">**这一节真正漂亮的地方在于：SFT 保证 PE「会改写、不会乱写」，RL 再让它学会「什么样的改写真的对下游生成有帮助」。**</mark>所以 PE 优化的是
+
+$$
+\boxed{
+\text{Prompt Utility for Generator}
+}
+$$
+
+<mark class="hl-trick">**而不是**</mark> $\text{Text Similarity}$ <mark class="hl-trick">**或** $\text{Text Richness}$。</mark><mark class="hl-key">**普通 LLM prompt rewriting 与它的差别正在这里——把「一个雨天的东京街道」扩写成一段华丽文字，对图像生成未必有任何帮助。**</mark>
+
+#### ⑥ Figure 9：定性证据，以及它的三个局限
+
+![Qwen-Image-2.0 Fig.9：Prompt Enhancer 定性对比（论文 caption 标注为 T2I）。两列布局，左列 `Original`、右列 `PE`，共 5 组案例，每组上方灰底横条是**原始 prompt 原文**。(1) `A massive waterfall formed by melting glaciers pours down from cliffs thousands of meters high, kicking up widespread mist and rainbows.` —— Original 是一张暖调、近距离的峡谷瀑布特写；PE 变成远景大全景，出现完整的雪山、彩虹横跨画幅、明显更冷更蓝的色调。(2) `A grand medieval castle stands atop a high mountain peak, surrounded by a rolling sea of clouds.` —— Original 是逆光下几乎剪影的远景小城堡；PE 变成近距离、明亮的城堡全景，可见石墙纹理、塔楼旗帜与云海层次。(3) `Paint the Mona Lisa as a Japanese ukiyo-e style geisha, keeping her original smile and pose unchanged.` —— **Original 列放的是真实的《蒙娜丽莎》**（因此这一行实际是编辑任务，尽管 caption 写 T2I）；PE 输出浮世绘风格艺伎，保留原画背景的山水与松树。(4) `A Chinese ink wash painting, with complete text of 《黄鹤楼》on the top left.` —— Original 侧栏文字是「黄鹤楼 / 黄鹤楼 / 云…」一类错字与重复字符；PE 输出竖排右起的《黄鹤楼》全诗（昔人已乘黄鹤去…烟波江上使人愁），字形与竖排版式均正确。(5) `A partially filled 4x4 sudoku grid with numbers 1 to 4 and three empty cells remaining.` —— Original 输出 `1 2 6 / 4 6 7 4 / 4 3 3 2 / 7 3 4`，数字重复且不构成合法数独、格子数也不对；PE 输出干净的黑框 4×4 网格，数字合法且恰好留下三个空格。](/qwen2-fig9-prompt-enhancer.png)
+
+<mark class="hl-key">**五组案例里有两组（黄鹤楼、数独）直接印证了 §2.2 Text Caption 的价值判断**</mark>——<mark class="hl-trick">**PE 的收益主要发生在「需要精确遵循文字与结构约束」的任务上，而不是普遍的美观提升。**</mark>
+
+##### 三个必须一起说清的局限
+
+<mark class="hl-trick">**局限一：图里从不显示 PE 增强后的 prompt。**</mark>每组只有<mark class="hl-key">**原始 prompt 的原文**</mark>，右列只是「用它渲染出的结果」。<mark class="hl-key">**所以读者无法看出 PE 究竟补了哪些信息**</mark>——<mark class="hl-trick">**而这恰恰是逆向退化流水线最想展示的东西。**</mark>
+
+<mark class="hl-trick">**局限二：caption 标注 `T2I results`，但第 (3) 行是编辑任务。**</mark>Original 列放的是真实《蒙娜丽莎》，<mark class="hl-key">**说明这一组是「给一张图按指令改」**</mark>。<mark class="hl-trick">**而 §3.3 的退化流水线本来只用于 T2I，所以这张图同时也没有为 Editing 侧的 MLLM summarize 设计提供任何视觉证据。**</mark>
+
+<mark class="hl-trick">**局限三：五组案例全部是定性对比，论文未给任何定量数字。**</mark><mark class="hl-key">**没有 win rate、没有 CLIPScore、没有人工评分**</mark>——<mark class="hl-trick">**§3.3 声称 PE 改善了 `generation quality, prompt following, and reasoning performance` 三项，但三项都没有量化支撑。**</mark>
+
+<mark class="hl-key">**一个容易被忽略但很有信息量的观察**</mark>：瀑布与城堡两组里，PE 改变的主要是<mark class="hl-trick">**构图与色调本身**</mark>（远景 vs 近景、冷调 vs 暖调），<mark class="hl-key">**不只是「多加了细节」**</mark>。<mark class="hl-trick">**这说明退化操作删掉的是 layout / background 这一整层信息，而 PE 的恢复是整体重写而非局部补充。**</mark>
+
+#### ⑦ §3.3 最该进 Recipe 的一条
+
+<mark class="hl-key">**§3.3 真正该加进 [Playbook](./training-playbook.md) 的不是「多加一个 LLM」，而是这条数据构造方法**</mark>：
+
+$$
+\boxed{
+\text{High-quality detailed annotation}
+\rightarrow
+\text{controlled degradation}
+\rightarrow
+\text{realistic user query}
+\rightarrow
+\boxed{\text{inverse reasoning supervision}}
+}
+$$
+
+<mark class="hl-trick">**以及与之配套的那个判断**</mark>：
+
+$$
+\boxed{
+\text{生成失败} \;\not\Rightarrow\; \text{一定要改 Generator}
+}
+$$
+
+<mark class="hl-key">**如果失败来自 specification 不充分，可以只优化中间这层接口**</mark>：
+
+$$
+\boxed{
+\text{User Intent}
+\;\rightarrow\;
+\text{Generator-friendly Condition}
+}
+$$
+
+<mark class="hl-trick">**这一条与 §2.4 的 PE Track 是同一件事的两个视角**</mark>：Flywheel 把它当成<mark class="hl-key">**一条不需要重训模型的修复路径**</mark>，§3.3 把它做成<mark class="hl-trick">**一个独立训练、独立 RL 的模块**</mark>。
+
+#### ⑧ 未公开细节汇总
+
+<mark class="hl-trick">**这一节把方法框架给得很完整，但 production recipe 全部缺失：**</mark>
+
+- <mark class="hl-trick">**degradation strategy pool 的完整列表，以及每种策略的采样概率**</mark>
+- <mark class="hl-trick">**$P_{\rm fine}$ 最初是怎么生成的**</mark>（用什么模型、什么 prompt）
+- <mark class="hl-trick">**做四分类的那个 LLM 是什么**</mark>
+- <mark class="hl-trick">**CoT 的具体格式**</mark>——是逐条列出被删掉的属性，还是自然语言推理段落
+- <mark class="hl-trick">**SFT 数据规模、训练 step、LR、batch size**</mark>
+- <mark class="hl-trick">**GRPO 的 rollout group size**</mark>
+- <mark class="hl-trick">**三个 PE reward 的权重与完整 reward prompt**</mark>
+- <mark class="hl-trick">**frozen image generator 用的是哪个 checkpoint**</mark>（Base 还是 RL 版？论文未说）
+- <mark class="hl-trick">**Editing 侧 MLLM summarize 用的是哪个模型**</mark>
+- <mark class="hl-trick">**PE 相对原始 prompt 的定量提升幅度**</mark>——论文只给定性图
+
+## 4. Training ★
 
 ### 4.1 Multistage Training
 
-<mark class="hl-trick">**三阶段：Pre-training → Continual Pre-training → SFT**</mark> ⬜ 待填
+<mark class="hl-key">**这一节描述的是模型训练的三个宏观 phase，与 §2.3 的六阶段数据流水线处于不同颗粒度。**</mark>论文没有给出二者的对应关系，<mark class="hl-trick">**不要自己强行配对**</mark>（→ §2.3⑩）。
 
-::: info 已核对的 Table 2 完整配置（供后续填写时对照，尚未展开）
-**Training Process**
+$$
+\boxed{
+\text{Pre-training}
+\rightarrow
+\text{Continual Pre-training}
+\rightarrow
+\text{SFT}
+}
+$$
 
-| Configuration | Pre-training | Continual Pre-training | Supervised Fine-tuning |
+#### ① Table 2 完整配置
+
+| Configuration | <mark class="hl-trick">Pre-training</mark> | <mark class="hl-trick">Continual Pre-training</mark> | <mark class="hl-trick">SFT</mark> |
 | :--- | :--- | :--- | :--- |
-| <mark class="hl-trick">Steps (K)</mark> | <mark class="hl-key">**700**</mark> | <mark class="hl-key">**250**</mark> | <mark class="hl-key">**10**</mark> |
+| **Steps (K)** | <mark class="hl-key">**700**</mark> | <mark class="hl-key">**250**</mark> | <mark class="hl-key">**10**</mark> |
 | <mark class="hl-trick">Resolution</mark> | 256 / 512 | 512 / 1024 / 2048 | 512 / 1024 / 2048 |
 | <mark class="hl-trick">Batch Size (K)</mark> | 32 / 16 | 16 / 8 / 4 | 16 / 8 / 4 |
 | **Data Distribution** | | | |
 | Type | T2I / TI2I | T2I / TI2I | T2I / TI2I |
 | <mark class="hl-key">Ratio</mark> | <mark class="hl-key">**0.9 / 0.1**</mark> | <mark class="hl-key">**0.7 / 0.3**</mark> | <mark class="hl-key">**0.7 / 0.3**</mark> |
-
-**Hyperparameters**
-
-| Configuration | Pre-training | Continual Pre-training | Supervised Fine-tuning |
-| :--- | :--- | :--- | :--- |
 | Optimizer | Adam | Adam | Adam |
 | Weight Decay | 0.001 | 0.001 | 0.001 |
 | Grad. Norm Clip | 1.0 | 1.0 | 1.0 |
 | Uncond. Dropout | 0.1 | 0.1 | 0.1 |
 | <mark class="hl-key">Learning Rate</mark> | <mark class="hl-key">**1×10⁻⁴**</mark> | <mark class="hl-key">**2×10⁻⁵**</mark> | <mark class="hl-key">**1×10⁻⁵**</mark> |
 
-<mark class="hl-key">**值得注意：T2I:TI2I 比例在 continual pre-training 之后不再继续下降，7:3 一直保持到 SFT。**</mark>并且 <mark class="hl-trick">**三阶段的 learning rate 是严格单调递减的 1e-4 → 2e-5 → 1e-5**</mark>，<mark class="hl-key">**与 [Playbook §2](./training-playbook.md)「SFT 是 distribution shaping 而非再训练一会」的定位一致**</mark>。
+<mark class="hl-trick">**注意 Batch Size 一栏是按分辨率顺序给的**</mark>：pre-training 的 `32 / 16` 对应 256P / 512P，continual 与 SFT 的 `16 / 8 / 4` 对应 512P / 1024P / 2048P。<mark class="hl-key">**即分辨率越高、batch 越小，这是显存与算力的常规 trade-off**</mark>。
+
+#### ② 这张表暴露的三个单调变化
+
+<mark class="hl-key">**把三个阶段横着看，整套训练策略最核心的三个趋势一目了然**</mark>：
+
+$$
+\boxed{
+\text{Resolution} \;\uparrow
+\qquad
+\text{Editing Ratio} \;\uparrow
+\qquad
+\text{Learning Rate} \;\downarrow
+}
+$$
+
+<mark class="hl-trick">**也就是模型越往后训练，越从「大范围广覆盖学习」转向「高分辨率、更多编辑、更精细地调整分布」。**</mark>
+
+#### ③ Pre-training：700K steps，先把通用生成能力立起来
+
+<mark class="hl-key">**这是训练量最大的一段**</mark>，分辨率 $256\text{P} + 512\text{P}$，且
+
+$$
+\text{T2I} = 90\%,
+\qquad
+\text{TI2I} = 10\%
+$$
+
+<mark class="hl-key">**所以这一阶段主任务非常明确**</mark>：
+
+$$
+\boxed{
+\text{先建立通用生成能力（general-purpose visual representation）}
+}
+$$
+
+<mark class="hl-trick">**论文说 LR 设为 $1\times10^{-4}$ 是为了让模型从 large-scale image-text data 里学到 robust 的视觉表示。**</mark>
+
+<mark class="hl-key">**这个比例很值得注意，因为它与 §2.3 的观察一致**</mark>——Qwen 很早就让 Generation 与 Editing 联合训练，<mark class="hl-key">**但「联合训练」并不意味着一开始就 1:1**</mark>。实际 recipe 更接近：
+
+$$
+\boxed{
+\text{Generation 为主干}
++
+\text{少量 Editing 提前建立统一条件接口}
+}
+$$
+
+<mark class="hl-trick">**而不是先训一个纯 T2I Base，最后再突然往里塞 Editing。**</mark><mark class="hl-key">**对照 [Playbook §3](./training-playbook.md) 的 Generation replay 讨论：两篇都说明 Editing 不应完全独立于 Generation，但具体 mixture 并不相同。**</mark>
+
+<mark class="hl-trick">**真正该学走的是**</mark>：**早期保留强 Generation 主分布，同时尽早给模型 Editing exposure**，<mark class="hl-key">**而不是死记 9:1**</mark>。
+
+#### ④ Continual Pre-training：250K steps，把分辨率与 Editing 权重同时抬上去
+
+<mark class="hl-key">**这一段有三个同时发生的变化**</mark>：
+
+##### 变化一：最低分辨率从 256P 消失
+
+$$
+256/512 \;\longrightarrow\; 512/1024/2048
+$$
+
+<mark class="hl-key">**模型已经学完基础低分辨率语义之后，训练资源集中到真正的高分辨率生成与编辑。**</mark><mark class="hl-trick">**注意 512 仍然保留——与 §2.3⑦ 一样是多分辨率共存，不是逐级替代。**</mark>
+
+##### 变化二：batch size 随分辨率下降
+
+$$
+512\text{P}:16\text{K}
+\qquad
+1024\text{P}:8\text{K}
+\qquad
+2048\text{P}:4\text{K}
+$$
+
+##### 变化三：Editing 权重从 10% 直接抬到 30%
+
+$$
+0.9 : 0.1 \;\longrightarrow\; \boxed{0.7 : 0.3}
+$$
+
+<mark class="hl-key">**而 LR 同时从 $10^{-4}$ 降到 $2\times10^{-5}$，论文给的理由是 `to ensure stable optimization during this stage`。**</mark>
+
+<mark class="hl-key">**因此 Continual Pre-training 不是另起炉灶重新学，而是在已有 base 上扩大 resolution 与 capability boundary**</mark>，<mark class="hl-key">**所以学习率明显更保守**</mark>。
+
+<mark class="hl-trick">**为什么抬 Editing 权重是合理的**</mark>：Editing 相比普通 T2I，需要模型同时完成
+
+$$
+\boxed{
+\text{理解 source image}
++
+\text{理解 instruction}
++
+\text{保留无关区域}
++
+\text{修改目标区域}
+}
+$$
+
+<mark class="hl-key">**基础视觉生成能力成熟后再增加 TI2I exposure，符合 curriculum learning。**</mark>
+
+#### ⑤ SFT：只有 10K steps
+
+<mark class="hl-key">**最值得注意的对比在这里**</mark>：
+
+$$
+\boxed{
+10\text{K} \;\ll\; 700\text{K} + 250\text{K} = 950\text{K}
+}
+$$
+
+<mark class="hl-key">**SFT 的训练量比前面两段加起来小两个数量级。**</mark>所以它的作用显然不是「模型不会，靠 SFT 再重新学一遍」，而是：
+
+$$
+\boxed{
+\text{用少量高质量数据重新塑造最终输出分布}
+}
+$$
+
+<mark class="hl-trick">**论文对 SFT 的定位是 `improving the aesthetic quality of generated images`**</mark>；<mark class="hl-key">**降 LR 的理由是 `To enhance fine-grained visual details while preserving the model's world knowledge`**</mark>——即<mark class="hl-trick">**SFT 的风险是冲掉 world knowledge，所以 LR 必须小**</mark>。
+
+<mark class="hl-trick">**SFT 数据方面，论文说从 diverse categories 采样，并施加 `strict filtering together with manual curation`。**</mark><mark class="hl-key">**这与 §2.3⑧ 的 S6 完全对应，数据侧与训练侧是同一件事的两面。**</mark>
+
+#### ⑥ SFT 没有继续改 task mixture
+
+<mark class="hl-key">**这一条很容易被忽略：SFT 并没有改变 T2I/TI2I 比例，而是保持 $0.7 : 0.3$。**</mark>也就是说从 Continual Pre-training 到 SFT，作者主要调整的<mark class="hl-trick">**不是 task mixture，而是**</mark>
+
+$$
+\boxed{
+\text{Data Quality / Distribution}
+\quad+\quad
+\text{Learning Rate } 2\times10^{-5} \rightarrow 1\times10^{-5}
+}
+$$
+
+<mark class="hl-key">**这意味着 SFT 的设计不一定非要「重新发明一套数据类别和训练任务」**</mark>，有时候只是
+
+$$
+\boxed{
+\text{同样的能力 mixture}
++
+\text{更高质量的数据}
++
+\text{更严格的分布}
++
+\text{更小的 LR}
+}
+$$
+
+<mark class="hl-key">**就已经足够改变最终生成风格和质量。**</mark>→ 这条与 [Playbook §2](./training-playbook.md) 的「SFT 塑造最终输出分布」是同一判断，<mark class="hl-key">**而 Z-Image、Mage-Flow、Qwen 三篇都给出了相似方向的证据，现在可以相当确信地写进 Recipe**</mark>。
+
+<mark class="hl-key">**这条也直接对应你之前关心的现象**</mark>——<mark class="hl-trick">**「为什么模型会偏亮、过饱和、GPT 独有质感学不到」这类最终 aesthetic distribution 问题，应当优先检查 SFT data distribution，而不是先改网络结构。**</mark>
+
+#### ⑦ 三段能力变化
+
+$$
+\boxed{
+\underbrace{
+\text{700K Pretrain}
+}_{\substack{
+256/512\\
+90\%\ \text{T2I}\\
+10\%\ \text{Edit}\\
+\text{LR}=10^{-4}
+}}
+}
+\;\longrightarrow\;
+\boxed{
+\underbrace{
+\text{250K Continual Pretrain}
+}_{\substack{
+512/1024/2048\\
+70\%\ \text{T2I}\\
+30\%\ \text{Edit}\\
+\text{LR}=2\times10^{-5}
+}}
+}
+\;\longrightarrow\;
+\boxed{
+\underbrace{
+\text{10K SFT}
+}_{\substack{
+512/1024/2048\\
+70\%\ \text{T2I}\\
+30\%\ \text{Edit}\\
+\text{High-quality curated}\\
+\text{LR}=10^{-5}
+}}
+}
+$$
+
+<mark class="hl-key">**压缩成一句**</mark>：
+
+$$
+\boxed{
+\text{先大规模学 Coverage}
+\rightarrow
+\text{再提高 Resolution + Editing}
+\rightarrow
+\boxed{\text{最后短程高质量 SFT 塑 Distribution}}
+}
+$$
+
+<mark class="hl-trick">**而不是从头到尾拿同一批数据、同一个比例、同一个 learning rate 训练。**</mark>
+
+#### ⑧ 一条很好用的规律
+
+<mark class="hl-key">**这三条曲线的方向完全一致，合并成一条通用规律**</mark>：
+
+$$
+\boxed{
+\text{越靠近最终模型}
+\;\Rightarrow\;
+\text{Data 更精、LR 更小、训练更短}
+}
+$$
+
+$$
+700\text{K} \rightarrow 250\text{K} \rightarrow 10\text{K}
+\qquad
+10^{-4} \rightarrow 2\times10^{-5} \rightarrow 10^{-5}
+$$
+
+<mark class="hl-key">**这是一个标准的 Broad Learning → Capability Refinement → Distribution Shaping 三段式。**</mark>→ 可补入 [Playbook §2](./training-playbook.md)。
+
+::: warning 不要把 9:1 与 7:3 当成通用最优值
+<mark class="hl-trick">**论文只是告诉我们它这么用了，并没有证明这些比例是最优的**</mark>。<mark class="hl-key">**全文没有任何针对 T2I/TI2I mixture 的 ablation**</mark>。
+
+<mark class="hl-trick">**真正该进 Playbook 的是两条结构性判断**</mark>：
+
+$$
+\boxed{
+\text{Task mixture 应该随训练阶段变化}
+}
+$$
+
+$$
+\boxed{
+\text{SFT 的核心是高质量 distribution shaping，而不是继续堆训练量}
+}
+$$
+
+<mark class="hl-trick">**而不是 9:1 和 7:3 这两个具体数字。**</mark>
 :::
 
-### 4.2 Reinforcement Learning with Human Feedback
+#### ⑨ 未公开细节汇总
 
-<mark class="hl-trick">**详见已有的 RL 专题笔记**</mark> → [Qwen-Image-2.0 RLHF 统一对齐](./image-rl-posttraining/qwen-image-2-rl.md)
+- <mark class="hl-trick">**不同 resolution 在 continual / SFT 中实际的采样概率**</mark>——Table 2 给了 batch size，<mark class="hl-key">**但 batch size ≠ 数据采样概率，不能反推**</mark>
+- <mark class="hl-trick">**每个 resolution 是否单独 queue / dataloader**</mark>
+- <mark class="hl-trick">**T2I / TI2I 内部各 capability category 的比例**</mark>
+- <mark class="hl-trick">**SFT 精确数据量与 manual curation 的标准**</mark>
+- <mark class="hl-trick">**不同 caption 类型（§2.2 四类）如何采样**</mark>
+- <mark class="hl-trick">**不同 resolution 是否有 loss reweight**</mark>
+- <mark class="hl-trick">**$0.9:0.1$ 与 $0.7:0.3$ 是否经过任何 ablation**</mark>
+- <mark class="hl-trick">**§2.3 Fig.6 标注的 `[S6 2048p] SFT` 与本节 Table 2 的 `512/1024/2048` 之间的口径差异**</mark>（→ §2.3②）
 
-<mark class="hl-key">**本篇不重复该笔记的 reward model 与五奖励 GRPO 细节**</mark>，待本节展开时只补充与 §2 数据体系的联动关系。
+### 4.2 Reinforcement Learning with Human Feedback ★★
+
+<mark class="hl-trick">**这一节是 Qwen-Image-2.0 真正的后训练核心。它的思路并不是发明一个新的 RL 算法，而是把 RL 做成一个多能力、多 reward、动态调度的系统。**</mark>
+
+$$
+\boxed{
+\text{Prompt Pool}
+\rightarrow
+\text{Rollout}
+\rightarrow
+\text{Multi-dimensional Reward}
+\rightarrow
+\text{GRPO Update}
+}
+$$
+
+#### ① T2I 与 TI2I 不共用同一套 Reward
+
+<mark class="hl-key">**这是本节第一件最重要的事。**</mark>论文对 Generation 与 Editing 分别设计了不同的 task-specific composite reward models，<mark class="hl-trick">**每个 reward model 针对一个特定评估维度**</mark>。
+
+##### T2I：三类 reward
+
+$$
+\boxed{
+R_{\rm T2I} = R_{\rm aesthetic} + R_{\rm alignment} + R_{\rm portrait}
+}
+$$
+
+| Reward | 论文原文的评价维度 |
+| :--- | :--- |
+| <mark class="hl-trick">Aesthetic</mark> | <mark class="hl-key">`compositional balance, realistic illumination, texture fidelity, and overall artistic coherence`</mark> |
+| <mark class="hl-trick">Image-text alignment</mark> | <mark class="hl-key">**`explicitly penalizing outputs that omit, misinterpret, or contradict user-specified requirements`**</mark> |
+| <mark class="hl-trick">Portrait</mark> | <mark class="hl-key">`anatomical plausibility, facial proportion accuracy, identity-preserving facial details, and fine-grained skin and hair texture realism`</mark> |
+
+<mark class="hl-key">**所以 T2I 的优化目标不是单纯「越美越好」，而是**</mark>：
+
+$$
+\boxed{
+\text{Quality}
++
+\text{Semantic Compliance}
++
+\text{Human-specific Capability}
+}
+$$
+
+<mark class="hl-trick">**为什么单独拆出 Portrait Reward**</mark>：人物是图像生成里非常特殊的一类——脸部结构、皮肤质感、肢体、手、眼睛的失败非常敏感。<mark class="hl-key">**一个通用 aesthetic reward 很可能只能说「整体还不错」，但无法针对人物的具体失效模式给出信号**</mark>，所以需要独立维度。
+
+::: warning 不能把 reward 脑补成某个具体模型
+<mark class="hl-trick">**论文明确给出了这三类 reward 的评价维度，但没有公开完整 reward model、训练数据、具体打分 prompt 和权重**</mark>。<mark class="hl-key">**上面的加号是帮助理解的记法，论文并没有写出求和公式**</mark>。<mark class="hl-trick">**不能据此推断它用的是某个特定的 VLM 或 aesthetic scorer。**</mark>
+:::
+
+##### TI2I：两类 reward
+
+$$
+\boxed{
+R_{\rm Edit} = R_{\rm instruction} + R_{\rm consistency}
+}
+$$
+
+| Reward | 论文原文的评价维度 |
+| :--- | :--- |
+| <mark class="hl-trick">Instruction-following</mark> | <mark class="hl-key">`evaluates whether user-specified modifications are accurately executed, covering editing operations such as object replacement and style transfer`</mark> |
+| <mark class="hl-trick">Visual consistency</mark> | <mark class="hl-key">**`preserves the identity and structural integrity of unmodified regions`，强制 source 与 edited 之间在 `geometric layout, spatial topology, and semantic features` 上严格一致**</mark> |
+
+<mark class="hl-key">**这两个 reward 几乎就是 Editing 的两个核心矛盾**</mark>：
+
+$$
+\boxed{
+\text{该改的必须改}
+\qquad\text{同时}\qquad
+\boxed{
+\text{不该改的不能乱改}
+}
+$$
+
+<mark class="hl-trick">**以「把衣服改成红色」为例**</mark>：Instruction reward 检查衣服到底红没红；Consistency reward 检查人物身份、背景、姿态、其他区域有没有被破坏。
+
+<mark class="hl-key">**所以 Editing RL 的目标不是简单提高图像美观，而是处理一个更难的 trade-off**</mark>：
+
+$$
+\boxed{
+\text{Edit Strength}
+\;\longleftrightarrow\;
+\text{Preservation}
+}
+$$
+
+<mark class="hl-key">**这条应该进 Playbook**</mark>：以后碰到 Editing 出现「完全不改 / 改得不够 / 把整张图一起改了」这三类症状，<mark class="hl-trick">**第一反应不应该是统一地「加强 reward」，而应该先看 $R_{\rm instruction}$ 与 $R_{\rm consistency}$ 之间是不是失衡了**</mark>。
+
+<mark class="hl-trick">**T2I 三类 + TI2I 两类 = 5 个任务专用 reward model。**</mark>
+
+#### ② Scale Calibration 必须先于权重调节
+
+<mark class="hl-key">**这是本节最容易被忽略、但工程上最关键的一条。**</mark>论文只有一句话交代：
+
+> <mark class="hl-key">**`All reward models are calibrated to operate on comparable scales, and their weights are dynamically adjusted throughout training to avoid over-optimization toward any single dimension.`**</mark>
+
+<mark class="hl-key">**「校准到可比尺度」与「动态调权重」是两个独立且有先后关系的动作**</mark>：
+
+$$
+\boxed{
+\hat R_i = \operatorname{Calibrate}(R_i)
+\qquad
+R_{\rm final} = \sum_i w_i\,\hat R_i
+}
+$$
+
+<mark class="hl-trick">**上面的公式是帮助理解的记法。论文只给了 `calibrated to operate on comparable scales` 这个陈述，没有给出 calibration 的数学形式**</mark>——<mark class="hl-key">**是 z-score、min-max 还是别的，论文未说明**</mark>。
+
+##### 为什么这一步不能跳过
+
+<mark class="hl-trick">**假设 $R_{\rm aesthetic}\in[0,1]$ 而 $R_{\rm alignment}\in[0,100]$，那么即使形式上写**</mark>
+
+$$
+R = R_{\rm aesthetic} + R_{\rm alignment}
+$$
+
+<mark class="hl-trick">**实际优化几乎完全由 alignment reward 控制**</mark>，因为它的尺度大两个数量级。
+
+<mark class="hl-key">**所以在 multi-reward RL 里必须先统一 reward scale，否则「权重」这个概念本身没有真实含义**</mark>：
+
+$$
+\boxed{
+\text{Multi-reward 的第一步不是调权重，而是先统一 scale}
+}
+$$
+
+<mark class="hl-key">**这与 [DeepGen §3.3.1](./deepgen.md) 的结论完全一致**</mark>——<mark class="hl-trick">**那里给出了实证：Preference / OCR / CLIP similarity 三者数值范围与方差可以差好几个数量级，未做 per-reward 归一化时高方差 reward 会 dominate policy updates；去掉 reward-wise normalization 后 UniGenBench (Text) 掉 2.88 分，远超 GenEval / DPGBench 的 0.01–0.02**</mark>。
+
+<mark class="hl-key">**证据等级要分开标注**</mark>：<mark class="hl-trick">**「必须做 per-reward 归一化」在 DeepGen 侧是 〔A〕（有消融），在 Qwen 这篇技术报告里只是 〔B〕（只有一句陈述，无任何数据）**</mark>。<mark class="hl-trick">**不要因为 Qwen 也这么说就把它当成 A 级证据。**</mark>
+
+#### ③ Adapted GRPO，以及两处 GRPO 引用不同
+
+<mark class="hl-trick">**算法层面 Qwen 并没有声称提出新的 RL paradigm。**</mark>论文写的是 `an adapted GRPO framework`，引三篇工作：
+
+| 引用 | 工作 |
+| :--- | :--- |
+| Liu et al., 2026 | Flow-GRPO（flow matching 上的在线 RL） |
+| Wang et al., 2025 | GRPO-Guard（regulated clipping 防过优化） |
+| Zheng et al., 2025 | DiffusionNFT（forward-process 在线扩散 RL） |
+
+<mark class="hl-trick">**而 §3.3 里 Prompt Enhancer 的 RL 引的是 `GRPO (Shao et al., 2024)`，即 DeepMath 的原始 GRPO。**</mark>
+
+$$
+\boxed{
+\begin{aligned}
+\text{PE 的 RL} &: \text{原始 GRPO（Shao et al., 2024）}\\
+\text{生成器的 RL} &: \text{adapted GRPO，面向 flow matching}
+\end{aligned}
+}
+$$
+
+<mark class="hl-key">**这个区别值得记**</mark>：<mark class="hl-trick">**PE 优化的是文本输出，用原始 GRPO 就够；生成器优化的是 flow matching 模型的噪声预测，才需要上面那批适配工作**</mark>。
+
+GRPO 的核心直觉仍然是：对同一 prompt 采样多个 candidate，按 reward 比较组内结果，用相对 advantage 更新 policy。
+
+$$
+\boxed{
+\text{同一个 Prompt}
+\rightarrow
+\text{生成多张}
+\rightarrow
+\text{比较谁更好}
+\rightarrow
+\text{提高好样本概率}
+}
+$$
+
+<mark class="hl-key">**Qwen 真正有意思的不是 GRPO 本身，而是它如何把 CFG 与 GRPO rollout 结合起来**</mark> → 下一节。
+
+#### ④ Hybrid CFG：本节最值得记住的工程 trick
+
+##### 先说结论
+
+<mark class="hl-key">**Hybrid CFG 不减少 CFG rollout 的计算量。它仍然需要 conditional + unconditional 两次 forward；它真正降低的是 RL policy update 阶段的成本，因为 unconditional branch 不进入 policy objective，不需要为它构建梯度图和执行 backward。**</mark>
+
+$$
+\boxed{
+\text{Sampling 用完整 CFG 保证样本质量，Learning 只优化 conditional policy 降低训练成本}
+}
+$$
+
+##### 论文怎么说的
+
+<mark class="hl-trick">**论文的原文是**</mark>：
+
+> <mark class="hl-trick">**CFG is used during rollout sampling to generate high-quality candidates for reward evaluation, while the**</mark> <mark class="hl-key">**unconditional branch is excluded from the policy optimization objective.**</mark> <mark class="hl-trick">**This design preserves the visual fidelity and structural coherence of sampled images, thereby providing more reliable reward signals, while**</mark> <mark class="hl-key">**substantially reducing the computational overhead associated with optimizing the unconditional model.**</mark>
+
+##### 把两个阶段彻底拆开
+
+<mark class="hl-trick">**Rollout 阶段**</mark>：conditional 与 unconditional <mark class="hl-key">**两个分支都必须算**</mark>，然后组合
+
+$$
+\epsilon_{\rm CFG} = \epsilon_u + s\big(\epsilon_c - \epsilon_u\big)
+$$
+
+<mark class="hl-trick">**所以 rollout 的计算量仍然近似**</mark> $\boxed{2F}$ <mark class="hl-trick">**（$F$ 为一次模型 forward）**</mark>，<mark class="hl-key">**Hybrid 与否都跑不掉**</mark>。Qwen 保留这一步，是因为它希望 rollout 图片质量高、reward 信号可靠。
+
+<mark class="hl-trick">**RL update 阶段才是省钱的地方。**</mark>如果把整个 CFG policy 都当成要优化的 policy，梯度原则上就是
+
+$$
+\nabla_\theta \epsilon_{\rm CFG} = s\nabla_\theta\epsilon_c + (1-s)\nabla_\theta\epsilon_u
+$$
+
+<mark class="hl-trick">**于是你不只要重算 conditional，还要重算 unconditional，并且两个分支都要保留 activation、构建计算图、做 backward。这才贵。**</mark>
+
+Hybrid CFG 相当于：
+
+$$
+\boxed{
+\epsilon_u \text{ 只参与 rollout，policy loss 中 stop-gradient}
+}
+$$
+
+##### 一个粗略的 FLOPs 估算
+
+<mark class="hl-key">**⚠️ 重要限定：下面的 $8F \to 5F$ 是帮助理解的 toy estimate，不是论文报告的真实加速数字——论文完全没有公开 Hybrid CFG 的 wall-clock 或 FLOPs 节省比例。**</mark>设一次 forward 为 $F$，一次 backward 约为 $B \approx 2F$：
+
+设一次 forward 为 $F$，一次 backward 约为 $B \approx 2F$：
+
+$$
+\begin{array}{l|c|c|c}
+& \text{Rollout} & \text{Policy Update} & \text{合计} \\
+\hline
+\text{全 CFG policy update} & 2F & 2F + 2B \approx 6F & \approx 8F \\
+\text{Hybrid CFG} & 2F & F + B \approx 3F & \approx 5F
+\end{array}
+$$
+
+<mark class="hl-key">**所以省掉的不是 rollout 那 $2F$，而是反向传播那一大坨计算与显存。**</mark>
+
+##### 省的不只是 FLOPs，还有显存
+
+<mark class="hl-trick">**如果 unconditional branch 也参与 policy loss，它还意味着**</mark>
+
+$$
+\text{保存 unconditional activations}
++
+\text{autograd graph}
++
+\text{gradient computation}
++
+\text{更多 activation memory}
+$$
+
+<mark class="hl-key">**把 unconditional branch 从 policy objective 中拿掉，既省计算也省大量训练显存**</mark>——<mark class="hl-trick">**这在 diffusion RL 里尤其重要，因为成本本身就是「多个 rollout samples × 多个 denoising steps」**</mark>。
+
+##### 一个非常容易误解的点
+
+<mark class="hl-key">**「不更新 unconditional branch」并不意味着存在一个独立的无条件模型被冻结了。**</mark>conditional 与 unconditional 通常还是**同一套参数** $\theta$：
+
+$$
+f_\theta(x_t, c)
+\qquad\text{vs.}\qquad
+f_\theta(x_t, \varnothing)
+$$
+
+<mark class="hl-key">**更准确的说法是**</mark>：
+
+$$
+\boxed{
+\text{unconditional forward 不贡献 policy-gradient}
+}
+$$
+
+<mark class="hl-trick">**而不是「有一个独立的 unconditional network 不更新」。**</mark><mark class="hl-key">**因为参数是共享的，conditional branch 更新 $\theta$ 后，无条件输出本身以后也可能随之改变。**</mark>
+
+::: warning 论文那句措辞其实不够准确
+<mark class="hl-trick">**论文写的是「省掉 optimizing the unconditional model 的开销」，这个措辞暗示存在一个独立的 unconditional model——但从 diffusion 的实现看并不存在这样一个独立模块。**</mark>
+
+<mark class="hl-key">**这里应该读作对论文措辞的一次修正**</mark>：<mark class="hl-trick">**它省的是「无分支参与反向传播」的开销，不是「不训练一个额外模型」的开销。**</mark>
+:::
+
+##### 这本质上是一个近似
+
+<mark class="hl-trick">**既然 rollout 时的 action 由 $\epsilon_c$ 和 $\epsilon_u$ 共同产生，为什么 policy gradient 可以只算 conditional 分支？**</mark>严格来说，真正的 CFG policy 是
+
+$$
+a_t \sim \pi_{\rm CFG}\big(a_t \mid s\epsilon_c + (1-s)\epsilon_u\big)
+$$
+
+<mark class="hl-trick">**严格求梯度时两边都应该进入 $\nabla_\theta \log \pi_{\rm CFG}$。**</mark>Hybrid CFG 相当于把 $\epsilon_u$ 视作一个 <mark class="hl-key">**fixed guidance / baseline-like component**</mark>：rollout 时用它提高样本质量，但 policy optimization 时让 $\epsilon_c$ 承担「如何根据 prompt 改进生成结果」的责任。
+
+<mark class="hl-key">**直觉上也说得通**</mark>，因为 RL 真正想学的是
+
+$$
+\boxed{
+\text{Prompt Condition} \rightarrow \text{怎样产生更高 reward 的图}
+}
+$$
+
+<mark class="hl-trick">**而 unconditional branch 本身不包含 prompt-specific 信息。**</mark>所以它是在
+
+$$
+\boxed{
+\text{rollout fidelity}
+\;\longleftrightarrow\;
+\text{optimization cost}
+}
+$$
+
+<mark class="hl-key">**之间做的折中，而不是一个精确的策略梯度。**</mark>
+
+#### ⑤ Dynamic Prompt Distribution + Dynamic Reward Weight
+
+<mark class="hl-trick">**论文明确说这两者都不是固定的**：</mark> <mark class="hl-key">**`dynamically adjusting the prompt distribution across tasks and calibrating the relative weights of individual reward models`**</mark>。
+
+$$
+\boxed{
+\text{Dynamic Prompt Distribution}
++
+\text{Dynamic Reward Weighting}
+}
+$$
+
+<mark class="hl-trick">**也就是说 RL 过程中不是永远**</mark> $30\%_{\rm aesthetic} + 30\%_{\rm alignment} + 40\%_{\rm portrait}$ <mark class="hl-trick">**这种固定 recipe，而是模型在不同阶段遇到什么能力短板，就可以动态调整**</mark>
+
+$$
+p(\text{prompt type})
+\qquad\text{与}\qquad
+w_{\rm reward}
+$$
+
+<mark class="hl-key">**例如**</mark>：评测发现 <mark class="hl-trick">**portrait regression**</mark>，理论上就可以提高 $P(\text{portrait prompt})$ 或 $w_{\rm portrait}$；发现 <mark class="hl-trick">**instruction following 弱**</mark>，就提高对应 Editing prompt 与 reward 权重。
+
+$$
+\boxed{
+\text{Capability-driven RL Curriculum}
+}
+$$
+
+<mark class="hl-trick">**而不是**</mark> $\text{固定 Prompt Pool} + \text{固定 Reward} + \text{一路跑到底}$<mark class="hl-trick">**。**</mark>
+
+<mark class="hl-key">**这与 §2.4 的 Data Flywheel 是连起来的**</mark>——Flywheel 在系统层面发现 bad case 并路由，RL 在训练层面动态调整 prompt 分布与 reward 权重，<mark class="hl-trick">**两者是同一套「按能力缺口配置资源」的思想在不同层的实现**</mark>。
+
+<mark class="hl-key">**与已读过的两篇对照**</mark>：
+
+| 工作 | 做法 | 证据 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">[Mage-Flow §4.2⑤](./mage-flow.md)</mark> | <mark class="hl-trick">**两阶段显式配比**</mark> $P_{\rm aes}:P_{\rm text}:P_{\rm sem}$ 从 $1:1:1 \to 2{:}4{:}1$，通过提高 OCR 权重强化文字能力 | <mark class="hl-trick">**手工设计的固定 schedule**</mark> |
+| <mark class="hl-trick">[DeepGen](./deepgen.md)</mark> | <mark class="hl-key">**按 task type 动态切换 reward 配方**</mark>：text rendering 把权重压到 OCR 上，general T2I 完全不挂 OCR | <mark class="hl-trick">**按任务分派，非训练中动态**</mark> |
+| <mark class="hl-key">**Qwen-Image-2.0**</mark> | <mark class="hl-key">**训练过程中动态调整**</mark> $p(\text{prompt})$ 与 $w_{\rm reward}$ | <mark class="hl-trick">**只有一句陈述，无 schedule、无数据**</mark> |
+
+<mark class="hl-trick">**三者是同一趋势的三个刻度**</mark>：<mark class="hl-key">**都在往「reward 组合应该随能力缺口变化」这个方向走，Qwen 做得最动态但也最不透明。**</mark>
+
+#### ⑥ 完整 pipeline
+
+$$
+\begin{aligned}
+&\text{Capability-tagged / Dynamic Prompts} \\
+&\quad\Downarrow \\
+&\text{GRPO Rollout with Hybrid CFG} \\
+&\quad\Downarrow \\
+&\text{T2I: Aesthetic} + \text{Alignment} + \text{Portrait} \\
+&\text{Editing: Instruction Following} + \text{Visual Consistency} \\
+&\quad\Downarrow \\
+&\text{Reward Scale Calibration} \\
+&\quad\Downarrow \\
+&\text{Dynamic Reward Weighting} \\
+&\quad\Downarrow \\
+&\text{Relative GRPO Advantage} \\
+&\quad\Downarrow \\
+&\text{Conditional-branch Policy Update} \\
+&\quad\Downarrow \\
+&\text{Evaluate Capability Gaps} \rightarrow \text{重新调整 Prompt / Reward Distribution}
+\end{aligned}
+$$
+
+<mark class="hl-key">**注意这个环是闭的**</mark>——<mark class="hl-trick">**最后一步又回到最上面，形成 capability-driven 的自我强化循环，与 §2.4 的 Flywheel 同构。**</mark>
+
+![Qwen-Image-2.0 Fig.10：RL 对齐前后定性对比。上半部为 T2I，四列布局 `Qwen-Image-2.0-Base | Qwen-Image-2.0-RL | Qwen-Image-2.0-Base | Qwen-Image-2.0-RL`，共 4 行 2 组：绿谷瀑布、街头戴贝雷帽男子（人群虚化）、中文食品包装「靠啥靠啥 升天降地」与城市烟花、敞篷跑车与花海、棕榈海滩与落地窗前的西装男子。**下半部为 Editing，四列布局 `Input Image | Input Text | Qwen-Image-2.0-Base | Qwen-Image-2.0-RL`**，共 3 行：(1) 输入为梵高《星夜》，指令是一段结构化的中文商业广告文案（概念标题／艺术溯源／概念故事／工艺与触感／产品清单／生活方式呈现／视觉设计元素／以简洁专业的艺术感布局呈现），Base 与 RL 均产出《星夜·茶韵》茶具套装系列海报，RL 版排版更规整；(2) 输入为黑底橙花，指令为 `Enhance the image clarity by applying super-resolution and deblurring techniques, preserving the original orange flower structure, green stem details, and black background while removing pixelation and noise.`；(3) 输入为老人肖像，指令为长段中文漫画创作要求（主体从手绘漫画书破页而出、保持外貌姿态、`2026` 透明烟花字样、暖光串灯虚化背景），Base 与 RL 均生成漫画风格图。](/qwen2-fig10-rl-comparison.png)
+
+<mark class="hl-trick">**Fig. 10 有一个值得注意的结构信息：上半部 T2I 是 Base|RL 并排对比，下半部 Editing 是 Input Image|Input Text|Base|RL 四列**</mark>——<mark class="hl-key">**即编辑任务把输入图和指令文本也一起展示出来，因为编辑的保真度只有对着输入看才判断得了。**</mark>
+
+<mark class="hl-trick">**论文对 Fig. 10 的结论只有定性描述**</mark>：T2I 侧 `notable improvements in texture fidelity and overall image realism`，编辑侧 `enhances texture quality and visual consistency`。<mark class="hl-key">**「texture fidelity」在三处 reward 的定义里都出现了**</mark>（aesthetic 的 texture fidelity、portrait 的 skin and hair texture realism、consistency 的 semantic features），<mark class="hl-trick">**但论文没有给任何数值 benchmark 证明这一点**</mark>——<mark class="hl-key">**§4.2 全节没有一个数字**</mark>。
+
+#### ⑦ 后训练诊断思维
+
+<mark class="hl-trick">**把 DeepGen、Mage-Flow、Qwen 放在一起，一个越来越明确的趋势是**</mark>：
+
+$$
+\boxed{
+\text{图像 RL 的核心越来越像「训练系统设计」，而不只是 RL 算法设计}
+}
+$$
+
+$$
+\boxed{
+\text{Prompt Data}
++
+\text{Reward Design}
++
+\text{Reward Calibration}
++
+\text{Sampling Distribution}
++
+\text{Capability Curriculum}
++
+\text{Regression Control}
+}
+$$
+
+<mark class="hl-trick">**很多时候这些比「GRPO vs 某个 GRPO variant」更决定最终效果。**</mark>→ 可补入 [Playbook §4](./training-playbook.md)。
+
+<mark class="hl-key">**落到日常排障上，比如线上发现 OCR 弱，第一反应不应该是「换一个更先进的 RL algorithm」，而是依次检查**</mark>：
+
+$$
+\begin{aligned}
+&\text{OCR Prompt Pool 是否够难？}\\
+&\text{Reward 是否真的能判对？}\\
+&\text{Reward scale 是否合理？}\quad \text{（见 ②）}\\
+&\text{OCR Sampling Ratio 是否足够？}\\
+&\text{增加 OCR 后 aesthetic 有没有 regression？}
+\end{aligned}
+$$
+
+#### ⑧ §4.2 最该进 Post-training Recipe 的四条
+
+$$
+\boxed{
+1.\ \text{Reward 必须按 Capability 拆，而不是一个万能 Reward}
+}
+$$
+
+$$
+\boxed{
+2.\ \text{多 Reward 组合前先做 Scale Calibration}
+}
+$$
+
+$$
+\boxed{
+3.\ \text{Prompt Distribution 和 Reward Weight 应随 Capability Gap 动态变化}
+}
+$$
+
+$$
+\boxed{
+4.\ \text{Rollout Quality 与 RL 计算成本要分开优化，Hybrid CFG 是典型例子}
+}
+$$
+
+::: warning 「动态」≠「已证明最优」
+<mark class="hl-trick">**论文说「动态调整」，不等于论文证明了某种动态 schedule 最优。**</mark><mark class="hl-key">**它没有给出任何 controlled ablation，也没有公布 schedule。**</mark>
+
+<mark class="hl-trick">**尤其要记住：这一节虽然系统设计很清楚，但训练细节比 DeepGen 更不完整。**</mark>以下全部未公开：
+
+- RL prompt pool 总规模
+- rollout group size $G$
+- 每个 reward 的具体 evaluator
+- reward calibration 的数学形式
+- 各 reward 初始权重
+- dynamic weighting 的 schedule
+- prompt distribution 的动态调整规则
+- GRPO 超参数、KL coefficient
+- RL step 数
+- <mark class="hl-trick">**是否混入 SFT loss**</mark>（<mark class="hl-key">**DeepGen 明确保留了 auxiliary SFT loss，Qwen 这篇完全没提**</mark>）
+- 是否有 replay data
+- Hybrid CFG 实际节省了多少 wall-clock / FLOPs
+- 各 reward 的单独 ablation
+
+<mark class="hl-key">**还有一处 §3.3 与 §4.2 的空缺值得单独记**</mark>：§2.2 提到的 Text-rich 能力、以及本节说的 OCR 弱，<mark class="hl-trick">**Qwen 这篇的 RL reward 里没有 OCR / text-accuracy 这一维**</mark>。<mark class="hl-key">**三个 T2I reward（aesthetic / alignment / portrait）都不专门度量字形正确性**</mark>——<mark class="hl-trick">**这与 Mage-Flow 把 OCR 权重压到 0.7 形成鲜明对比**</mark>。<mark class="hl-key">**Qwen 的文字能力主要来自 pretrain 数据与 Text Caption，RL 阶段没有再单独优化文字准确率，论文也未解释这个选择。**</mark>
+:::
+
+<mark class="hl-key">**RLHF 的方法细节另见已有的 RL 专题笔记**</mark> → [Qwen-Image-2.0 RLHF 统一对齐](./image-rl-posttraining/qwen-image-2-rl.md)（<mark class="hl-trick">**其中包含本篇技术报告未展开的组内标准化融合实现**</mark>）。
 
 ### 4.3 Few-step Distillation
 
@@ -1495,4 +2538,10 @@ $$
 - <mark class="hl-trick">**六阶段过滤流水线的所有阈值与 mixture**</mark>：每个 Stage 的数据规模、8 个 S1 filter 的阈值、512/1024/2048 采样概率、S6「imbalance」判定（详见 §2.3⑫）。
 - <mark class="hl-trick">**Synthetic Data 在 S5 / S6 是否保留**</mark>：Fig. 6 只能确认它延续进了 S4，S4 之后色带不再按来源拆分，无法追踪（详见 §2.3②）。
 - <mark class="hl-trick">**三张 Data 配图都无数字**</mark>：Fig. 5 无百分比标注，Fig. 6 的 Sankey 带宽虽编码相对量但无图例与刻度，Fig. 7 无任何量。<mark class="hl-key">**因此 Data 全章没有任何一个可定量引用的比例或样本量**</mark>。
-- <mark class="hl-trick">**§3.1 VAE 完全未读**</mark>：是否沿用 Qwen-Image 原 VAE、latent 通道数与下采样率均未核。
+- <mark class="hl-trick">**§3.3 Prompt Enhancer 的全部生产细节**</mark>：degradation 策略池与概率、$P_{\rm fine}$ 的生成方式、分类用哪个 LLM、CoT 格式、SFT 规模与超参、GRPO group size、三个 reward 的权重与 prompt、frozen generator 用哪个 checkpoint、Editing 侧 summarize 用哪个模型（详见 §3.3⑧）。
+- <mark class="hl-trick">**PE 只有定性证据**</mark>：Fig. 9 不显示增强后的 prompt，caption 标 T2I 但含编辑案例，无任何 win rate 或评分（详见 §3.3⑥）。
+- <mark class="hl-trick">**§4.1 的 resolution 采样概率与 mixture 细节**</mark>：batch size ≠ 采样概率；T2I/TI2I 内部能力配比；SFT 精确数据量与人工筛选标准；不同 caption 类型如何采样；是否有 loss reweight；9:1 与 7:3 无任何 ablation（详见 §4.1⑨）。
+- <mark class="hl-trick">**§4.2 RLHF 是全篇最不完整的一节**</mark>：prompt pool 规模、rollout group size、每个 reward 的 evaluator、calibration 的数学形式、初始权重、dynamic weighting schedule、GRPO 超参与 KL 系数、RL step 数、是否混入 SFT loss、Hybrid CFG 实际节省多少算力、各 reward 的单独 ablation，全部未公开（详见 §4.2⑧）。
+- <mark class="hl-trick">**两套 GRPO 引用的差异未展开**</mark>：§3.3 的 PE 用原始 GRPO（Shao et al. 2024），§4.2 的生成器用 flow-matching 适配版（Flow-GRPO / GRPO-Guard / DiffusionNFT），论文未解释这个分工（详见 §4.2③）。
+- <mark class="hl-trick">**§4.2 全节没有一个数字**</mark>：包括 LMArena 之外的任何定量 benchmark 都没给，Fig. 10 纯定性。
+- <mark class="hl-trick">**§3.1 VAE 与 §3.2 MMDiT 完全未读**</mark>：是否沿用 Qwen-Image 原 VAE、latent 通道数与下采样率均未核；MMDiT 的 3D RoPE 身份区分设计只在一句话里出现过（详见 §2.1③）。

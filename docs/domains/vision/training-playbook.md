@@ -1,10 +1,10 @@
 # 图像基模训练 Playbook / Recipe v1.0
 
 > **标签**：`Vision` `Diffusion` `Flow Matching` `RL` `GRPO` `Distillation` `Data-centric` `Playbook`
-> **更新时间**：2026-10-04
-> **性质**：<mark class="hl-trick">**方法论字典，不是论文笔记**</mark>。本文是读完 Z-Image / SeFi-Image / Mage-Flow / DeepGen 四篇技术报告后蒸馏出的操作手册，按「数据 → 预训练/SFT → 生成与编辑 → 后训练 → 评估 → 实验系统 → 工业流程」组织。
+> **更新时间**：2026-10-05
+> **性质**：<mark class="hl-trick">**方法论字典，不是论文笔记**</mark>。本文是读完 Z-Image / SeFi-Image / Mage-Flow / DeepGen / Qwen-Image-2.0 五篇技术报告后蒸馏出的操作手册，按「数据 → 预训练/SFT → 生成与编辑 → 后训练 → 评估 → 实验系统 → 工业流程」组织。
 > **怎么用**：<mark class="hl-key">**当模型出现某种症状时，知道应该打开哪一个抽屉**</mark>。不是用来机械复刻某篇论文的。
-> **来源笔记**：[Z-Image](./z-image.md) · [SeFi-Image](./image-rl-posttraining/sefi-image-rl.md) · [Mage-Flow](./mage-flow.md) · [DeepGen 1.0](./deepgen.md) · [语义先行扩散范式 SFD](./sfd-semantic-first-diffusion.md) · [图像 RL 后训练专辑](./image-rl-posttraining/)
+> **来源笔记**：[Z-Image](./z-image.md) · [SeFi-Image](./image-rl-posttraining/sefi-image-rl.md) · [Mage-Flow](./mage-flow.md) · [DeepGen 1.0](./deepgen.md) · [Qwen-Image-2.0](./qwen-image-2.md) · [语义先行扩散范式 SFD](./sfd-semantic-first-diffusion.md) · [图像 RL 后训练专辑](./image-rl-posttraining/)
 
 ---
 
@@ -46,6 +46,63 @@ $$
 $$
 
 第一层过滤尽量用便宜规则处理明显垃圾：文件损坏、极低分辨率、极端 aspect ratio、空白图、方向异常等。第二层再运行成本高一些的 aesthetic、watermark、NSFW、blur、OCR、image-text alignment 等模型。<mark class="hl-trick">**不要一上来给所有图片跑最贵的 VLM，这是数据流水线里非常实际的成本问题。**</mark>
+
+### 从 Qwen-Image-2.0 补进 §1 的两条
+
+#### 增量 A：Capability-driven Data Taxonomy（先定义能力，再反推数据域）
+
+<mark class="hl-trick">**很多团队做数据时起点是“我有什么数据”，Qwen 的起点是“我希望模型会什么”。**</mark>两者的差别是<mark class="hl-key">**前者只能在既有数据里做取舍，后者会告诉你还缺哪一类数据、该去补什么**</mark>：
+
+$$
+\boxed{
+\text{我希望模型会什么}
+\;\rightarrow\;
+\text{对应的数据域是什么}
+}
+$$
+
+<mark class="hl-key">**这个层次高于 concept balancing。**</mark>concept balancing 解决的是<mark class="hl-trick">**“已经选定的域之间怎么配比”**</mark>；capability-driven taxonomy 解决的是<mark class="hl-key">**“域本身该怎么划、漏了哪些域”**</mark>——<mark class="hl-trick">**这是前一步，做错了后面配比再优化也补不回来**</mark>。
+
+<mark class="hl-key">**可操作的做法**</mark>：把模型要具备的能力列成 taxonomy，然后<mark class="hl-trick">**对每个能力域标注三件事**</mark>——真实业务里出现频率、现有数据量、当前评测分数。<mark class="hl-key">**三者一比，缺口自然浮现**</mark>。→ [Qwen-Image-2.0 §2.1](./qwen-image-2.md#21-data-collection) <mark class="hl-key">〔B〕</mark>
+
+#### 增量 B：Task-specific Supervision Representation（不要只有一种 caption 模板）
+
+<mark class="hl-trick">**“Recaption” 这个词本身藏了一个假设：所有图都用同一个 VLM 走一遍，出一段自然语言。**</mark>Qwen 明确否掉了这个假设——<mark class="hl-key">**监督表示形式应该由数据承担的 capability 决定**</mark>：
+
+$$
+\boxed{
+\text{Image Type / Capability}
+\;\rightarrow\;
+\text{Appropriate Supervision Representation}
+}
+$$
+
+它把 caption 分成四类：普通视觉内容用自然语言描述；<mark class="hl-key">**文字密集图像要显式建模文字内容 + 版面结构 + 视觉符号 + 语义关系**</mark>；需要世界知识的图像补充背景与上下文；<mark class="hl-trick">**关系图 / 流程图这类图像用 entity–attribute–relation 的结构化表示，因为一长段自然语言会丢结构**</mark>。
+
+<mark class="hl-key">**这条与本节已有的 Z-Image「先 OCR 再生成 caption」不冲突而是互补**</mark>——<mark class="hl-trick">**Z-Image 解决的是「通用 captioner 会漏掉密集文字」，Qwen 解决的是「这类图像根本需要另一套 pipeline」**</mark>。
+
+<mark class="hl-trick">**落地成本要说清楚：为不同类型数据分设 caption pipeline 是有额外工程代价的**</mark>，<mark class="hl-key">**优先对最高 ROI 的两类做特化（通常是 text-rich 与长尾知识型），不要一上来做全套**</mark>。→ [Qwen-Image-2.0 §2.2](./qwen-image-2.md#22-data-annotation) <mark class="hl-key">〔B〕</mark>
+
+#### 增量 C（构造方法）：从精细标注反向造“坏 prompt”
+
+<mark class="hl-key">**这一条同时是数据构造和 prompt 工程两边的工具，值得单独记。**</mark>不要手工收集成千上万对「差 prompt / 好 prompt」，而是<mark class="hl-trick">**从已有的高质量精细标注出发，反向把它降级成真实用户会输入的短 prompt**</mark>：
+
+$$
+\boxed{
+\text{Detailed Annotation}
+\;\rightarrow\;
+\text{Controlled Degradation}
+\;\rightarrow\;
+\text{Realistic User Query}
+\;\rightarrow\;
+\boxed{\text{Inverse Reasoning Supervision}}
+}
+$$
+
+<mark class="hl-key">**最巧的地方在于：因为系统知道“降级时到底删掉了什么”，这些降级操作的逆过程天然就构成一条 reasoning 轨迹**</mark>，<mark class="hl-trick">**所以监督信号可以做成 (短 prompt, CoT, 精细标注) 三元组，而不只是「短 → 长」的映射**</mark>。→ [Qwen-Image-2.0 §3.3](./qwen-image-2.md#33-prompt-enhancer-) <mark class="hl-key">〔B〕</mark>
+
+<mark class="hl-key">**并且随机采样降级策略与比例，才能覆盖难度、模糊度、信息密度各不相同的输入**</mark>——<mark class="hl-trick">**固定一种降级方式得到的是一个点，不是一条分布**</mark>。
+
 
 过滤阈值不要问“aesthetic 应该是 5.5 还是 6.0”，真正应该做的是<mark class="hl-key">**阈值扫描**</mark>。例如分别取 4.5、5.0、5.5、6.0 后观察：
 
@@ -105,7 +162,11 @@ $$
 | 数量关系差 | count / compositional 数据稀缺 | 单独统计 2/3/5+ objects prompt 与训练样本 |
 | 冷门物体不会生成 | long-tail concept coverage 不足 | 按 concept frequency 画能力曲线 |
 | 模型有固定摄影风格 | caption/style distribution 或 aesthetic 筛选过窄 | style-conditioned validation |
+| 同一类问题反复出现，但每次修的层次都不一样 | 没有做根因归因，坏案例默认被塞回重训 | 建立 bad case 归因路由表，先分 Knowledge / Alignment / Prompt 三类 |
 | 训练 loss 好但生成语义差 | caption 本身错误或过度 hallucination | 人工抽查 caption-image consistency |
+| 模型分不清「该按版式渲染的文字」与「画面里的文字」 | 用了同一套 caption 模板，text-rich 数据没有被特殊处理 | 单独统计 text-rich 子集，并为其做 text + layout-aware caption |
+| 冷门领域 / 长尾概念整体偏弱 | 数据域划分本身没覆盖到，而非配比问题 | 按 capability taxonomy 列出「业务频率 × 数据量 × 当前分数」三列表 |
+| 用户 prompt 很短但生成结果缺版式 / 缺细节 | 中间缺一层 prompt→condition 的转换，而不是模型能力不足 | 检查是否有 Prompt Enhancer；用降级构造补 (短 prompt, 精细标注) 训练对 |
 
 数据问题排查时我会坚持一个原则：
 
@@ -136,6 +197,53 @@ $$
 $$
 
 <mark class="hl-key">**常见的 256→512→1024 只是这种思想的一种实现，不应该当成硬规定。**</mark>如果模型本身从头就是 native-resolution，也可以不采用固定 bucket，但“早期追 coverage、后期追 quality”的 curriculum 仍然成立。 <mark class="hl-trick">〔B〕</mark>
+
+<mark class="hl-key">**Qwen-Image-2.0 把这条原则推到了更完整的形态：阶段变化时变的不只是分辨率，而是多个维度同时变。**</mark>它把数据流水线做成六阶段，每一阶段同时调整任务混合、数据类型、过滤强度与分布：
+
+$$
+\boxed{
+\text{Stage Change}
+\;\Rightarrow\;
+\text{Resolution}
++
+\text{Task Mixture}
++
+\text{Data Type}
++
+\text{Filter Threshold}
++
+\text{Distribution}
+\quad \text{一起调整}
+}
+$$
+
+<mark class="hl-key">**对照本节上面的四段式（Broad → Cleaner → High-quality → SFT），Qwen 的增量在于“分辨率升上去时，同步收紧质量门槛并引入新的数据类型”。**</mark>两个可直接复用的具体做法：
+
+- <mark class="hl-trick">**高分辨率不等于大像素**</mark>——尺寸达标但低清放大、JPEG 重压、细节差的图必须单独拦掉：
+
+$$
+\boxed{
+\text{High Resolution Data} \;\neq\; \text{Large Pixel Count Data}
+}
+$$
+
+<mark class="hl-key">**真正要的是 high-resolution + high-fidelity 的交集。**</mark>→ [Qwen-Image-2.0 §2.3](./qwen-image-2.md#23-multi-stage-training-data-strategy-) <mark class="hl-key">〔B〕</mark>
+
+- <mark class="hl-trick">**升到最高分辨率时不要丢弃低分辨率，而是多分辨率共存**</mark>，<mark class="hl-key">**避免训练分布只剩最贵的那一档、同时保住多个 scale 的能力**</mark>。
+
+<mark class="hl-key">**另一条很好用的规律，越靠近最终模型，数据越精、LR 越小、训练越短**</mark>（Qwen 是 700K → 250K → 10K steps，LR 1e-4 → 2e-5 → 1e-5）：
+
+$$
+\boxed{
+\text{越靠近最终模型}
+\;\Rightarrow\;
+\text{Data 更精、LR 更小、训练更短}
+}
+$$
+
+<mark class="hl-trick">**它还印证了本节的另一条：SFT 往往不需要“重新发明一套任务和数据类别”**</mark>，<mark class="hl-key">**同样的能力混合 + 更高质量的数据 + 更严格的分布 + 更小的 LR，就已经足够改变最终输出风格**</mark>。
+
+<mark class="hl-trick">**⚠️ 别把它的具体比例当通用最优值**</mark>——<mark class="hl-key">**Qwen 的 9:1 → 7:3 没有任何 ablation 支撑，真正可迁移的是「task mixture 随阶段变化」这个结构性判断**</mark>。 <mark class="hl-key">〔B〕</mark>
 
 什么时候进入下一阶段，也不应该只看 training loss。最好同时观察 capability validation：basic semantic、composition、text、human、aesthetic、高分辨率细节。<mark class="hl-trick">**如果基础语义仍在快速提升，那么过早切换到非常窄的高质量数据，可能浪费 coverage；如果基础能力已经趋于平台，而高分辨率细节和质感明显落后，就应该进入下一阶段。**</mark>
 
@@ -359,6 +467,53 @@ $$
 $$
 
 但不是简单把 easy 全部删除，而是逐渐提高 hard sample 的占比。→ [Mage-Flow §4.2⑤](./mage-flow.md#_5-两阶段-curriculum-1-1-1-→-2-4-1) 的 Text RL 就体现了这种思路：前期简单 OCR，后期增加完整句子、多行文本和复杂 scene text，同时一直保留 aesthetic / semantic capability，防止模型完全向 OCR 专门化。 <mark class="hl-key">〔B〕</mark>
+
+### 从 Qwen-Image-2.0 补进 §4 的两条
+
+#### 增量 D：Hybrid CFG —— 把 rollout 质量与训练成本分开优化
+
+<mark class="hl-key">**这是图像 RL 里最实用的一个工程 trick，而且极易被误解，所以必须说准。**</mark>扩散模型 rollout 时通常要开 CFG：
+
+$$
+\epsilon_{\rm CFG}=\epsilon_u+s\big(\epsilon_c-\epsilon_u\big)
+$$
+
+<mark class="hl-trick">**关键事实：这个 trick 不省 rollout 的钱。**</mark>rollout 阶段 conditional 与 unconditional 两个分支<mark class="hl-key">**仍然都要算**</mark>，否则采样质量下降、reward 变噪声；<mark class="hl-trick">**它省的是 policy update 阶段的 backward**</mark>——把 uncond 分支从 policy objective 里摘掉，不必为它保留 activation、构图、反传。
+
+$$
+\boxed{
+\text{Sampling 用完整 CFG 保证样本质量，Learning 只优化 conditional policy 降低训练成本}
+}
+$$
+
+<mark class="hl-key">**要注意两点**</mark>：
+
+- <mark class="hl-trick">**这本质是一个近似，不是精确的策略梯度**</mark>——它把 $\epsilon_u$ 当作 fixed guidance / baseline-like 组件，rollout 时用、优化时不让它承担“根据 prompt 改进结果”的责任。<mark class="hl-key">**直觉上成立，因为 uncond 分支本身不含 prompt-specific 信息**</mark>。
+- <mark class="hl-trick">**“不更新 uncond 分支”不等于“有一个独立的无条件模型被冻结”**</mark>——<mark class="hl-key">**两者共用同一套参数，只是 uncond 分支的 forward 不贡献梯度；参数更新后它的行为仍会随之改变**</mark>。
+
+<mark class="hl-key">**收益主要在显存而不只是 FLOPs**</mark>：省掉的是一份 activation 加上整条反向图。<mark class="hl-trick">**在 “多 rollout sample × 多 denoising step” 的扩散 RL 里，这个开销本来就极重。**</mark>→ [Qwen-Image-2.0 §4.2](./qwen-image-2.md#42-reinforcement-learning-with-human-feedback-) <mark class="hl-key">〔B〕</mark>
+
+#### 增量 E：Prompt 分布与 reward 权重应当随能力缺口动态变化
+
+<mark class="hl-key">**三篇报告在同一个方向上给出了三个刻度，值得并排看：**</mark>
+
+| 工作 | 做法 | 颗粒度 |
+| :--- | :--- | :--- |
+| Mage-Flow | 两阶段显式配比，如 $P_{\rm aes}:P_{\rm text}:P_{\rm sem}$ 由 $1{:}1{:}1 \to 2{:}4{:}1$ | <mark class="hl-trick">**手工设计的固定 schedule**</mark> |
+| DeepGen | 按 task type 切换 reward 配方（general T2I 完全不挂 OCR） | <mark class="hl-trick">**按任务分派，非训练中动态**</mark> |
+| Qwen-Image-2.0 | <mark class="hl-key">**训练过程中动态调整**</mark> $p(\text{prompt})$ 与 $w_{\rm reward}$ | <mark class="hl-trick">**最动态，但也最不透明——只给了一句陈述，没有 schedule、没有数据**</mark> |
+
+$$
+\boxed{
+\text{Capability-driven RL Curriculum}
+}
+$$
+
+<mark class="hl-key">**注意一条边界**：论文说“动态调整”，不等于论文证明了某种动态 schedule 最优。</mark><mark class="hl-trick">**Qwen 这篇没有给任何 controlled ablation**</mark>，<mark class="hl-key">**所以可迁移的是「reward 组合要跟着能力缺口走」这个方向，而不是它的实现**</mark>。 <mark class="hl-key">〔B〕</mark>
+
+<mark class="hl-key">**另外把 §4 开头那条 Capability Taxonomy 落到实处**：reward 必须按能力拆，而不是做一个万能 reward。</mark>例如人类主体生成值得单列一个 portrait reward——<mark class="hl-trick">**通用的美学 reward 往往只能说“整体还不错”，无法针对脸部结构、皮肤质感这类具体失效给出信号**</mark>；<mark class="hl-key">**editing 则天然是一对相反的 reward（该改的必须改 / 不该改的不能乱改），也就是一个 trade-off 而不是单一方向**</mark>。 <mark class="hl-key">〔B〕</mark>
+
+<mark class="hl-key">**⚠️ 一个反例值得记住**：Qwen 的三个 T2I reward（美学 / 图文对齐 / 人像）**都没有专门度量字形正确性**</mark>——<mark class="hl-trick">**它的文字能力主要来自预训练数据与 caption 设计，RL 阶段并没有再单独优化文字准确率**</mark>。<mark class="hl-key">**这与 Mage-Flow 把 OCR 权重压到 0.7 形成鲜明对比，说明“是否需要专门的 text reward”取决于该模型文字能力的来源阶段，不能默认照抄。**</mark> <mark class="hl-key">〔B〕</mark>
 
 RL 最大的风险是：
 
@@ -604,6 +759,55 @@ $$
 \text{Train More}.
 $$
 
+### 从 Qwen-Image-2.0 补进 §7 的增量 F：Bad Case 先归因，再选最小干预
+
+<mark class="hl-key">**上面这个闭环里的 “Diagnose → Minimal Intervention” 一步，Qwen-Image-2.0 给出了一个可以直接照抄的路由表。这是它对工业流程最有增量的贡献。**</mark>它的关键判断是：<mark class="hl-trick">**坏案例绝不能默认“塞回去重训”，更不能默认“都上 RL”——先做错误归因。**</mark>
+
+$$
+\boxed{
+\text{Bad Case}
+\rightarrow
+\text{Root Cause}
+\rightarrow
+\boxed{\text{Minimal Intervention}}
+}
+$$
+
+| 根因 | 优先动作 | 对应轨道 |
+| :--- | :--- | :--- |
+| <mark class="hl-trick">模型从没见过这类概念 / 知识</mark> | <mark class="hl-trick">补 Pretrain / Continual-pretrain 数据</mark> | Pre-training track |
+| <mark class="hl-trick">模型会，但输出偏好或执行方式不对</mark> | <mark class="hl-key">RL / Reward 调整</mark> | RL track |
+| <mark class="hl-trick">模型有能力，但用户 prompt 表达不足</mark> | <mark class="hl-key">**Prompt Enhancer（不必重训模型）**</mark> | PE track |
+
+<mark class="hl-key">**其中最反直觉、也最省钱的是第三行**</mark>——<mark class="hl-trick">**如果失败只是 specification 不充分，那么模型本身完全不用重训，只要把输入经一层 Prompt Enhancer 转成更适合生成模型消费的形式即可**</mark>：
+
+$$
+\boxed{
+\text{生成失败} \;\not\Rightarrow\; \text{一定要改 Generator}
+}
+$$
+
+<mark class="hl-key">**最重要的一条规则，也是这条路由表背后的思想**</mark>：
+
+$$
+\boxed{
+\text{不要拿一种训练方法解决所有问题。}
+}
+$$
+
+<mark class="hl-trick">**很多团队最容易犯的错就是：看见某个能力不行就继续加 RL——但有些问题根本不是 RL 问题。**</mark><mark class="hl-key">**尤其是“知识缺失”这类问题，再复杂的 reward 也很难把根本没有见过的东西 RL 出来，应该先补数据。**</mark>
+
+<mark class="hl-trick">**Qwen 的实现里还有两点工程设计值得借鉴**</mark>：
+
+- <mark class="hl-key">**Pre-training track 用向量检索做两件事：先诊断“是不是某类数据太少”，再检索并泛化出更多 prompt 与 instruction-image pair（含 base image）**</mark>，<mark class="hl-trick">**最终形成 curated dataset 补缺口**</mark>。
+- <mark class="hl-key">**它把人工干预压缩到几乎只有一个卡点：数据进模型前的人工 review & filtering**</mark>，<mark class="hl-trick">**其余（评测、归因、检索、prompt 改写、启动训练）全部自动**</mark>。→ [Qwen-Image-2.0 §2.4](./qwen-image-2.md#24-closed-loop-data-flywheel-system-) <mark class="hl-key">〔B〕</mark>
+
+::: warning 这套路由表有两个论文自己没解决的缺口
+<mark class="hl-trick">**第一，归因本身可能出错，而且出错代价最高**</mark>——<mark class="hl-key">**把“数据缺失”误判成“对齐问题”，就会在错误的轨道上烧掉整轮预算**</mark>。论文完全没讨论归因的可靠性或兜底策略。
+
+<mark class="hl-trick">**第二，论文只定义了三条轨道，没有“归因不确定”这一种情况**</mark>，而工业上这恰恰是常态。<mark class="hl-key">**我的补充做法是：归因不确定时先做检索与相似 case 分析，用数据决定轨道，而不是先选一条路。**</mark>
+:::
+
 **这套方法本身可能比记住某一个 GRPO 公式更重要。**
 
 ---
@@ -618,6 +822,7 @@ $$
 | **[SeFi-Image](./image-rl-posttraining/sefi-image-rl.md)** | Semantic-first、dual VAE、SFD，再接 SFT、DiffusionNFT、DMD2 | latent 表示、语义能力以及少步生成之间的协同 | <mark class="hl-trick">〔B〕</mark> 最大启发是：<mark class="hl-key">**Tokenizer / latent 设计本身会决定后面模型好不好学**</mark>，不能永远只从数据/RL 找问题 |
 | **[DeepGen 1.0](./deepgen.md)** | Alignment Pretrain + Joint SFT；MR-GRPO；multi-reward；auxiliary SFT + KL；reward-wise normalization | 多能力联合 post-training，同时抑制 RL drift | <mark class="hl-key">〔A〕</mark> 对做后训练尤其重要：<mark class="hl-key">**RL 中保留 supervised signal、reward normalization、防漂机制确实值得优先考虑**</mark>；<mark class="hl-trick">且它给出了唯一可直接借的失效时钟表（300/600/1000 steps）</mark> |
 | **[Mage-Flow](./mage-flow.md)** | Mage-VAE；Native Resolution Packing；Edit 中 Generation replay；capability-routed Diffusion-NFT；two-stage capability curriculum；系统级 kernel optimization | 高分辨率效率、Edit forgetting、能力定向 alignment | <mark class="hl-key">〔A〕</mark> Mage-VAE/系统优化有很强实证；Generation replay 有一定 ablation 支持；<mark class="hl-trick">**2:4:1 等具体 RL ratio 没有证明是最优，不应机械照搬**</mark> |
+| **[Qwen-Image-2.0](./qwen-image-2.md)** | Capability-driven data taxonomy；四类 task-specific caption；六阶段数据 curriculum；<mark class="hl-trick">**错误归因驱动的 Data Flywheel（三轨路由）**</mark>；逆向退化构造 PE 数据 + PE 侧 GRPO；<mark class="hl-key">**Hybrid CFG（rollout 全开、优化只走 conditional）**</mark>；五维分任务 reward + scale calibration | 统一生编基模的数据系统设计；prompt 重写的可训练化；扩散 RL 的成本控制 | <mark class="hl-key">〔B〕</mark> 系统设计 unusually 完整，是四篇里<mark class="hl-key">**最接近“可直接照搬的流程”**</mark>的一篇；但<mark class="hl-trick">**全篇零 ablation，所有阈值、比例、reward 权重、数据量均未公开，不能当可复现 recipe**</mark>。<mark class="hl-trick">其中「多 reward 先统一 scale」在 DeepGen 侧是 〔A〕，在本篇只是 〔B〕</mark> |
 
 ---
 
