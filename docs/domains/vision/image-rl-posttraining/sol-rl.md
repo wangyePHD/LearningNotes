@@ -8,7 +8,7 @@
 > **作者**：Yitong Li, Junsong Chen, Shuchen Xue, Pengcuo Zeren, Siyuan Fu, Dinghao Yang, Yangyang Tang, Junjie Bai, Ping Luo, Song Han, Enze Xie
 > **实验基模**：SANA / FLUX.1 / SD3.5-Large，8× NVIDIA B200
 > **精读进度**：§1–§5 全完结（Data 无关，纯 RL 方法论）
-> **相关笔记**：[Qwen-Image-2.0 RLHF 统一对齐](./qwen-image-2-rl.md)（Hybrid CFG 同族思想）｜ [Swift-Image 并行专家 RL](./swift-image-rl.md)（CFG 非对称同构）｜ [算法 × 奖励 × 基模对比](./rl-comparison-2026.md) ｜ [训练 Playbook §4](../training-playbook.md)
+> **相关笔记**：[训练 Playbook §4 · RL Sampling / Exploration](../training-playbook.md)（本文三条原则的 Recipe 化表述）｜ [Qwen-Image-2.0 RLHF 统一对齐](./qwen-image-2-rl.md)（Hybrid CFG 同族思想）｜ [Swift-Image 并行专家 RL](./swift-image-rl.md)（CFG 非对称同构）｜ [算法 × 奖励 × 基模对比](./rl-comparison-2026.md)
 
 ---
 

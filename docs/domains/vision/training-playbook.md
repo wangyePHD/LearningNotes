@@ -2,9 +2,9 @@
 
 > **标签**：`Vision` `Diffusion` `Flow Matching` `RL` `GRPO` `Distillation` `Data-centric` `Playbook`
 > **更新时间**：2026-10-05
-> **性质**：<mark class="hl-trick">**方法论字典，不是论文笔记**</mark>。本文是读完 Z-Image / SeFi-Image / Mage-Flow / DeepGen / Qwen-Image-2.0 五篇技术报告后蒸馏出的操作手册，按「数据 → 预训练/SFT → 生成与编辑 → 后训练 → 评估 → 实验系统 → 工业流程」组织。
+> **性质**：<mark class="hl-trick">**方法论字典，不是论文笔记**</mark>。本文是读完 Z-Image / SeFi-Image / Mage-Flow / DeepGen / Qwen-Image-2.0 / Sol-RL 六篇技术报告后蒸馏出的操作手册，按「数据 → 预训练/SFT → 生成与编辑 → 后训练 → 评估 → 实验系统 → 工业流程」组织。
 > **怎么用**：<mark class="hl-key">**当模型出现某种症状时，知道应该打开哪一个抽屉**</mark>。不是用来机械复刻某篇论文的。
-> **来源笔记**：[Z-Image](./z-image.md) · [SeFi-Image](./image-rl-posttraining/sefi-image-rl.md) · [Mage-Flow](./mage-flow.md) · [DeepGen 1.0](./deepgen.md) · [Qwen-Image-2.0](./qwen-image-2.md) · [语义先行扩散范式 SFD](./sfd-semantic-first-diffusion.md) · [图像 RL 后训练专辑](./image-rl-posttraining/)
+> **来源笔记**：[Z-Image](./z-image.md) · [SeFi-Image](./image-rl-posttraining/sefi-image-rl.md) · [Mage-Flow](./mage-flow.md) · [DeepGen 1.0](./deepgen.md) · [Qwen-Image-2.0](./qwen-image-2.md) · [Sol-RL 扩散 RL 高效 Rollout Scaling](./image-rl-posttraining/sol-rl.md) · [语义先行扩散范式 SFD](./sfd-semantic-first-diffusion.md) · [图像 RL 后训练专辑](./image-rl-posttraining/)
 
 ---
 
@@ -515,6 +515,99 @@ $$
 
 <mark class="hl-key">**⚠️ 一个反例值得记住**：Qwen 的三个 T2I reward（美学 / 图文对齐 / 人像）**都没有专门度量字形正确性**</mark>——<mark class="hl-trick">**它的文字能力主要来自预训练数据与 caption 设计，RL 阶段并没有再单独优化文字准确率**</mark>。<mark class="hl-key">**这与 Mage-Flow 把 OCR 权重压到 0.7 形成鲜明对比，说明“是否需要专门的 text reward”取决于该模型文字能力的来源阶段，不能默认照抄。**</mark> <mark class="hl-key">〔B〕</mark>
 
+### RL Sampling / Exploration：Exploration 与 Training 解耦
+
+<mark class="hl-trick">**这一节处理的是 RL 系统里最容易被忽略的一块成本：大量 rollout 里，究竟有多少样本最后真的参与了梯度更新。**</mark><mark class="hl-key">**如果绝大多数候选注定被丢弃，那一开始就不该为它们支付完整的高精度生成成本。**</mark>
+
+#### 原则 1：Exploration Budget 与 Training Budget 解耦
+
+不要默认「rollout 多少样本就训练多少样本」。更合理的做法是<mark class="hl-key">**扩大 rollout pool，只挑 reward 两端、$|A|$ 较大的高信息量样本做 update**</mark>：
+
+$$
+N_{\rm explore} \gg K_{\rm train}
+$$
+
+<mark class="hl-key">**这样 rollout scaling 的主要作用就不是扩大 optimization batch，而是提高「找到高对比度正负样本」的概率。**</mark><mark class="hl-trick">**在 GRPO 这类组内相对优化里，接近 group 均值的样本 advantage 趋近于 0，本来就贡献不了多少梯度**</mark>——<mark class="hl-key">**让昂贵的 backward 去覆盖它们是纯浪费**</mark>。
+
+> **经验来源：Sol-RL**
+> 采用典型的 **24-in-96**：每个 prompt 先探索 96 个 candidate，但最终只选择 **Top-12 + Bottom-12 = 24** 个样本进入高精度训练。
+> <mark class="hl-key">**论文实验表明，在 $K=24$ 基本固定时，把 exploration pool 从 24 扩大到 48、72、96，性能持续提升（HPSv2 0.3569 → 0.3622 → 0.3663 → 0.3686）**</mark>——<mark class="hl-trick">**真正 backward 的仍然只有 24 个样本**</mark>。
+> **注意两点**：① <mark class="hl-trick">**24-in-96 是 Sol-RL 的具体设置，不是通用最优比例**</mark>；② <mark class="hl-key">**「只训高对比度样本」这个概念来自 DanceGRPO 的 selective training，Sol-RL 的贡献是用 FP4 把它变便宜，而不是发明它**</mark>。
+
+<mark class="hl-key">**〔A〕**</mark>（限 $N\le96$）——Table 3 是固定 $K$ 只变 $N$ 的直接消融。<mark class="hl-trick">**但论文没有给 $N>96$ 的数据，也没说 scaling 最终在哪里饱和**</mark>。
+
+#### 原则 2：Exploration 阶段可以用低成本近似，但训练阶段必须保证高保真
+
+探索的目的只是回答一个问题：
+
+$$
+\boxed{\text{哪个 sample / seed 值得训练？}}
+$$
+
+<mark class="hl-key">**因此 exploration 不一定需要和最终训练使用同样的精度、sampling steps 甚至同一个模型**</mark>，只要低成本 proxy 对真实高精度结果具有足够可靠的 <mark class="hl-key">**reward ranking consistency**</mark>。
+
+通用流程：
+
+$$
+\boxed{
+\text{Cheap Broad Exploration}
+\rightarrow
+\text{Reward Ranking}
+\rightarrow
+\text{Select Seeds}
+\rightarrow
+\text{High-Fidelity Regeneration}
+\rightarrow
+\text{Policy Update}
+}
+$$
+
+<mark class="hl-key">**注意流程里最关键的一步是「只保存 seed、丢弃 proxy 图像本身」**</mark>——<mark class="hl-trick">**否则量化误差仍会通过样本进入监督信号**</mark>。这也是为什么这条原则和原则 1 是一体的：<mark class="hl-key">**pool 可以很大，但真正进入梯度的那 $K$ 个样本必须是干净的高精度样本**</mark>。
+
+> **经验来源：Sol-RL**
+> Sol-RL 使用 **NVFP4** 做 cheap exploration，标准配置中先对 **96 个 seed 做 6-step FP4 rollout**；根据 reward 选出 Top-12 / Bottom-12 seed 后，<mark class="hl-key">**丢弃 FP4 图像本身**</mark>，再用 BF16 policy 从相同 seed 重新生成 24 个高精度样本用于训练（10 denoise steps）。
+> 它依赖的不是 $I^{\rm FP4}\approx I^{\rm BF16}$，而是
+> $$
+> \operatorname{Rank}\!\big(R(I^{\rm FP4})\big)\approx\operatorname{Rank}\!\big(R(I^{\rm BF16})\big)
+> $$
+> 实测排序保真度（四个 reward 平均）：Kendall $\tau=0.798$、Spearman $\rho=0.927$、Top-4 命中 **96.9%**、Bottom-4 误纳 **3.9%**。<mark class="hl-key">**也就是说 FP4 在这里是 ranking proxy，不是 training target。**</mark>
+> <mark class="hl-trick">**而且 probe 的步数可以远低于最终生成**：探索用 6 步、HPSv2 已饱和（2/4/6/8 步分别 0.3587 / 0.3650 / 0.3686 / 0.3659，8 步反而略降）</mark>，<mark class="hl-key">**说明 proxy 只需要「足够排序」而不是「足够好」**</mark>。
+
+<mark class="hl-key">**〔A〕**</mark>（exploration 不必达到 final quality，以及低精度 proxy 的 ranking consistency 足够）——两者都有直接消融：Table 2 的步数扫描与 Table 8 的四 reward 排序统计。<mark class="hl-key">**〔C〕**</mark>（把这条推广到少步 rollout、小模型、低分辨率或专门的 surrogate model）——<mark class="hl-trick">**Sol-RL 一个字都没验证，只能当作值得尝试的方向**</mark>。
+
+<mark class="hl-key">**⚠️ 用这条之前必须自己测一遍 ranking consistency，而且要先看你的 reward 是哪一个。**</mark><mark class="hl-trick">**Sol-RL 的数据里 CLIPScore 是四个 reward 里排序一致性最差的**</mark>（$\tau=0.752$、Top-4 95.7%、Bottom-4 误纳 4.5%，全项最差），<mark class="hl-key">**HPSv2 明显更好**</mark>（$\tau=0.827$、Top-4 97.6%）。<mark class="hl-trick">**选 reward 时查对应行，不要看四 reward 的平均值**</mark>——<mark class="hl-key">**而且 Top-K 命中率随 $K$ 单调下降（4→96.9%、8→95.0%、12→93.3%），$K$ 必须自己消融**</mark>。
+
+#### 原则 3：Image RL 的算力优化应优先压「找到值得训练的样本」的成本
+
+RL 系统不能只优化 backward / policy loss，<mark class="hl-key">**也要看大量 rollout 中到底有多少最终真正参与训练。**</mark>如果大量候选最后都会被丢弃，就没有必要一开始都支付完整的高精度生成成本。
+
+> **经验来源：Sol-RL**
+> naïve 24-in-96 需要 $96\times\text{BF16 rollout}$，而 Sol-RL 变成 $96\times\text{cheap FP4 rollout}+24\times\text{BF16 regeneration}$——<mark class="hl-key">**省下来的正是那 72 个注定被丢弃的候选的高精度 rollout**</mark>。
+> 实测（Table 5，rollout 加速 / 端到端 iteration 加速）：<mark class="hl-trick">**FLUX.1 2.33× / 1.62×；SD3.5-Large 2.41× / 1.61×**</mark>；<mark class="hl-key">**但 SANA 只有 1.41× / 1.25×**</mark>。<mark class="hl-key">**最高 4.64× 指的是达到相同性能目标的 time-to-target / convergence speedup，不是单 iteration 快 4.64×**</mark>。
+> 另外要澄清一点：<mark class="hl-key">**相对同等计算预算下的 BF16 naïve scaling，Sol-RL 的最终质量基本是打平（≤1% 差距），不是更好**</mark>。<mark class="hl-trick">**它的收益是「同等质量、更便宜」**</mark>——<mark class="hl-key">**对其他方法的提升主要来自更大的 exploration pool + selective training，量化本身只是让这个更大的 pool 付得起**</mark>。
+
+<mark class="hl-key">**〔B〕**</mark>——三个基模上有实测，<mark class="hl-trick">**但收益强依赖硬件（该论文实测 8× NVIDIA B200），且模型越小、算力越弱，收益缩水越明显**</mark>。
+
+#### 这三条与 Hybrid CFG 的关系：同族，但方向相反
+
+<mark class="hl-key">**别把它和上面的「增量 D：Hybrid CFG」搞混——两者都在拆「采样」与「学习」这两个阶段，但省的部位不同**</mark>：
+
+| | 采样阶段 | 学习阶段 | 省的是 |
+| :--- | :--- | :--- | :--- |
+| <mark class="hl-trick">**原则 2（Sol-RL）**</mark> | <mark class="hl-key">**便宜**</mark>（FP4、低步数、只求排序准） | <mark class="hl-key">**昂贵**</mark>（BF16 重新生成，保证样本 fidelity） | <mark class="hl-key">**探索的采样成本**</mark> |
+| <mark class="hl-trick">**增量 D（Qwen Hybrid CFG）**</mark> | <mark class="hl-key">**昂贵**</mark>（rollout 保留 CFG 保样本质量） | <mark class="hl-trick">**便宜**</mark>（uncond 分支不进 policy objective） | <mark class="hl-key">**反向传播的开销**</mark> |
+
+<mark class="hl-key">**共同的抽象是同一句话：把「产生候选」和「产生训练信号」当成两个可以独立决策的阶段，各自选合适的精度与算力。**</mark><mark class="hl-trick">**一个省 forward、一个省 backward，两者甚至可以叠加使用**</mark>。
+
+<mark class="hl-key">**这一节最终压成一句**</mark>：
+
+$$
+\boxed{
+\textbf{Cheap Explore, Selective High-Fidelity Learn}
+}
+$$
+
+
 RL 最大的风险是：
 
 $$
@@ -548,6 +641,7 @@ $$
 | reward 长期几乎不动 | rollout diversity、reward variance、prompt difficulty |
 | Edit RL 后 Generation 掉 | Generation replay |
 | 某一个 capability 狂涨其他都掉 | curriculum 权重失衡 |
+| RL 吃 GPU-hours 但收敛很慢 | <mark class="hl-trick">**exploration 阶段占了大头，而多数候选最终被丢弃**</mark> | 先算 exploration / update 各占总时长比例；再考虑「扩池子 + 只训两端」与低成本 proxy |
 
 这里最重要的一句话是：
 
@@ -823,6 +917,7 @@ $$
 | **[DeepGen 1.0](./deepgen.md)** | Alignment Pretrain + Joint SFT；MR-GRPO；multi-reward；auxiliary SFT + KL；reward-wise normalization | 多能力联合 post-training，同时抑制 RL drift | <mark class="hl-key">〔A〕</mark> 对做后训练尤其重要：<mark class="hl-key">**RL 中保留 supervised signal、reward normalization、防漂机制确实值得优先考虑**</mark>；<mark class="hl-trick">且它给出了唯一可直接借的失效时钟表（300/600/1000 steps）</mark> |
 | **[Mage-Flow](./mage-flow.md)** | Mage-VAE；Native Resolution Packing；Edit 中 Generation replay；capability-routed Diffusion-NFT；two-stage capability curriculum；系统级 kernel optimization | 高分辨率效率、Edit forgetting、能力定向 alignment | <mark class="hl-key">〔A〕</mark> Mage-VAE/系统优化有很强实证；Generation replay 有一定 ablation 支持；<mark class="hl-trick">**2:4:1 等具体 RL ratio 没有证明是最优，不应机械照搬**</mark> |
 | **[Qwen-Image-2.0](./qwen-image-2.md)** | Capability-driven data taxonomy；四类 task-specific caption；六阶段数据 curriculum；<mark class="hl-trick">**错误归因驱动的 Data Flywheel（三轨路由）**</mark>；逆向退化构造 PE 数据 + PE 侧 GRPO；<mark class="hl-key">**Hybrid CFG（rollout 全开、优化只走 conditional）**</mark>；五维分任务 reward + scale calibration | 统一生编基模的数据系统设计；prompt 重写的可训练化；扩散 RL 的成本控制 | <mark class="hl-key">〔B〕</mark> 系统设计 unusually 完整，是四篇里<mark class="hl-key">**最接近“可直接照搬的流程”**</mark>的一篇；但<mark class="hl-trick">**全篇零 ablation，所有阈值、比例、reward 权重、数据量均未公开，不能当可复现 recipe**</mark>。<mark class="hl-trick">其中「多 reward 先统一 scale」在 DeepGen 侧是 〔A〕，在本篇只是 〔B〕</mark> |
+| **[Sol-RL](./image-rl-posttraining/sol-rl.md)** | Cheap Explore / Selective High-Fidelity Learn：NVFP4 低精度探索 + reward 排序挑两端 seed + BF16 重生成；exploration 步数远低于训练步数 | rollout scaling 的计算瓶颈——大量候选注定被丢弃却已付全额高精度成本 | <mark class="hl-key">〔A〕</mark> Table 2/3/8 三组直接消融（探索步数、池子大小、排序保真度）；<mark class="hl-trick">**但它是系统/工程贡献，algorithm 是 DiffusionNFT、selective training 来自 DanceGRPO**</mark>，且加速强依赖 Blackwell 硬件（SANA 仅 1.41×），相对 naïve scaling 质量打平而非更好 |
 
 ---
 
