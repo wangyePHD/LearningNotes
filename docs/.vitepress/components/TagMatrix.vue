@@ -183,6 +183,15 @@ const notesList = ref([
   },
   // 续：RL 专题其余 7 篇隐藏，保留 SeFi 条目
   {
+    title: 'Sol-RL：FP4 Explore, BF16 Train（扩散 RL 高效 Rollout Scaling）',
+    link: '/domains/vision/image-rl-posttraining/sol-rl',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-10-06',
+    summary: 'NVIDIA/HKU/MIT。把 Exploration 与 Policy Training 彻底拆开：NVFP4 低精度大批量探索 96 个 candidate，只用 reward 排序挑出 top-12 + bottom-12 的 initial noise seed，再用 BF16 重跑这 24 张做 GRPO update。关键洞察是「FP4 不需要生成得准，只需要挑得准」——只要求 Rank 保真而非 $I^{FP4} \\approx I^{BF16}$。排序保真度 Kendall τ=0.752 / Spearman ρ=0.900，Top-4 命中率 95.7%、Top-12 降到 92.2%。pipeline 加速 2.4×（额外开销仅 2%），收敛加速最高 4.64×。可迁移的抽象是「Cheap Approximation for Exploration + Accurate Computation for Learning」。',
+    tags: ['Vision', 'RL', 'GRPO', 'Diffusion RL', 'FP4', 'NVFP4', 'Quantization', 'Rollout Scaling', 'Systems']
+  },
+  {
     title: '语义先行文生图基模 (SeFi-Image)',
     link: '/domains/vision/image-rl-posttraining/sefi-image-rl',
     domain: '🖼️ 图像视觉',

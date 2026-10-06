@@ -143,7 +143,8 @@ export default defineConfig({
             { text: '统一生编基模 Qwen-Image-2.0', link: '/domains/vision/qwen-image-2' },
             { text: '图像基模训练 Playbook v1.0', link: '/domains/vision/training-playbook' },
             { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
-            { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' }
+            { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' },
+            { text: 'Sol-RL 扩散 RL 高效 Rollout Scaling', link: '/domains/vision/image-rl-posttraining/sol-rl' }
           ]
         },
         {
