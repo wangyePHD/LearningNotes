@@ -13,6 +13,6 @@
 | **图像基模训练 Playbook v1.0** | 从五篇技术报告蒸馏出的**方法论字典**：Data Engine → Pretrain/SFT → Generation/Edit → RL → Evaluation → 实验系统 → 工业流程；每条经验标 **A/B/C 证据等级**，配三张诊断表 | 🟢 已完结 | [查阅手册 →](./training-playbook.md) |
 | **语义先行扩散范式 (SFD)** | 复合语义-纹理隐空间 + 固定偏移 $\Delta t$ 异步去噪三阶段，ImageNet FID 1.04 / 收敛快 100× | 🟢 已完结 | [阅读笔记 →](./sfd-semantic-first-diffusion.md) |
 | **语义先行文生图基模 (SeFi-Image)** | SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力 | 🟢 精读中 | [阅读笔记 →](./image-rl-posttraining/sefi-image-rl.md) |
-| **Sol-RL：FP4 Explore, BF16 Train** | NVIDIA 的扩散 RL 高效 rollout scaling：NVFP4 探索 96 个 candidate → 只按 reward 排序挑 top-12+bottom-12 的 seed → BF16 重跑 24 张做 GRPO update。**「FP4 不需要生成得准，只需要挑得准」**；$N_{\rm explore}\gg K_{\rm train}$；pipeline 加速 2.4×、收敛加速最高 4.64× | 🔄 精读中（§1–3） | [阅读笔记 →](./image-rl-posttraining/sol-rl.md) |
+| **Sol-RL：FP4 Explore, BF16 Train** | NVIDIA 的扩散 RL 高效 rollout scaling：NVFP4 探索 96 个 candidate → 只按 reward 排序挑 top-12+bottom-12 的 seed → BF16 重跑 24 张做 GRPO update。**「FP4 不需要生成得准，只需要挑得准」**；$N_{\rm explore}\gg K_{\rm train}$；pipeline 加速 2.4×、收敛加速最高 4.64× | 🟢 已完结 | [阅读笔记 →](./image-rl-posttraining/sol-rl.md) |
 | **Caption 与效率专题** | DALL-E 3 recaption 范式与 Lens 效率方法论，两篇精读 | 🟢 已完结 | [进入专题 →](./caption-efficiency/) |
 | **图像 AIGC 数据集专题** | 预训练/持续训练/SFT/评测集全生命周期大盘，收录 Fine-T2I 6M 数据工程精读 | 🟢 持续建设中 | [进入专题 →](./datasets/) |

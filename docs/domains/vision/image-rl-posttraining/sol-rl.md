@@ -7,7 +7,7 @@
 > **arXiv**：[2604.06916](https://arxiv.org/abs/2604.06916) v1（2026-04-08）
 > **作者**：Yitong Li, Junsong Chen, Shuchen Xue, Pengcuo Zeren, Siyuan Fu, Dinghao Yang, Yangyang Tang, Junjie Bai, Ping Luo, Song Han, Enze Xie
 > **实验基模**：SANA / FLUX.1 / SD3.5-Large，8× NVIDIA B200
-> **精读进度**：§1 ✅ ｜ §2 ✅ ｜ §3 ✅ ｜ §4 ⬜ ｜ §5 ⬜
+> **精读进度**：§1–§5 全完结（Data 无关，纯 RL 方法论）
 > **相关笔记**：[Qwen-Image-2.0 RLHF 统一对齐](./qwen-image-2-rl.md)（Hybrid CFG 同族思想）｜ [Swift-Image 并行专家 RL](./swift-image-rl.md)（CFG 非对称同构）｜ [算法 × 奖励 × 基模对比](./rl-comparison-2026.md) ｜ [训练 Playbook §4](../training-playbook.md)
 
 ---
@@ -73,17 +73,19 @@ Figure 2 的耗时分解说明了加速来自哪里（同一 prompt）：
 | <mark class="hl-trick">**FP4 Explore**（Sol-RL 探索阶段，6 denoise steps）</mark> | <mark class="hl-key">**125s**</mark> |
 | <mark class="hl-key">**BF16 Re-gen**（只重跑 24 张，10 denoise steps）</mark> | <mark class="hl-key">**62s**</mark> |
 
-<mark class="hl-key">**⚠️ 这里有三个不同的加速口径，引用时必须带清楚**</mark>。Figure 3(a) 把单次 iteration 拆成 rollout（绿）与 train（灰）两段后可以看到：<mark class="hl-trick">**三根柱子的 Train Time 都是 240s，完全不变**</mark>，所以加速全部来自 rollout 段：
+<mark class="hl-key">**⚠️ 加速有三个不同口径，权威来源是 Table 5，引用时请直接用它**</mark>：
 
 $$
-\underbrace{\frac{451}{184}=2.45\times}_{\text{rollout 段}} ,
+\underbrace{1.41\text{–}2.41\times}_{\text{rollout 段}}
 \qquad
-\underbrace{\frac{691}{424}=1.63\times}_{\text{单次 iteration 端到端}} ,
+\underbrace{1.25\text{–}1.62\times}_{\text{单次 iteration 端到端}}
 \qquad
-\underbrace{\le 4.64\times}_{\text{收敛（达到同等 reward）}}
+\underbrace{1.91\text{–}4.64\times}_{\text{收敛（time-to-target）}}
 $$
 
-<mark class="hl-trick">**论文摘要与 Figure 1/2 说的 `2.4×` / `4.64×` 属于前两个 rollout / 收敛口径；Figure 1 给出的三模型分别是 `2.42×` / `4.64×` / `3.00×`**</mark>。<mark class="hl-key">**注意「扩 rollout」本身是有代价的**</mark>——<mark class="hl-trick">**`24-in-24 (BF16)` 单次只要 353s，`24-in-96 (BF16)` 却要 691s，rollout 段本身就是 `×4`**</mark>；<mark class="hl-key">**Sol-RL 的价值在于「探索空间扩了 4 倍之后，总时长仍被压回接近原量级」**</mark>。
+<mark class="hl-key">**论文摘要与 Figure 1/2 给的 `2.4×` / `4.64×` 分属 rollout 与收敛两个口径；Figure 1 的三条 ImageReward 曲线分别是 SANA `2.42×`、FLUX.1 `3.00×`、SD3.5-Large `4.64×`**</mark>。<mark class="hl-key">**注意「扩 rollout」本身有代价**</mark>——<mark class="hl-trick">**`24-in-24 (BF16)` 单次 iteration 只要 353s，`24-in-96 (BF16)` 却要 691s，rollout 段本身就是 `×4`**</mark>；<mark class="hl-key">**Sol-RL 的价值在于「探索空间扩了 4 倍之后，总时长仍被压回接近原量级」**</mark>。
+
+<mark class="hl-key">**⚠️ 另外 Figure 3(a) 的图例有一处会误导人的标注，建议以 Table 5 为准**</mark>：<mark class="hl-trick">**图中把 184s 那一根标为 `24-in-96 (FP4)`，但 184s 其实是 Naïve Quant（直接在 FP4 上训练）的耗时；Sol-RL 自己的 rollout 是 `125s + 62s = 187s`，对应 Table 5 的 2.41×（$451/187$），而不是图上标的 2.45×（$451/184$）**</mark>。<mark class="hl-key">**两者只差 3 秒，但结论完全不同——图上那根柱子的 `Train with FP4 Rollout` 曲线正是 Naïve Quant，而不是 Sol-RL**</mark>。
 
 真正可迁移的不是 FP4 本身，而是这个抽象——<mark class="hl-key">**把大量、便宜、近似的计算用于「搜索哪里值得学」，把昂贵的高精度计算集中到少量 informative samples 上**</mark>：
 
@@ -98,7 +100,7 @@ $$
 <mark class="hl-trick">**这个抽象远超量化本身**</mark>——<mark class="hl-key">**任何「便宜代理足以完成排序 / 筛选，但不足以完成学习」的领域都适用**</mark>：候选检索、prompt 筛选、数据清洗、reward model 粗筛。相应地，<mark class="hl-key">**Sol-RL 的准确定位是 Diffusion RL 的 Exploration Efficiency 方法，而不是一个新的 GRPO objective**</mark>——<mark class="hl-trick">**它不动 reward、不动 advantage 公式、不动组内相对比较机制，改的是「花多少算力、在什么精度上、采多少候选」这三个系统量**</mark>。论文对这个协同关系的表述是 <mark class="hl-trick">**"integrates the algorithmic mechanisms of rollout scaling with the system-level throughput gains of NVFP4"**</mark>：<mark class="hl-key">**因为极端样本占比小，量化误差被限制在少量样本上，而这少量样本还会用 BF16 重跑一遍**</mark>。
 
 ::: warning 引用前必须记住的三个限制
-<mark class="hl-trick">**一、这套方法高度依赖 Blackwell 世代硬件**</mark>——论文实测 8× NVIDIA B200，NVFP4 稠密算力约为 BF16 的 4× TFLOPs，NVFP4 采用 16 元素 / E4M3 scale 分组（OCP MXFP4 是 32 / E8M0）。<mark class="hl-key">**在 Ampere / Ada 上 NVFP4 路径未必有同等吞吐，论文完全没讨论跨硬件可移植性**</mark>。<mark class="hl-trick">**二、$K=12$ 不是普适最优**</mark>，见上文命中率衰减。<mark class="hl-trick">**三、加速有三种口径**</mark>：rollout 段 `2.45×`、单次 iteration 端到端仅 `1.63×`（因为 240s 的 Train Time 不变）、收敛 `≤4.64×`。<mark class="hl-key">**论文摘要给的是 rollout / 收敛口径，$1.63\times$ 这个更保守的数字要自己从 Fig.3a 算**</mark>。
+<mark class="hl-trick">**一、这套方法高度依赖 Blackwell 世代硬件**</mark>——论文实测 8× NVIDIA B200，NVFP4 稠密算力约为 BF16 的 4× TFLOPs，NVFP4 采用 16 元素 / E4M3 scale 分组（OCP MXFP4 是 32 / E8M0）。<mark class="hl-key">**在 Ampere / Ada 上 NVFP4 路径未必有同等吞吐，论文完全没讨论跨硬件可移植性**</mark>。<mark class="hl-trick">**二、$K=12$ 不是普适最优**</mark>，见上文命中率衰减。<mark class="hl-trick">**三、加速有三种口径，且以 Table 5 为准**</mark>：rollout 段 `1.41–2.41×`、单次 iteration 端到端 `1.25–1.62×`、收敛 `1.91–4.64×`。<mark class="hl-key">**Figure 3(a) 把 Naïve Quant 的 184s 误标成了 Sol-RL，会让人把加速算高一点**</mark>。
 :::
 
 ## 2. 为什么 Rollout Scaling 有效
@@ -225,15 +227,205 @@ $$
 <mark class="hl-trick">**三、这套论证依赖「确定性 ODE 采样 + seed 决定粗结构」**</mark>。<mark class="hl-key">**如果换成 SDE 采样器、或 seed 之外还有明显随机性来源，那么「seed 决定语义结构」这个前提就不成立，排序保真度需要重新测**</mark>。<mark class="hl-trick">**论文完全没讨论这个边界**</mark>。
 :::
 
-## 4. Sol-RL 完整训练 Pipeline ⬜
+## 4. Sol-RL 完整训练 Pipeline
 
-待填（论文 §3.4 + 附录 B）。要回答的是：两阶段的算法描述（seed 如何保存复用、advantage 如何在 24 张子集上重算）与工程描述（NVFP4 引擎部署、权重量化/反量化、init mode）。
+Sol-RL 的一次 iteration 可以理解成 <mark class="hl-key">**两次 rollout，但两次 rollout 的目的完全不同**</mark>：第一阶段只负责**便宜地搜索哪些 seed 值得训练**，第二阶段才真正生成高质量 trajectory 做 policy update。
 
-<mark class="hl-key">**⚠️ 已标记的待核实关键点**</mark>：论文保留的是 <mark class="hl-trick">**initial noise seed**</mark>，所以 BF16 重跑后 reward 必然会变——<mark class="hl-key">**advantage 是用 BF16 重算的 reward，还是沿用 FP4 阶段的排序？这是整套方法最容易实现错的地方**</mark>。
+![Sol-RL Fig.2：两阶段解耦 pipeline。上半部三栏 —— **(a) FP4 Exploration**：四行候选，从噪声图生成马匹图像并标出 reward，红框 0.09（最差，✓ 选中）与绿框 0.98（最好，✓ 选中），灰框 0.35 / 0.56（✗ 淘汰）；**(b) BF16 Re-generation**：标注 `regeneration from selected noise seeds`，只有被选中的红/绿两行被重新生成出干净图像，淘汰的两行显示为带斜杠的空框；**(c) GRPO Training**：标注 `train on most contrastive samples (eg. 24 in 96 samples)`，右侧图例把样本分成 `Best-K Samples`（绿框）、`Worst-K Samples`（红框）、`Other Samples`（灰框），下方写出损失 $\mathcal{L}_{\rm GRPO}(\theta)=\frac{1}{N}\sum_{i\in\mathcal{S}_{\rm contrast}}\mathcal{J}^{(i)}_{\rm clip}(\theta)+\frac{1}{N}\sum_{j\in\mathcal{S}_{\rm norm}}\mathcal{J}^{(j)}_{\rm clip}(\theta)$。左侧竖排流程为 (a) FP4 Exploration → (b) BF16 Re-generation → (c) GRPO Training → Policy Update & Re-quant → 回流到 (a)。下半部三条横向耗时条：**Naïve Scaling** = 10 denoise steps / 96 samples / BF16 Precision Rollout **451s** / HPSv2 **0.370**；**Naïve Quant** = 10 steps / 96 samples / FP4 Naïve Quantized Rollout **184s** / HPSv2 **0.354**；**Sol-RL** = 6 steps / 96 samples / FP4 Explore **125s** + 10 steps / 24 samples / BF16 Re-gen **62s**，旁注 **2% overhead** 与 **2.4× speedup** / HPSv2 **0.369**。](/solrl-fig2-two-stage-pipeline.png)
 
-## 5. Experiments / Ablation / Recipe ⬜
+**Stage 1（Accelerated Exploration at Scale via FP4）。** 论文的做法是采样 $N$ 个**互相独立**的 initial noises $\{z^{(i)}\}_{i=1}^{N}$（标准配置 $N=96$），用一个 <mark class="hl-key">**NVFP4 model ODE solver**</mark> 生成样本，并且<mark class="hl-trick">**刻意减少 inference steps**</mark>（标准是 6 步），快速算出对应的 <mark class="hl-key">**proxy rewards $\{\tilde R_i\}$**</mark>——注意论文对它用的是带波浪号的 $\tilde R$，本身就表明「这是估计值而非真值」。然后按 proxy reward 排序，隔离出 $K$ 个高对比度 seed。
 
-待填（论文 §4）。Table 1 是 FLUX.1 上对 FlowGRPO / DanceGRPO / AWM / DiffusionNFT 的定量对比；Table 3 是 exploration pool $N\in\{24,48,72,96\}$ 的 scaling；Table 4 是 NVFP4 rollout 的定量评估；Table 5 是 $N=96$ 的耗时分解；Table 7 是训练超参（rollout 10 步、eval 40 步、timestep fraction 0.6、num train timesteps 6、$\beta_{\rm kl}=1.0$、old-model decay 0.9）。<mark class="hl-key">**最后只提炼真正值得加入 [Image RL Recipe](../training-playbook.md) 的部分**</mark>。
+**Stage 2（High-Fidelity Regeneration and Policy Update）。** 被选中的 $K$ 个 seed（标准 $K=24$）用**原始高精度 BF16 diffusion loop** 重新生成。这里有一个比「用 BF16」更强的表述，值得单独记：
+
+> <mark class="hl-trick">**By completely shielding the underlying vector field $v_\theta$ from low-precision quantization, this phase allows the ODE solver to reliably reconstruct high-fidelity samples $x_0$**</mark>
+
+<mark class="hl-key">**也就是说不只是采样器用 BF16，而是把向量场本身完全隔离在低精度量化之外**</mark>，然后 policy network **只在这 $K$ 个高保真样本上做标准梯度优化**。
+
+**每轮都要重量化，这是最容易被误解的一点。** FP4 exploration policy 和 BF16 training policy <mark class="hl-key">**并不是两个长期独立训练的模型**</mark>。BF16 policy 更新之后，其权重会被<mark class="hl-trick">**重新量化回 NVFP4**</mark>，供下一轮 exploration 使用：
+
+$$
+\theta_t^{\rm BF16}
+\;\longrightarrow\;
+Q_{\rm FP4}(\theta_t)
+\;\longrightarrow\;
+\text{Cheap Explore}
+\;\longrightarrow\;
+\text{Select Seeds}
+\;\longrightarrow\;
+\theta_t^{\rm BF16}\text{ Regenerate}
+\;\longrightarrow\;
+\text{RL Update}
+\;\longrightarrow\;
+\theta_{t+1}^{\rm BF16}
+$$
+
+$$
+\theta_{t+1}^{\rm BF16}\;\longrightarrow\;Q_{\rm FP4}(\theta_{t+1})\;\longrightarrow\;\cdots
+$$
+
+<mark class="hl-key">**所以 FP4 proxy 是持续跟着当前 policy 更新的，不是拿一个很旧的量化模型一直帮新 policy 挑样本**</mark>。附录给了工程细节：<mark class="hl-trick">**权重先经 NVIDIA Transformer Engine 量化成 NVFP4，部署到一个「预编译」推理引擎上；每轮梯度更新后的新权重 in-place 重新量化并拷回这个已编译引擎，`without recompilation`**</mark>——<mark class="hl-key">**这就是 Figure 2 里那个 `2% overhead` 的来源**</mark>。
+
+**一个 iteration 的真实开销不是「96 FP4 + 96 BF16」。** 这是 $N$ 个便宜的加 $K$ 个贵的：
+
+$$
+\boxed{
+96\times\text{Cheap FP4}\;+\;24\times\text{Expensive BF16}
+}
+$$
+
+而 naive rollout scaling 相当于 $96\times\text{Expensive BF16}$。<mark class="hl-key">**所以 Sol-RL 节省计算的真正来源非常直观：72 个最终本来就不会参与 gradient update 的 candidate，不再浪费 BF16 完整 rollout。FP4 只负责快速淘汰它们。**</mark>
+
+**最后要避免一个概念混淆：Sol-RL 本身不是新的 RL loss。** <mark class="hl-trick">**它可以建立在已有的 diffusion RL optimization 之上**</mark>，论文标准配置用的是 DiffusionNFT（见 §3）；<mark class="hl-key">**Sol-RL 改的是 rollout / sample-selection infrastructure**</mark>：
+
+$$
+\boxed{
+\text{它解决「哪些样本值得花高精度训练成本」，而不是重新发明 policy objective。}
+}
+$$
+
+<mark class="hl-key">**这也是它工业价值高的原因：理论上的 RL 方法可以继续换，但「cheap exploration + selective high-precision training」这个结构可以独立复用。**</mark>
+
+::: warning 这一节有一个我没能从论文里确认的关键歧义
+<mark class="hl-trick">**Figure 2(c) 画出的损失有两项**</mark>
+
+$$
+\frac{1}{N}\sum_{i\in\mathcal{S}_{\rm contrast}}\mathcal{J}^{(i)}_{\rm clip}(\theta)
+\;+\;
+\frac{1}{N}\sum_{j\in\mathcal{S}_{\rm norm}}\mathcal{J}^{(j)}_{\rm clip}(\theta)
+$$
+
+<mark class="hl-key">**第二项是对「非选中集合」$\mathcal{S}_{\rm norm}$ 的求和**</mark>，<mark class="hl-trick">**与「只用最对比样本训练」的叙述并不完全一致**</mark>——<mark class="hl-key">**如果被淘汰的 72 个样本仍然以 $1/N$ 权重进入损失，那么「其余样本被丢弃」这个说法就需要修正**</mark>。
+
+<mark class="hl-trick">**论文正文没有解释 $\mathcal{S}_{\rm norm}$ 项的作用**</mark>（可能用于归一化统计、可能对应 DiffusionNFT 的某种加权），<mark class="hl-key">**而且 Figure 2(c) 标注的是 `GRPO Training` 而 §4.1 明确说实际用的是 DiffusionNFT objective，两者未对齐**</mark>。<mark class="hl-trick">**这一项需要查官方实现才能确认，笔记里先按「未确认」保留**</mark>。
+:::
+
+## 5. 实验、消融与最终 Recipe
+
+这篇的实验真正要验证的只有三件事：更大的 rollout pool 有没有持续收益；FP4 探索要跑多少步才排得准；以及这套两阶段方案是真省钱，还是只是把计算从一个地方搬到另一个地方。
+
+**① rollout scaling 确实有效，而且收益来自 exploration space 而不是训练 batch。** 作者固定真正参与训练的样本为 $K=24$，只改探索池 $N$：
+
+| Exploration Pool $N$ | HPSv2 |
+| ---: | ---: |
+| 24 | 0.3569 |
+| 48 | 0.3622 |
+| 72 | 0.3663 |
+| 96 | <mark class="hl-key">**0.3686**</mark> |
+
+<mark class="hl-key">**真正 backward 的仍然只有 24 个样本，性能却单调上升**</mark>——<mark class="hl-trick">**这就是 §2 那件事的直接实验证据**</mark>。<mark class="hl-key">**但在作者测试的 $N\le96$ 范围内还没有看到饱和**</mark>，<mark class="hl-trick">**所以 $N=96$ 是「还没饱和的最后一个点」，不是「已找到的最优值」**</mark>。
+
+**② FP4 探索不需要跑完整的步数。** Table 2 的 HPSv2：$2$ 步 0.3587、$4$ 步 0.3650、<mark class="hl-key">**$6$ 步 0.3686**</mark>、$8$ 步 0.3659——<mark class="hl-trick">**6 步之后饱和，8 步甚至略降**</mark>。所以标准 recipe 是：
+
+$$
+\boxed{
+96\times6\text{-step FP4}
+\;\longrightarrow\;
+24\times10\text{-step BF16}
+\;\longrightarrow\;
+\text{DiffusionNFT update}
+}
+$$
+
+<mark class="hl-key">**这个结果的意义不是「6 是神奇最优值」，而是证明了一件更普适的事**</mark>：
+
+$$
+\boxed{
+\text{Exploration sample 不需要达到 final-generation quality}
+}
+$$
+
+<mark class="hl-key">**它只需要达到 Enough Quality for Reliable Ranking**</mark>。<mark class="hl-trick">**步数太少时图像连基本 semantic layout 都还没形成，排序不可靠；到某个程度后主体与构图已足够用于 Top/Bottom 判定，再往上堆细节对筛 seed 帮助很小**</mark>。
+
+**③ 三个 speedup 口径必须分开，这是最容易混淆的地方。** Table 5 是权威来源：
+
+| Base Model | Rollout Naive | Rollout Ours | 加速 | E2E Naive | E2E Ours | 加速 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| FLUX.1 | 184s | 79s | <mark class="hl-key">**2.33×**</mark> | 274s | 169s | <mark class="hl-key">**1.62×**</mark> |
+| SD3.5-Large | 451s | 187s | <mark class="hl-key">**2.41×**</mark> | 691s | 427s | <mark class="hl-key">**1.61×**</mark> |
+| SANA | 65s | 46s | <mark class="hl-trick">1.41×</mark> | 95s | 76s | <mark class="hl-trick">1.25×</mark> |
+
+$$
+\boxed{2.4\times \approx \text{Rollout Forward 加速}}
+\qquad
+\boxed{1.6\times \approx \text{单次完整 RL Iteration 加速}}
+\qquad
+\boxed{4.64\times \approx \text{达到相同性能所需时间的加速}}
+$$
+
+<mark class="hl-trick">**端到端拿不到 2.4×，是因为一次完整 iteration 还包含 BF16 regeneration、backward、optimizer step，而这三段都没被加速**</mark>。<mark class="hl-key">**所以拿 2.4× 当「训练快多少」去汇报是会夸大的**</mark>。
+
+![Sol-RL Fig.1（右栏）：ImageReward 训练曲线，横轴 GPU Hours、纵轴 ImageReward Score，绿线 Sol-RL、灰线 DiffusionNFT，红虚线标出 DiffusionNFT 的最终水平。三条曲线自上而下为 **SANA speedup 2.42×**、**FLUX.1 speedup 3.00×**、**SD3.5 Large speedup 4.64×**。三条曲线形状一致：Sol-RL 用明显更少的 GPU Hours 追上 DiffusionNFT 的终值，并最终停在更高的天花板。](/solrl-fig1-convergence-curves.png)
+
+![Sol-RL Fig.4：跨基模的对齐性能，3×3 网格。行 = SD3.5 Large / SANA / FLUX.1，列 = CLIPScore / HPSv2 / PickScore，横轴 GPU Hours，绿线 Sol-RL、灰线 DiffusionNFT，每格左上角红字标注该格的加速倍数：**SD3.5 Large** CLIPScore 2.7× / HPSv2 3.0× / PickScore 2.0×；**SANA** CLIPScore 2.7× / HPSv2 3.6× / PickScore 2.0×；**FLUX.1** CLIPScore 1.9× / HPSv2 3.9× / PickScore 3.3×。](/solrl-fig4-alignment-perf.png)
+
+<mark class="hl-key">**⚠️ 这里必须补一个论文没有明说的观察：headline 的 `4.64×` 只出现在 ImageReward 曲线上（即 SD3.5-Large 那一格）。**</mark>在 Figure 4 覆盖的三个指标上，加速区间是 <mark class="hl-key">**1.9× – 3.9×**</mark>，明显低于 4.64×。<mark class="hl-trick">**论文正文写的是「surpasses the baseline's equivalent performance by 1.91× to 4.64×」，这个区间横跨两个 figure**</mark>，<mark class="hl-key">**只报上限会明显夸大**</mark>。
+
+**④ 质量不是「更快但略掉点」——这一点要靠 Table 6 澄清。** Sol-RL 对 BF16 naive scaling 的 HPSv2 差距是：
+
+| Base Model | Naive | Sol-RL (Δ) |
+| :--- | ---: | ---: |
+| FLUX.1 | 0.3699 | 0.3688（<mark class="hl-trick">−0.29%</mark>） |
+| SD3.5-Large | 0.3803 | 0.3762（<mark class="hl-trick">−1.08%</mark>） |
+| SANA | 0.3682 | <mark class="hl-key">0.3686（+0.11%）</mark> |
+
+<mark class="hl-key">**所以相对 naive scaling，Sol-RL 基本是「打平」，不是「更好」**</mark>，论文自己的措辞也是 `maintains on-par results with a marginal gap of at most 1%`。<mark class="hl-key">**它的收益是「同等质量、更便宜」，而不是「更便宜、还更好」**</mark>——<mark class="hl-trick">**这个区分在汇报时不能含糊**</mark>。
+
+**⑤ 那 Table 1 里相对其他方法的优势是哪来的？** Table 1 在 FLUX.1 上、**相同 GPU-hour 预算**下比较：
+
+| Method | ImageReward | CLIPScore | PickScore | HPSv2 |
+| :--- | ---: | ---: | ---: | ---: |
+| Base (w/o CFG) | 0.455 | 0.2630 | 0.8096 | 0.2566 |
+| DanceGRPO | 1.4937 | 0.2898 | 0.8807 | 0.3552 |
+| FlowGRPO | 1.5331 | 0.2884 | 0.8743 | 0.3501 |
+| AWM | 1.6693 | <mark class="hl-trick">0.3039</mark> | 0.8842 | <mark class="hl-trick">0.3664</mark> |
+| DiffusionNFT | 1.6707 | 0.2991 | <mark class="hl-trick">0.8852</mark> | 0.3613 |
+| <mark class="hl-key">**Sol-RL (Ours)**</mark> | <mark class="hl-key">**1.7636**</mark> | <mark class="hl-key">**0.3089**</mark> | <mark class="hl-key">**0.8932**</mark> | <mark class="hl-key">**0.3688**</mark> |
+
+<mark class="hl-key">**Sol-RL 四项全部最优，但要注意两点论文没强调的细节：**</mark>
+
+- <mark class="hl-trick">**AWM 是比 DiffusionNFT 更强的 baseline**</mark>——<mark class="hl-key">**它在 CLIPScore（0.3039 vs 0.2991）与 HPSv2（0.3664 vs 0.3613）上都高于 DiffusionNFT**</mark>，而论文的超参是对齐 DiffusionNFT 的。<mark class="hl-trick">**在 HPSv2 上 Sol-RL 相对最强 baseline（AWM）的优势只有 +0.0024**</mark>，<mark class="hl-key">**远小于表观上的 +0.0075（对 DiffusionNFT）**</mark>。
+- <mark class="hl-key">**真正起作用的是 rollout scaling + selective training，FP4 只是让这个更大的探索池付得起**</mark>——<mark class="hl-trick">**因为 Table 6 显示 Sol-RL 与 naive scaling 基本打平，两者的区别只有探索池大小**</mark>。
+
+**⑥ 最后提炼进 Image RL Recipe 的两条。**
+
+<mark class="hl-key">**第一条：Exploration Budget 与 Training Budget 应该解耦。**</mark> 以后不要默认「生成多少就训练多少」：
+
+$$
+\boxed{
+\text{大量廉价探索}
+\;\longrightarrow\;
+\text{筛出高信息量样本}
+\;\longrightarrow\;
+\text{少量高质量训练}
+}
+$$
+
+<mark class="hl-key">**第二条（比「FP4」这个具体技术普适得多）：探索阶段只需要满足决策所需的最低精度。**</mark>
+
+$$
+\boxed{
+\text{探索的目的只是判断「哪个 candidate 值得训练」，它不需要达到训练样本所要求的 fidelity}
+}
+$$
+
+<mark class="hl-trick">**可以用更低 precision、更少 denoising steps，甚至未来用其他 surrogate model 来做。**</mark>
+
+**所以 Sol-RL 最终压成一句放进总 Recipe：**
+
+$$
+\boxed{
+\textbf{Cheap Explore, Expensive Learn：把算力花在寻找高价值样本，而不是把所有 rollout 都高精度算到底。}
+}$$
+
+::: warning 引用这篇时必须一起带走的四个限定
+<mark class="hl-trick">**一、这是工程 / 系统贡献，不是算法贡献**</mark>——algorithm 是 DiffusionNFT，selective training 来自 DanceGRPO。
+
+<mark class="hl-trick">**二、加速上限依赖 Blackwell 硬件**</mark>，且 <mark class="hl-key">**SANA 只有 1.41× / 1.25×**</mark>——<mark class="hl-trick">**说明在算力较弱或模型较小的场景，收益会显著缩水**</mark>。
+
+<mark class="hl-trick">**三、$N=96$ 只是「没饱和的最后一个测试点」**</mark>，论文没给 $N>96$ 的数据，<mark class="hl-key">**也没有回答 rollout scaling 最终会在哪里饱和**</mark>。
+
+<mark class="hl-trick">**四、Figure 3(a) 把 Naïve Quant 的耗时标成了 Sol-RL**</mark>，<mark class="hl-key">**算加速请一律以 Table 5 为准**</mark>。
+:::
 
 ---
 
@@ -245,8 +437,10 @@ $$
 | Selected samples | top-12 + bottom-12 = 24（`24-in-96`） |
 | FP4 探索 / BF16 rollout denoise steps | 6 / 10 |
 | FP4 吞吐 | up to **4×** TFLOPs of BF16 |
-| Pipeline 加速 / 额外开销 | **2.4×** / **2%**（rollout 段口径） |
-| 收敛加速 | up to **4.64×**（三模型 2.42 / 4.64 / 3.00×） |
+| 重量化开销 | **2%**（in-place 拷回已编译引擎，无需 recompile） |
+| Rollout 加速（Table 5） | FLUX.1 **2.33×**、SD3.5-L **2.41×**、SANA **1.41×** |
+| 端到端 iteration 加速（Table 5） | FLUX.1 **1.62×**、SD3.5-L **1.61×**、SANA **1.25×** |
+| 收敛加速 time-to-target | **1.91–4.64×**（ImageReward 曲线：SANA 2.42 / FLUX.1 3.00 / SD3.5-L **4.64**） |
 | Kendall $\tau$ / Spearman $\rho$（Overall） | 0.798 / 0.927（CLIPScore 单项最差：0.752 / 0.900） |
 | Top-K match（Overall） | 4→96.9%、8→95.0%、12→93.3% |
 | FP4 vs BF16 语义指标（Table 4） | IS 16.84→17.85 / 16.02→15.94 / 16.42→17.60；CLIP 27.44→27.10 / 29.53→29.43 / 28.37→28.34 |
@@ -254,5 +448,13 @@ $$
 | 探索池 $N$（Table 3） | 24→0.3569、48→0.3622、72→0.3663、**96→0.3686**（到 96 仍无饱和） |
 | 硬件 / 基模 | 8× B200，NVFP4 backend = Transformer Engine；SANA / FLUX.1 / SD3.5-L |
 | KL 系数 / old-model decay | $\beta_{\rm kl}=1.0$ / 0.9 |
+| 对 naive scaling 的 HPSv2 差距（Table 6） | FLUX.1 −0.29%、SD3.5-L −1.08%、SANA +0.11% |
+| 最强 baseline（Table 1, FLUX.1） | AWM 的 CLIPScore 0.3039 / HPSv2 0.3664 优于 DiffusionNFT；Sol-RL 在 HPSv2 上仅比 AWM 高 0.0024 |
 
-<mark class="hl-trick">**尚未核实**</mark>：BF16 重跑后 reward 是否重算、Table 1 / Table 5 具体数值、Figure 1 / 2 / 4 / 5 未查看（已收录 Fig.3 与 Fig.6）、跨硬件可移植性论文未讨论。
+<mark class="hl-trick">**尚未核实 / 未解决**</mark>：
+- **Figure 2(c) 损失里 $\mathcal{S}_{norm}$ 项的作用**——被淘汰样本是否仍进梯度、系数为何（§4 末尾的 warning）
+- **BF16 重跑后 reward 是否重算**，还是沿用 FP4 阶段的 $\tilde R$ 排序（§3 已标，论文始终用带波浪号的 proxy reward，未说明）
+- **Figure 3(a) 把 Naïve Quant 的 184s 误标为 Sol-RL**（§1 / §5 已标，以 Table 5 为准）
+- **Figure 2(c) 标 `GRPO Training` 而正文用 DiffusionNFT**，两者未对齐
+- **$N>96$ 的 scaling 行为**未给；附录 B 的完整超参表（Table 7）未逐项抄录
+- **Figure 5 / 7 / 8 / 9**（定性对比图）未查看；跨硬件可移植性论文未讨论
