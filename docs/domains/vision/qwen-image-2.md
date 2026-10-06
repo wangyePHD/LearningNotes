@@ -403,7 +403,7 @@ $$
 
 > Qwen-Image-2.0 enables <mark class="hl-key">**ultra-long text rendering with instructions of up to 1K tokens**</mark>, and can directly produce text-dense visual outputs such as slides, posters, ...
 
-<mark class="hl-key">**`up to 1K tokens` 这个数字已核实，确实出自论文摘要，不是外部推测。</mark>它把「Text Caption 监督」与「1K-token 超长文字渲染」这两个目标直接连起来了：<mark class="hl-trick">**如果 captioner 只教模型「写 20 个字」，模型不可能在推理时稳定渲染 1K token 的文字内容**</mark>。
+<mark class="hl-key">**`up to 1K tokens` 这个数字已核实，确实出自论文摘要，不是外部推测。**</mark>它把「Text Caption 监督」与「1K-token 超长文字渲染」这两个目标直接连起来了：<mark class="hl-trick">**如果 captioner 只教模型「写 20 个字」，模型不可能在推理时稳定渲染 1K token 的文字内容**</mark>。
 
 <mark class="hl-key">**对我们的 Recipe 最有启发的一条：想做好 OCR / infographic / poster，仅仅给普通 caption 追加 OCR transcription 是不够的，最好建立独立的 Text-rich Annotation Pipeline。**</mark>
 
@@ -1033,7 +1033,7 @@ $$
 | <mark class="hl-trick">**图内箭头**</mark> | Model Evaluation → User Feedback → Bad Case Mining（<mark class="hl-key">**单向串联**</mark>） |
 | <mark class="hl-trick">**caption 文字**</mark> | `standardized model evaluation, targeted bad-case mining, and user feedback`（<mark class="hl-trick">**bad-case mining 在 user feedback 之前**</mark>） |
 
-<mark class="hl-trick">**两种读法含义不同：图示是「采集→补充→深挖」的递进流水线，caption 更像三类并列信号源。**</mark><mark class="hl-key">**论文没有解释，因此不确定是「先收反馈再定向挖掘」这一串行流程，还是三种并列来源的图示简写。</mark>
+<mark class="hl-trick">**两种读法含义不同：图示是「采集→补充→深挖」的递进流水线，caption 更像三类并列信号源。**</mark><mark class="hl-key">**论文没有解释，因此不确定是「先收反馈再定向挖掘」这一串行流程，还是三种并列来源的图示简写。**</mark>
 
 <mark class="hl-key">**实务上按并行理解更稳妥**</mark>——<mark class="hl-trick">**因为 caption 的措辞是 `from diverse sources`（来自多种来源），而「多种来源」通常是并行采集的意思**</mark>。
 :::

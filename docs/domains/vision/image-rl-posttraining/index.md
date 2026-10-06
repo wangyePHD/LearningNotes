@@ -22,6 +22,6 @@
 | **Swift-Image RL** | 并行专家 NFT → 多教师在线蒸馏 | 🟢 已完结 | [阅读笔记 →](./swift-image-rl.md) |
 | **ERNIE-Image DPO** | Flow Matching DPO + 双 anchor + MT-DMD | 🟢 已完结 | [阅读笔记 →](./ernie-image-dpo.md) |
 | **SeFi-Image RL** | 在线 NFT + 双潜适配 + 能力标签；§4–7 已补全损失/Δt 调度/双流代码/评测 | 🟢 已完结 | [阅读笔记 →](./sefi-image-rl.md) |
-| **Sol-RL (FP4 Explore / BF16 Train)** | NVFP4 探索 + BF16 重生成；`24-in-96`（top-12+bottom-12），pipeline 加速 2.4×、收敛加速最高 4.64× | 🔄 精读中（§1–2） | [阅读笔记 →](./sol-rl.md) |
+| **Sol-RL (FP4 Explore / BF16 Train)** | NVFP4 探索 + BF16 重生成；`24-in-96`（top-12+bottom-12），pipeline 加速 2.4×、收敛加速最高 4.64× | 🔄 精读中（§1–3） | [阅读笔记 →](./sol-rl.md) |
 | **i1（无 RL 参照）** | 建模 + 数据 recipe 对照组 | 🟢 已完结 | 见对比总结 |
 | **算法 × 奖励 × 基模对比与演进** | 六条主线 + 工程 checklist | 🟢 已完结 | [阅读笔记 →](./rl-comparison-2026.md) |
