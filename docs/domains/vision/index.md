@@ -6,6 +6,7 @@
 
 | 篇目 | 主题 / 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
+| **理解优先 Agentic 基模 Boogu-Image-0.1** | **Requirement-to-Image**：Reasoner(≈32B) + Encoder(Qwen3-VL-8B 冻结) + DiT 10B 三段解耦（原 72B VLM+10B DiT 成本不可接受）；**208.62M 图 ≈$400K**（187M 开源 + Syllabus 21.62M→重采样 47.19M），缺陷图**标注而非删除**，分维度多 VLM Caption，汉字曝光阈值 ≈300 次/字；**Rectified Dynamic Time Shifting**（2K 不再加大偏移，中位数 0.04→0.24）；**刻意不做大规模美学 RL**（保生成分布多样性），只修 anatomy/文字；**BOG**（CFG 更新当矩阵做 Newton–Schulz 正交化 + POD，training-free 解过饱和） | 🔄 精读中 | [阅读笔记 →](./boogu-image.md) |
 | **单流扩散基模 Z-Image** | S3-DiT 6.15B 单流主干 + 数据四模块闭环，SFT 三件套 → D-DMD/DMDR 蒸馏 8 NFE → DPO+GRPO，全流程 314K H800·h；附「写实感来源」讨论 | 🟢 已完结 | [阅读笔记 →](./z-image.md) |
 | **轻量统一多模态 DeepGen 1.0** | 3B VLM + 2B DiT = 5B，SCB 多层桥接 + think tokens，三阶段训练（对齐预训练 → 联合 SFT → MR-GRPO）；RL = 多奖励解耦归一化 + velocity KL + auxiliary SFT loss + 噪声保持随机采样，仅 1,500 steps，**RL 数据无 Edit**（RISE 13.3 → 10.8） | 🔄 精读中 | [阅读笔记 →](./deepgen.md) |
 | **原生分辨率高效基模 Mage-Flow** | 微软 4B，Mage-VAE（one-step diffusion tokenizer，>10× 降本）+ Native-Resolution MMDiT + 栈级 CUDA 融合（MFU 13.88%→29.28%）；Data 10B→1.3B / Edit 90M→45M，Diffusion-NFT（Edit:Gen=4:1）→ 4-step D-DMD + adversarial guidance | 📋 目录已建 | [阅读笔记 →](./mage-flow.md) |

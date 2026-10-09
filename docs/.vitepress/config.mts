@@ -141,6 +141,7 @@ export default defineConfig({
             { text: '轻量统一多模态 DeepGen 1.0', link: '/domains/vision/deepgen' },
             { text: '原生分辨率高效基模 Mage-Flow', link: '/domains/vision/mage-flow' },
             { text: '统一生编基模 Qwen-Image-2.0', link: '/domains/vision/qwen-image-2' },
+            { text: '理解优先 Agentic 基模 Boogu-Image-0.1', link: '/domains/vision/boogu-image' },
             { text: '图像基模训练 Playbook v1.0', link: '/domains/vision/training-playbook' },
             { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
             { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' },
