@@ -22,6 +22,7 @@
 | :--- | :--- | :--- |
 | **视频生成与理解** | `docs/domains/video/` | `.agent/specs/video-generation.md` |
 | **图像生成与风格定制** | `docs/domains/vision/` | `.agent/specs/vision-customization.md` |
+| **AIGC 强化学习后训练** | `docs/domains/rl-aigc/` | `.agent/specs/rl-aigc.md` |
 | **语言模型与推理** | `docs/domains/llm/` | `.agent/specs/llm-reasoning.md` |
 | **多模态与特征对齐** | `docs/domains/multimodal/` | `.agent/specs/multimodal-alignment.md` |
 | **智能体系统与工具编排** | `docs/domains/agent/` | `.agent/specs/agent-systems.md` |

@@ -9,6 +9,7 @@ When Ye Wang gives you a knowledge point, paper insight, experiment finding, or 
 3. **Route to domain spec**:
    - Video models: read `.agent/specs/video-generation.md`
    - Vision & style transfer: read `.agent/specs/vision-customization.md`
+   - RL post-training for AIGC (reward system / rubric / data pipeline): read `.agent/specs/rl-aigc.md`
    - LLM & Reasoning: read `.agent/specs/llm-reasoning.md`
    - Multimodal & CLIP: read `.agent/specs/multimodal-alignment.md`
    - Agent systems & tool orchestration: read `.agent/specs/agent-systems.md`

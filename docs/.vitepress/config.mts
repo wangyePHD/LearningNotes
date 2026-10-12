@@ -52,6 +52,7 @@ export default defineConfig({
           { text: '🖼️ 图像与视觉 (CV & Image)', link: '/domains/vision/' },
           { text: '💬 语言与推理 (LLM & Reasoning)', link: '/domains/llm/' },
           { text: '🎙️ 多模态与语音 (Multimodal)', link: '/domains/multimodal/' },
+          { text: '🎲 AIGC 强化学习 (RL for AIGC)', link: '/domains/rl-aigc/' },
           { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' }
         ]
       },
@@ -187,7 +188,18 @@ export default defineConfig({
         }
       ],
 
-      // 5. 智能体系统专属侧边栏
+      // 5. AIGC 强化学习后训练专属侧边栏
+      '/domains/rl-aigc/': [
+        {
+          text: '🎲 AIGC 强化学习后训练',
+          items: [
+            { text: '专区概览与收录标准', link: '/domains/rl-aigc/' },
+            { text: 'Arena-RL：Preference × Rubric 复合奖励', link: '/domains/rl-aigc/arena-preference-rubric-reward' }
+          ]
+        }
+      ],
+
+      // 6. 智能体系统专属侧边栏
       '/domains/agent/': [
         {
           text: '🤖 智能体系统与工具编排',
@@ -200,7 +212,7 @@ export default defineConfig({
         }
       ],
 
-      // 6. 通用理论基石专属侧边栏
+      // 7. 通用理论基石专属侧边栏
       '/foundations/': [
         {
           text: '📐 通用理论基石',
@@ -213,7 +225,7 @@ export default defineConfig({
         }
       ],
 
-      // 7. 算力与工程专属侧边栏
+      // 8. 算力与工程专属侧边栏
       '/infra/': [
         {
           text: '⚡ 算力与系统工程',
@@ -225,7 +237,7 @@ export default defineConfig({
         }
       ],
 
-      // 8. 实战项目专属侧边栏
+      // 9. 实战项目专属侧边栏
       '/projects/': [
         {
           text: '🚀 个人复现与落地项目',

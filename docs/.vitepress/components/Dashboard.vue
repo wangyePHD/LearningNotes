@@ -149,6 +149,14 @@ onMounted(() => {
           </div>
         </a>
 
+        <a href="/domains/rl-aigc/" class="nav-card">
+          <div class="card-icon">🎲</div>
+          <div class="card-body">
+            <h4>AIGC 强化学习后训练 (RL for AIGC)</h4>
+            <p>扩散/流模型后训练全闭环：Reward 覆盖率与鲁棒性、Rubric checklist 自动生产、one-sided veto 反 hacking、LoRA soup 权重集成、Prompt 过滤与评测协议。</p>
+          </div>
+        </a>
+
         <a href="/domains/agent/" class="nav-card">
           <div class="card-icon">🤖</div>
           <div class="card-body">

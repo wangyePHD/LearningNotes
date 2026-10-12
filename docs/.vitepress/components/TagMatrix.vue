@@ -2,7 +2,7 @@
   <div class="tag-matrix-container">
     <div class="matrix-header">
       <p class="matrix-desc">
-        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
+        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、RL 后训练、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
       </p>
     </div>
 
@@ -219,6 +219,15 @@ const notesList = ref([
     tags: ['Vision', 'Diffusion', 'Dataset', 'Fine-T2I', 'SFT', 'Data Engineering']
   },
   // 续：RL 对比总表隐藏
+  {
+    title: 'Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模',
+    link: '/domains/rl-aigc/arena-preference-rubric-reward',
+    domain: '🎲 RL 后训练',
+    domainClass: 'domain-rl',
+    date: '2026-10-12',
+    summary: 'Arena。算法不变、只动奖励侧。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness；四类奖励（Preference RM / presence Faithfulness / absence Intent-gated Constraint / Anti-Hack）+ 四个组合机制（解耦归一化 / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 2**：Arena 真实用户 Prompt 经 Gemini-3.5-Flash 六条 VALID 规则二值过滤得 10K 训练 / 1K 验证，100K 未过滤比 10K 过滤低 0.0360 胜率。',
+    tags: ['RL', 'Reward System', 'Rubric', 'Bradley-Terry', 'Reward Hacking', 'DiffusionNFT', 'Prompt Filtering', 'Vision']
+  },
   {
     title: 'DeepSeek-R1 推理涌现与强化学习机制',
     link: '/domains/llm/deepseek-r1-reasoning',
@@ -564,6 +573,7 @@ const filteredNotes = computed(() => {
 .domain-vision { background: rgba(38, 166, 154, 0.15); color: #26a69a; }
 .domain-llm { background: rgba(142, 68, 173, 0.15); color: #9c27b0; }
 .domain-multi { background: rgba(66, 165, 245, 0.15); color: #1e88e5; }
+.domain-rl { background: rgba(156, 39, 176, 0.15); color: #8e24aa; }
 .domain-agent { background: rgba(0, 176, 255, 0.15); color: #039be5; }
 .domain-foundations { background: rgba(255, 179, 0, 0.18); color: #f57f17; }
 .domain-infra { background: rgba(76, 175, 80, 0.15); color: #43a047; }
