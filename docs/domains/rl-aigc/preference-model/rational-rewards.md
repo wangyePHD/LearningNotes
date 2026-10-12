@@ -6,10 +6,11 @@
 > **标题**：*RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time*
 > **模型**：Teacher Qwen3-VL-32B-Instruct → Student **Qwen3-VL-Instruct-8B**
 > **原图**：`Papers/RetionalReward.pdf`
-> **精读进度**：**Part 1–3 完结**
+> **精读进度**：**Part 1–4 完结**
 > **Part 1**：Abstract / §1 / §2 整体框架与核心创新 → §1–§6
 > **Part 2**：§3 Training Data / 附录 F.1 → §7–§12
 > **Part 3**：§2.1 + 附录 B、C、F，Figure 4 → §13–§18
+> **Part 4**：SFT 训练 + 官方开源配置 → §19–§25
 > **子专题**：[🏅 偏好模型 (Preference Model)](./index.md)
 
 ---
@@ -712,3 +713,274 @@ $$
 :::
 
 **下一部分 Part 4：** 我们就进入真正的 Reward Model 训练——Qwen3-VL-8B 的 SFT 数据格式、Pairwise 与 Pointwise 如何混合、训练 Loss、LoRA 和实际开源代码。
+
+---
+
+# Part 4：RationalRewards-8B 的 SFT 训练
+
+> **对应原文**：SFT 目标 + 官方开源训练配置（LLaMA-Factory）
+
+这一部分最重要的结论是：<mark class="hl-key">**RationalRewards 没有使用 Bradley–Terry Loss，也没有对 Reward Model 本身进行 GRPO。它主要通过一次 SFT，让 Qwen3-VL-8B 学会输出评价理由、偏好判断和多维评分。**</mark>
+
+而且查官方训练代码时发现了一个重要细节：<mark class="hl-trick">**仓库当前公开的 SFT 配置默认使用 Full Fine-tuning，而不是 LoRA。这一点要和后续图像基模使用 LoRA + DiffusionNFT 区分开。**</mark>
+
+---
+
+## 19. 先搞清楚到底训练了什么
+
+作者使用两类数据共同训练同一个 Qwen3-VL-8B：
+
+$$
+\begin{aligned}
+&\textbf{Qwen3-VL-8B-Instruct} \\
+&\quad \bullet\ \textbf{Pairwise SFT} \\
+&\qquad (\text{Prompt} + \text{图片 A/B}) \Rightarrow \text{学习比较理由、偏好判断} \\
+&\quad \bullet\ \textbf{Pointwise SFT} \\
+&\qquad (\text{Prompt} + \text{单张图片}) \Rightarrow \text{学习评价理由、各维度评分} \\
+&\quad \downarrow\ \textbf{联合 SFT：Token-level Cross Entropy} \\
+&\quad \downarrow \\
+&\textbf{RationalRewards-8B} \\
+&\qquad \text{既能比较两张图片，又能对单张图片独立评分}
+\end{aligned}
+$$
+
+::: danger 这里有一个关键区别
+<mark class="hl-key">**训练用的 Pairwise 标签，不是 RL 阶段的 Reward。它只是用于制作模型应该生成的答案。**</mark>
+
+真正用于后续 DiffusionNFT 的，<mark class="hl-trick">**是训练完成后 Pointwise 接口输出的数值评分**</mark>。
+:::
+
+---
+
+## 20. 两种数据到底怎么送入模型？
+
+继续用前面的例子：
+
+> Prompt：一只红色的猫站在蓝色汽车左侧。
+
+现有偏好标签告诉我们，Image A 比 Image B 更好。经过 PARROT，Teacher 已经为两种样本生成了训练答案。
+
+### Pairwise SFT：学习比较图片
+
+**Student 输入**：
+
+```text
+User Prompt: A red cat stands to the left of a blue car.
+
+Image A: <image>
+Image B: <image>
+
+Compare these images and explain their relative quality.
+```
+
+**Student 学习的目标输出**：
+
+```text
+Text Faithfulness:
+Image A correctly places the cat to the left.
+Image B has an incorrect spatial relationship.
+
+Physical Quality:
+Both images are reasonably natural.
+
+Overall Preference: A is better than B.
+```
+
+::: warning 这个格式是简化示例
+<mark class="hl-key">**并非官方 JSON 原文**</mark>。重点是：<mark class="hl-trick">**Student 输入不包含「A 更好」这个答案，而训练目标中包含正确的比较理由与偏好结果**</mark>。
+:::
+
+### Pointwise SFT：学习单图评分
+
+**Student 输入**：
+
+```text
+User Prompt: A red cat stands to the left of a blue car.
+
+Generated Image: <image>
+
+Evaluate this image independently.
+```
+
+**Student 学习的目标输出**：
+
+```text
+Text Faithfulness:
+The cat, car and relative positions match the prompt.
+Score: 4.0
+
+Physical and Visual Quality:
+Natural lighting, with minor visual imperfections.
+Score: 3.5
+
+Text Rendering: N/A
+
+Suggested improvement:
+Improve fine-grained surface details.
+```
+
+同样是示意格式。<mark class="hl-key">**实际训练数据采用包含 `messages` 和 `images` 字段的 ShareGPT 风格多模态对话格式。**</mark>
+
+::: tip 这两种数据最关键的区别
+<mark class="hl-key">**Pairwise 让模型学会区分相对质量，Pointwise 让模型能够脱离比较对象，独立给一张图片评分。**</mark>
+:::
+
+论文明确提出联合训练：
+
+$$
+\mathcal{D}_{\mathrm{train}} = \mathcal{D}_{\mathrm{pair}} \cup \mathcal{D}_{\mathrm{point}}
+$$
+
+<mark class="hl-trick">**公开的 LLaMA-Factory 配置也确实在同一个 `dataset` 字段中列出了 Pairwise 和 Pointwise 数据集。**</mark>
+
+---
+
+## 21. Loss 怎么计算？需不需要 BT Loss？
+
+<mark class="hl-key">**不需要。**</mark>
+
+论文给出的核心目标是：
+
+$$
+\boxed{
+\mathcal{L}_{\mathrm{SFT}} = -\mathbb{E}_{(x,y,z)\sim\mathcal{D}_{\mathrm{train}}} \log P_{\theta}(z, y \mid x)
+}
+$$
+
+这里 $x$ 是输入图片及任务条件，$z$ 是评价理由，$y$ 是偏好判断或对应的评分结果。
+
+具体到语言模型实现，本质上就是<mark class="hl-key">**逐 Token 的 Cross-Entropy**</mark>：
+
+$$
+\mathcal{L} = -\sum_{t=1}^{T} \log P_{\theta}\bigl(a_t \mid x, a_{<t}\bigr)
+$$
+
+其中 $a_t$ 是目标回答中的 Token。
+
+例如 Teacher 的目标回答是 `Image A is better because ...`，训练时就通过 <mark class="hl-trick">**Teacher Forcing**</mark>，让 Student 学会逐 Token 生成这句话，<mark class="hl-trick">**包括评价理由和最终结论**</mark>。
+
+::: warning 分数也是以文本形式被预测的
+<mark class="hl-key">**不需要单独增加一个 Scalar Reward Head。**</mark>这和 HPSv3、Arena 中的回归式 Preference RM 是两种不同架构。
+:::
+
+::: tip 再强调一次
+论文虽通过 ELBO 解释 PARROT，但<mark class="hl-key">**实际 Student SFT 阶段并没有要求另行实现一个 KL Loss。它使用的就是上述标准 SFT 目标。**</mark>
+:::
+
+---
+
+## 22. 官方开源的 SFT 训练配置
+
+<mark class="hl-key">**这里直接以作者 GitHub 当前公开的配置为准。**</mark>
+
+源文件：[`rationalrewards_full_sft.yaml`](https://github.com/TIGER-AI-Lab/RationalRewards/blob/main/rationalrewards_sft/examples/train_full/rationalrewards_full_sft.yaml)
+
+| 参数 | 官方代码中的配置 |
+| :--- | :--- |
+| **Backbone** | Qwen3-VL-8B-Instruct |
+| **训练框架** | LLaMA-Factory |
+| **Fine-tuning** | <mark class="hl-trick">**Full Fine-tuning**</mark> |
+| **Vision Tower** | Frozen |
+| **Multimodal Projector** | Frozen |
+| **DeepSpeed** | ZeRO-3 |
+| **Precision** | BF16 |
+| **Learning Rate** | `1e-5` |
+| **Epoch** | `3` |
+| **Per-device Batch Size** | `4` |
+| **Gradient Accumulation** | `4` |
+| **LR Scheduler** | Cosine |
+| **Warmup Ratio** | `0.05` |
+| **Max Sequence Length** | `32768` |
+| **Image Max Pixels** | `802816` |
+| **GPU 数量** | <mark class="hl-key">**配置未明确指定**</mark> |
+
+::: warning 值得特别提醒的是
+<mark class="hl-key">**这些是仓库当前提供的训练配置，论文正文没有完整列出 Reward Model SFT 的全部超参数。因此不能保证公开配置与作者最终实验使用的配置在每个细节上完全一致。**</mark>
+
+而且，代码中的 `finetuning_type: full` 表示默认执行全参数微调，<mark class="hl-trick">**LoRA 相关配置只是被注释的可选项**</mark>，<mark class="hl-key">**不能把后续 DiffusionNFT 的 LoRA Rank 64 误当成 Reward Model 的 SFT 参数**</mark>。
+:::
+
+如果只想复现 SFT，官方入口是：
+
+```bash
+bash rationalrewards_sft/run_sft.sh
+```
+
+<mark class="hl-trick">**运行前需要配置模型路径、数据目录、缓存和输出目录。**</mark>
+
+---
+
+## 23. 还有一个需要认真核对的数据规模问题
+
+<mark class="hl-key">**仓库的数据注册表与论文所描述的原始样本统计口径并不完全对应。**</mark>
+
+论文描述的是约 <mark class="hl-trick">**80K 原始 Pairwise 数据，过滤后约 57.6K 对**</mark>；但公开 SFT 配置包括：
+
+```text
+t2i_pairwisev4all_90k
+editreward_pairwisev4_42k
+editpica_pairwisev4_33k
+```
+
+等**六个数据集标识**，而 Hugging Face 发布的 SFT 数据集还显示<mark class="hl-key">**约 348K 条记录**</mark>。
+
+::: danger 这对复现很重要
+<mark class="hl-key">**这些数据名称、记录数量与论文中的原始 Pair 数量不在同一统计层级，可能涉及数据扩展、多种训练格式或不同实验版本。**</mark>
+
+<mark class="hl-trick">**目前无法仅凭公开说明准确还原每种样本的实际混合比例，也不能简单把文件名中的 `90k` 当成最终训练样本数。**</mark>
+
+特别是可能关心的 <mark class="hl-key">**Pairwise 和 Pointwise 的训练比例**</mark>——<mark class="hl-trick">**论文没有给出清晰的比例消融**</mark>。
+:::
+
+---
+
+## 24. SFT 到底带来了什么效果？
+
+论文有一组非常有参考价值的对照：<mark class="hl-key">**用同样的 8B Backbone 和同等数据量，比较普通 Teacher 蒸馏与 PARROT 蒸馏**</mark>。
+
+| 训练方法 | MMRB2-T2I | GenAI-Bench T2I |
+| :--- | ---: | ---: |
+| 直接蒸馏 Qwen3-VL-32B | 57.4% | 59.3% |
+| **PARROT → Qwen3-VL-8B** | **64.2%** | **69.8%** |
+| **差值** | **+6.8** | **+10.5** |
+
+::: tip 这组结果说明什么
+在作者的实验条件下，<mark class="hl-key">**不是简单使用更强的 Teacher 就能得到好的 Reward Model；Teacher 生产什么样的监督数据同样重要**</mark>。
+:::
+
+::: danger 但它没有单独证明两件事
+1. <mark class="hl-key">**Pairwise SFT 与 Pointwise SFT 分别贡献多少**</mark>；
+2. <mark class="hl-trick">**不能仅据此断言「生成 Reasoning 本身就能避免 Reward Hacking」**</mark>——那是论文另一组实验的结论。
+:::
+
+---
+
+## 25. Part 4 总结
+
+RationalRewards 的 Reward Model 训练，可以浓缩为：
+
+$$
+\boxed{
+\begin{gathered}
+\textbf{Pairwise Preference} \\
+\downarrow\ \textbf{PARROT} \\
+\textbf{Pairwise + Pointwise Reasoning Data} \\
+\downarrow\ \textbf{SFT Cross-Entropy} \\
+\textbf{Qwen3-VL-8B Reward Model}
+\end{gathered}
+}
+$$
+
+<mark class="hl-key">**整套方法没有专门设计复杂的 Reward Loss，真正有技术含量的地方在于 PARROT 制作出来的 SFT 监督，而不是 SFT 算法本身。**</mark>
+
+::: danger 这里还有两个容易踩的坑
+1. <mark class="hl-key">**Reward Model 的 SFT 是 Full FT，不是 LoRA**</mark>——而后续图像基模的 DiffusionNFT 才是 LoRA Rank 64，两套配置的 rank 含义完全不同；
+2. <mark class="hl-trick">**分数是以文本形式被逐 Token 预测的，没有独立回归头**</mark>，因此它天然没有 BT/回归式 RM 的标量校准保证。
+:::
+
+::: tip 还有一个值得保留的研究疑问
+Pairwise 监督明明只规定 $A$ 比 $B$ 好，<mark class="hl-key">**经过 Pointwise Projection 后，两张图各自得到的 1–4 分到底有多准确？**</mark>
+
+这就涉及 <mark class="hl-trick">**Reward Calibration 和在线 RL 的有效性**</mark>。
+
+**下一部分 Part 5：Reward 推理与打分。** 我们会重点研究四个评分维度的完整 1–4 分定义、如何处理 N/A、不同维度怎么融合，以及为什么这种数值设计可能直接影响 DiffusionNFT 的训练结果。
