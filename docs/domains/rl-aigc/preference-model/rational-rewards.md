@@ -6,9 +6,10 @@
 > **标题**：*RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time*
 > **模型**：Teacher Qwen3-VL-32B-Instruct → Student **Qwen3-VL-Instruct-8B**
 > **原图**：`Papers/RetionalReward.pdf`
-> **精读进度**：**Part 1–2 完结**
+> **精读进度**：**Part 1–3 完结**
 > **Part 1**：Abstract / §1 / §2 整体框架与核心创新 → §1–§6
 > **Part 2**：§3 Training Data / 附录 F.1 → §7–§12
+> **Part 3**：§2.1 + 附录 B、C、F，Figure 4 → §13–§18
 > **子专题**：[🏅 偏好模型 (Preference Model)](./index.md)
 
 ---
@@ -430,3 +431,284 @@ $$
 :::
 
 **下一部分 Part 3 是整篇论文最核心的部分：PARROT。** 我们会进一步拆解 Qwen3-VL-32B 如何利用已知偏好标签生成 Reasoning、为什么要遮蔽答案重新验证、Pointwise Projection 到底怎样生成 1–4 分，以及直接蒸馏和 PARROT 有什么本质区别。
+
+---
+
+# Part 3：PARROT —— 如何把 Pairwise 偏好数据变成 Reasoning Reward 数据
+
+> **对应原文**：§2.1、Figure 4、附录 B、C、F
+
+这是 RationalRewards 最核心的创新。思路其实很简单：<mark class="hl-key">**我们已经知道两张图片谁更好，但不知道为什么更好。PARROT 让一个大 VLM 根据已知偏好生成理由，再检查理由是否能支持原始偏好，最后把这些理由转成单图评分数据，训练一个 8B Reward Model。**</mark>
+
+$$
+\begin{aligned}
+&\textbf{已知} \quad I_A \succ I_B \\
+&\quad \downarrow \\
+&\textbf{① Phase 1} \quad \text{Teacher 围绕已知结果寻找视觉证据} \\
+&\quad \downarrow \\
+&\textbf{② Phase 2} \quad \text{遮蔽标签，检查理由能否推回原偏好} \\
+&\quad \downarrow \\
+&\textbf{③ Phase 3} \quad \text{把比较理由投影成单图绝对评分} \\
+&\quad \downarrow \\
+&\textbf{SFT} \quad \text{8B Student 同时学会 Pairwise 与 Pointwise}
+\end{aligned}
+$$
+
+![RationalRewards Figure 4：PARROT 三阶段全景。顶部是统一目标 $\log P(y|x) \ge \mathbb{E}_{z\sim q_\phi}[\log P_\theta(y|x,z)] - D_{KL}(q_\phi(z|x,y)\|P_\theta(z|x))$，把「理由 $z$」当作潜变量。① Rationale Generation (Hindsight)：Teacher VLM 拿到 User Request 与 Generation A&B (X) 并**额外拿到人工偏好标签 (Y)**，输出 $q_\phi(z|x,y)$。② Causal Consistency Check：只给 (X, Z) 让模型 Re-predict preference，与人工标签比对——这就是 Phase 2 的判据。③ Student SFT (Foresight)：Student VLM 只凭 (X) 输出 Scoring Rationales (Z) 与分数，因为训练时已经**看不到偏好标签**。](/rational-fig4-parrot-pipeline.png)
+
+---
+
+## 13. Phase 1：Preference-Anchored Rationale Generation
+
+假设有一条文生图 Prompt：
+
+> 一只红色的猫站在蓝色汽车左边，背景是一座雪山。
+
+现有偏好数据告诉我们：
+
+$$
+I_A \succ I_B
+$$
+
+也就是人类更喜欢图片 A。
+
+<mark class="hl-key">**作者没有让 Teacher 自己判断 A 和 B 谁更好，而是直接把偏好答案告诉 Teacher。**</mark>
+
+具体输入：
+
+| 输入 | 内容 |
+| :--- | :--- |
+| Prompt | 一只红色的猫站在蓝色汽车左边…… |
+| Image A | 第一张候选图 |
+| Image B | 第二张候选图 |
+| Preference Label | <mark class="hl-trick">**A 优于 B**</mark> |
+| Teacher | Qwen3-VL-32B-Instruct |
+
+然后要求 Teacher 给出评价理由。
+
+::: warning 下面这个 Pairwise Rationale 是帮助理解的假设示例
+<mark class="hl-key">**不是论文中的真实训练样本。**</mark>
+:::
+
+| 维度 | Teacher 输出 |
+| :--- | :--- |
+| **Text Faithfulness** | 图片 A 正确呈现红色猫、蓝色汽车和雪山，且猫位于汽车左侧。图片 B 虽然包含这些主体，但猫位于汽车右侧。 |
+| **Physical Quality** | 两张图片整体结构自然，但图片 B 的汽车阴影存在轻微异常。 |
+| **Overall** | 图片 A 在 Prompt 遵循和视觉质量上优于图片 B，因此 A 更好。 |
+
+作者把这种方式称为 **Preference Anchoring（偏好锚定）**。
+
+::: tip 它的优势是什么
+<mark class="hl-key">**Teacher 不需要先解决「谁更好」的问题，只需要围绕已知结果寻找具体视觉证据**</mark>。
+
+相比让 Teacher 完全自由地评价两张图，<mark class="hl-trick">**可以减少与现有人类偏好标签冲突的情况**</mark>。
+:::
+
+::: danger 但这里有个明显风险
+<mark class="hl-key">**Teacher 已经知道 A 更好，会不会为了证明 A 更好而编造理由？**</mark>所以作者设计了第二阶段。
+:::
+
+---
+
+## 14. Phase 2：Predictive Consistency Filtering
+
+<mark class="hl-key">**这个阶段的想法很有意思：把偏好答案藏起来，看 Teacher 能不能根据前面生成的理由重新判断出 A 更好。**</mark>
+
+$$
+\begin{aligned}
+&\textbf{原始偏好} \quad A \succ B \\
+&\quad \downarrow\ \textbf{Teacher 生成理由 } Z \\
+&\quad \downarrow\ \textbf{（Teacher 知道 A 优于 B）} \\
+&\quad \downarrow\ \textbf{再次调用 Teacher，提供比较案例与理由 Z，但隐藏原始偏好标签} \\
+&\quad \downarrow \\
+&\textbf{预测偏好是否仍然为 A 优于 B？} \\
+&\quad \bullet\ \textbf{一致} \Rightarrow \text{保留} \\
+&\quad \bullet\ \textbf{不一致} \Rightarrow \text{过滤}
+\end{aligned}
+$$
+
+论文公式 (2) 就是一个操作：
+
+$$
+\mathcal{C}(x, y, z) = \mathbb{I}\Bigl[ \arg\max_{y'} P_{\mathrm{Teacher}}(y' \mid x, z) = y \Bigr]
+$$
+
+其中 $x$ 是 Prompt 和两张图片，$y$ 是真实偏好，$z$ 是生成的理由。
+
+<mark class="hl-trick">**这里不需要计算什么特殊的视觉损失函数，核心就是再次调用 Teacher 做一次偏好预测，再与原始标签比较。**</mark>
+
+论文中约 72% 的 Reasoning 通过过滤：
+
+| 数据 | 数量 |
+| :--- | ---: |
+| 原始偏好对 | 80K |
+| **保留** | **约 57.6K** |
+| **过滤** | **约 22.4K** |
+
+作者总结的失败类型包括：
+
+| 失败类型 | 说明 |
+| :--- | :--- |
+| 视觉幻觉 | <mark class="hl-trick">**描述了图片里不存在的东西**</mark> |
+| 忽略真实偏好 | <mark class="hl-key">**理由反而支持了错误图片**</mark> |
+| 过于笼统 | <mark class="hl-trick">**无法区分两张图片**</mark> |
+
+::: danger 这里有一个很大的局限
+<mark class="hl-key">**Phase 2 验证的是 Reasoning 与 Preference Label 是否一致，并不是独立验证 Reasoning 是否真实。**</mark>
+
+例如，Teacher 错误地认为图片 B 有严重畸形，实际上 B 没有。<mark class="hl-trick">**只要这个错误理由能够支持 A 优于 B，那么一致性过滤仍可能放行。**</mark>
+
+而且<mark class="hl-key">**前后两次都使用 Qwen3-VL-32B-Instruct，本身存在共享偏差的问题**</mark>。
+
+所以<mark class="hl-trick">**不要把这一步理解为「验证所有 Reasoning 都正确」。更准确地说，它是一次 Preference Consistency Check**</mark>。
+:::
+
+---
+
+## 15. Phase 3：Pointwise Projection
+
+<mark class="hl-key">**这是最重要的一步，因为前面生成的都是 Pairwise Reasoning，但我们最终想训练的是一个可以对单张图片独立评分的 Reward Model。**</mark>
+
+作者的做法是：<mark class="hl-key">**把刚才已经验证的 Pairwise Reasoning 当作参考提示，让 Teacher 分别评价图片 A 和 B。**</mark>
+
+例如，对图片 A 的输入是：
+
+```text
+Prompt: 一只红色的猫站在蓝色汽车左边……
+
+Image: A
+
+Reference Hint:
+在先前比较中，图片 A 的空间关系正确，
+且图片整体结构自然。
+
+请独立评价这张图片，并给出各维度评分。
+```
+
+Teacher 得到的输出可以类似：
+
+| 维度 | Image A | Image B |
+| :--- | ---: | ---: |
+| Text Faithfulness | 4.0 | 2.5 |
+| Physical and Visual Quality | 3.5 | 3.0 |
+| Text Rendering | N/A | N/A |
+
+::: warning 以上为帮助理解的假设分数
+<mark class="hl-key">**文生图没有源图，因此 Image Faithfulness 同样是 N/A。**</mark>
+:::
+
+![RationalRewards Figure 5：真实的 Pointwise 投影结果。左侧编辑任务（Change the background to a deserted road.）中 Flux-Kontext-Dev 得 4.0 / 4.0 / 3.6 / 4.0，Ovis-u1 与 Bagel-Think 的 Text Faithfulness 只有 1.0；右侧纯文生图（architectural blueprint…）两个输出的 Image Faithfulness 都是 N/A。可以看到「相对判断」被改写成「绝对判断」，而 Image Faithfulness 是否参与平均完全由任务类型决定。](/rational-fig5-pointwise-examples.jpg)
+
+### 你会发现两个变化
+
+::: tip 变化一：评价标准从相对偏好变成了绝对评分
+<mark class="hl-key">**不再问 A 是否比 B 好，而是问这张图片本身质量如何。**</mark>
+:::
+
+::: tip 变化二：每个维度有明确的 1–4 分评价标准
+<mark class="hl-key">**允许 2.5、3.2 这样的浮点分数**</mark>：
+
+| 维度 | 衡量什么 |
+| :--- | :--- |
+| **Text Faithfulness** | 指令遵循 |
+| **Physical and Visual Quality** | 物理合理性及视觉缺陷 |
+| **Text Rendering** | 文字渲染 |
+
+<mark class="hl-key">**对于文生图，最终主要使用三个维度；图像编辑则还需要 Image Faithfulness，用来评价对原图未编辑内容的保留。**</mark>
+:::
+
+到这里，一条原始 Pairwise 数据就有机会产生两条 Pointwise 数据，分别描述 A 和 B 的质量。
+
+::: danger 但数量对不上
+论文附录 Table 12 存在一个未解释的数量差异：<mark class="hl-key">**约 36K 条过滤后的 T2I Pair，实际列出的 Pointwise 样本约 55K 条，而不是理论上的 72K 条**</mark>。
+
+因此<mark class="hl-trick">**不能认定所有 Pair 都完整产生并保留了两条 Pointwise 数据**</mark>。
+:::
+
+---
+
+## 16. 最后怎样训练 Student？
+
+经过 PARROT，我们得到两种训练监督：
+
+| 数据类型 | Student 的输入 | Student 学习输出 |
+| :--- | :--- | :--- |
+| **Pairwise** | Prompt + Image A + Image B | 比较理由 + 哪张更好 |
+| **Pointwise** | Prompt + 单张 Image | 各维度 Reasoning + 1–4 分数 |
+
+然后使用 <mark class="hl-key">Qwen3-VL-8B 做 SFT，学习这些结构化文本输出**</mark>。
+
+::: danger 特别注意
+<mark class="hl-key">**Student 训练和实际推理时，不会获得原始 Preference Label 作为提示。**</mark>
+:::
+
+我们可以把它理解为：
+
+$$
+\boxed{
+\text{Pairwise Preference}
+\xrightarrow{\text{PARROT}}
+\text{Reasoning Supervision}
+\xrightarrow{\text{SFT}}
+\text{RationalRewards-8B}
+}
+$$
+
+::: tip 变分解释 ≠ 实际优化目标
+作者还提供了变分推断的 ELBO 理论解释，<mark class="hl-key">**但工程上并不是先显式计算一个复杂 KL Loss、再单独优化 Teacher**</mark>。
+
+最终 Student 使用的<mark class="hl-trick">**核心仍然是标准的 SFT Token Prediction Loss**</mark>。
+:::
+
+具体的 LoRA、Batch Size、Epoch、数据格式和训练脚本，我们留到 Part 4。
+
+---
+
+## 17. 这套数据生产方式真正值得思考的地方
+
+<mark class="hl-key">**PARROT 与 TRM 的数据生产有一个本质不同：**</mark>
+
+| | 监督数据的来源 |
+| :--- | :--- |
+| **TRM** | <mark class="hl-trick">**让 Gemini 直接生成高质量评价数据**</mark> |
+| **PARROT** | <mark class="hl-key">**利用已有的真实偏好标签，约束 Teacher 生成解释，再把相对比较转换成单图评价**</mark> |
+
+这比单纯让 Teacher 自由生成评分更有依据，<mark class="hl-trick">**因为至少有一个外部 Preference Label 作为监督锚点**</mark>。
+
+::: tip 论文做了很关键的消融
+直接使用 Qwen3-VL-32B-Instruct 生成监督数据、蒸馏相同的 8B Backbone，在 MMRB2-T2I 上达到 **57.4%**；采用 PARROT 则达到 **64.2%**。
+
+<mark class="hl-key">**这提供了证据，说明改进不仅仅来自「使用更大的 Teacher」。**</mark>
+:::
+
+::: danger 但还有两个尚未完全解决的问题
+**一是已知答案后生成的理由可能存在事后合理化**；
+
+**二是从 Pairwise 转换成 Pointwise 后，相对偏好正确，并不意味着绝对评分已经校准准确**。
+
+<mark class="hl-key">**论文附录 B.2 自己也承认了 Calibration Drift 和 Context Dependence 这两类风险。**</mark>
+:::
+
+---
+
+## 18. Part 3 最终结论
+
+<mark class="hl-key">**PARROT 的真正创新不是训练出了一个会说 Reasoning 的 VLM，而是建立了「已有偏好标签 → 有依据的比较理由 → 单图评分监督」的数据生产链路。**</mark>
+
+$$
+\underbrace{\text{已有偏好标签}}_{\text{可靠性锚点}}
+\;\longrightarrow\;
+\underbrace{\text{有依据的比较理由}}_{\text{Teacher 定向解释}}
+\;\longrightarrow\;
+\underbrace{\text{单图评分监督}}_{\text{可蒸馏、可用于 RL}}
+$$
+
+::: tip 但这条链路的每一环都不是「验证正确性」
+- **Phase 1** 是<mark class="hl-trick">**事后合理化风险最高的一环**</mark>；
+- **Phase 2** 只能筛掉<mark class="hl-trick">**推不回标签的理由**</mark>，筛不掉<mark class="hl-trick">**视觉依据为假但恰好支持标签的理由**</mark>；
+- **Phase 3** 把相对正确<mark class="hl-trick">**悄悄转成绝对分数，而这一步的校准漂移论文自己承认没有解决**</mark>。
+
+<mark class="hl-key">**换句话说，PARROT 把「验证理由是否正确」这个难题，降级成了「验证理由是否一致」这个容易得多但也更弱的问题。**</mark>
+:::
+
+**下一部分 Part 4：** 我们就进入真正的 Reward Model 训练——Qwen3-VL-8B 的 SFT 数据格式、Pairwise 与 Pointwise 如何混合、训练 Loss、LoRA 和实际开源代码。

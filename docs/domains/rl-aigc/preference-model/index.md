@@ -26,7 +26,7 @@
 
 | 篇目 | 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
-| **RationalRewards：让奖励模型学会「说出理由」** | **不设计新 RL 算法，只改 Reward Model 的数据生产方式**。Teacher (Qwen3-VL-32B-Instruct) 在**已知偏好标签**的条件下解释「为什么 A 更好」→ 隐藏标签做**一致性过滤**（约 72% 通过）→ **Pointwise Projection** 把成对理由投影成单图评价 → SFT 蒸馏到 **Qwen3-VL-8B** Student。输出四维评分 + 文字理由（Text Faithfulness / Image Faithfulness / Physical & Visual Quality / Text Rendering）。FLUX.1-dev 60.97→70.34、SD3.5-Medium 60.71→70.56、Qwen-Image 78.36→82.60（UniGenBench++ Overall） | 🔄 Part 1 完结 | [阅读笔记 →](./rational-rewards.md) |
+| **RationalRewards：让奖励模型学会「说出理由」** | **不设计新 RL 算法，只改 Reward Model 的数据生产方式**。Teacher (Qwen3-VL-32B-Instruct) 在**已知偏好标签**的条件下解释「为什么 A 更好」→ 隐藏标签做**一致性过滤**（约 72% 通过）→ **Pointwise Projection** 把成对理由投影成单图评价 → SFT 蒸馏到 **Qwen3-VL-8B** Student。输出四维评分 + 文字理由（Text Faithfulness / Image Faithfulness / Physical & Visual Quality / Text Rendering）。FLUX.1-dev 60.97→70.34、SD3.5-Medium 60.71→70.56、Qwen-Image 78.36→82.60（UniGenBench++ Overall）。**Part 3**：PARROT 三阶段全拆 —— Phase 2 的判据只是「理由能否推回标签」而非「理由是否真实」（前后两次共用同一 Teacher 存在共享偏差）；Phase 3 把相对偏好转成绝对评分，论文附录 B.2 自承 Calibration Drift / Context Dependence 未解；消融显示同 Teacher 直接蒸馏仅 57.4%、PARROT 达 64.2% | 🔄 Part 1–3 完结 | [阅读笔记 →](./rational-rewards.md) |
 
 ---
 
