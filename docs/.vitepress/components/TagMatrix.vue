@@ -225,7 +225,7 @@ const notesList = ref([
     domain: '🎲 RL 后训练',
     domainClass: 'domain-rl',
     date: '2026-10-12',
-    summary: 'Arena。算法不变、只动奖励侧。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness；四类奖励（Preference RM / presence Faithfulness / absence Intent-gated Constraint / Anti-Hack）+ 四个组合机制（解耦归一化 / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 2**：Gemini-3.5-Flash 六条 VALID 规则过滤 100K→10K Prompt，未过滤低 0.0360 胜率。**Part 3**：BT Preference RM（Qwen3.6-27B + `<\|cls\|>` Linear Head，5M 偏好对，1 Epoch，LR 2e-6）；Score 是无界 Logit，BT Loss 只依赖差值故跨 Prompt 分数不可比；RM 数据 10K→5.6M 对应下游 RL 胜率 53.7%→64.2%。',
+    summary: 'Arena。算法不变、只动奖励侧。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 1–10 完结**：10K Arena Prompt 经 Gemini-3.5-Flash 六条 VALID 规则过滤（未过滤 100K 低 0.0360）；BT Preference RM 5M 偏好对（Score 为无界 Logit，BT Loss 只依赖差值）；Faithfulness Checklist **182,230 问 / 18.2 每 Prompt**，Gemini-3-Pro 离线生成**依赖 DAG**，父失败子自动 No；Intent 三分类 strict/neutral/open，26,213 约束问题仅 3,140 启用（31.4%），人工审计 89.5%；Anti-Hack = 205 失败案例审计出的**两种固定 detector** + Applicability Gate + **One-sided Veto**（additive 化从 .635 崩到 .526）；Ideogram-4 Graded OCR = 0.5/0.3/0.2 三分量、无文字一律 Mask；公式 (3)–(9) 分轴 z-score → Gate → Veto → A_i=(R_i-μ_group)/σ_batch → r̃=½clip(A_i/5,-1,1)+½；Stage 1/2/3（Stage 2 单跑不超 Stage 1，收益来自 LoRA soup，r64×2→r128 精确平均）。',
     tags: ['RL', 'Reward System', 'Rubric', 'Bradley-Terry', 'Reward Hacking', 'DiffusionNFT', 'Prompt Filtering', 'Vision']
   },
   {

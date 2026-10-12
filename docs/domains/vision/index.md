@@ -17,4 +17,4 @@
 | **Sol-RL：FP4 Explore, BF16 Train** | NVIDIA 的扩散 RL 高效 rollout scaling：NVFP4 探索 96 个 candidate → 只按 reward 排序挑 top-12+bottom-12 的 seed → BF16 重跑 24 张做 GRPO update。**「FP4 不需要生成得准，只需要挑得准」**；$N_{\rm explore}\gg K_{\rm train}$；pipeline 加速 2.4×、收敛加速最高 4.64× | 🟢 已完结 | [阅读笔记 →](./image-rl-posttraining/sol-rl.md) |
 | **Caption 与效率专题** | DALL-E 3 recaption 范式与 Lens 效率方法论，两篇精读 | 🟢 已完结 | [进入专题 →](./caption-efficiency/) |
 | **图像 AIGC 数据集专题** | 预训练/持续训练/SFT/评测集全生命周期大盘，收录 Fine-T2I 6M 数据工程精读 | 🟢 持续建设中 | [进入专题 →](./datasets/) |
-| **AIGC 强化学习后训练专题（独立专区）** | 奖励体系为主变量时移入独立专区：**Arena-RL**（Preference × Rubric 复合奖励；FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5；Part 2：Gemini-3.5-Flash 六条规则过滤 100K→10K Prompt） | 🔄 Part 1–2 精读中 | [进入专区 →](../rl-aigc/) |
+| **AIGC 强化学习后训练专题（独立专区）** | 奖励体系为主变量时移入独立专区：**Arena-RL**（Preference × Rubric 复合奖励，FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5） | 🟢 Part 1–10 完结 | [进入专区 →](../rl-aigc/) |

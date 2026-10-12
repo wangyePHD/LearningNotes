@@ -25,14 +25,16 @@
 
 | 篇目 | 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
-| **Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模** | **算法不变、只动奖励侧**。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。四类奖励（Preference RM / presence-oriented Faithfulness / absence-oriented Intent-gated Constraint / Anti-Hack）+ 四个组合机制（Reward-decoupled Normalization / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 2**：Arena 真实用户 Prompt → Gemini-3.5-Flash 六条 VALID 规则二值过滤 → 10K 训练 / 1K 验证；100K 未过滤比 10K 过滤低 **0.0360** 胜率。**Part 3**：BT Preference RM（Qwen3.6-27B + `<\|cls\|>` Linear Head，5M 偏好对，1 Epoch，LR 2e-6）；Score 为无界 Logit，BT Loss 只依赖差值故不同 Prompt 分数不可直接比较；RM 数据 10K→5.6M 对应下游 RL 胜率 53.7%→64.2% | 🔄 Part 1–3 完结 | [阅读笔记 →](./arena-preference-rubric-reward.md) |
+| **Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模** | **算法不变、只动奖励侧**。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。四类奖励（Preference RM / presence-oriented Faithfulness / absence-oriented Intent-gated Constraint / Anti-Hack）+ 四个组合机制（Reward-decoupled Normalization / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**已完结 Part 1–10**：① 三问题动机与 Related Work 三分类定位；② Arena 真实用户 Prompt → Gemini-3.5-Flash 六条 VALID 规则二值过滤 → 10K/1K，100K 未过滤低 **0.0360**；③ BT Preference RM（Qwen3.6-27B + `<\|cls\|>` Linear Head，5M 偏好对），Score 为无界 Logit 且 BT Loss 只依赖差值；④ Faithfulness Checklist = **182,230 问 / 18.2 每 Prompt**，Gemini-3-Pro 离线生成**依赖 DAG**（F4←{F0,F3} 多父节点），父失败子自动 No，$R_{\mathrm{faith}}$ = Yes 比例；⑤ Intent 三分类 strict/neutral/open，**26,213 约束问题 / 3,140 启用（31.4%）**，人工审计三分类 77.8%、strict 二分类 89.5%、κ=0.66；⑥ Anti-Hack = **205 个失败案例审计出的两种固定 detector**（Text Gibberish pointwise / Photo-style Drift reference-based 双序判）+ Applicability Gate + **One-sided Veto**；⑦ Ideogram-4 的 Graded OCR $=0.5r_e+0.3r_p+0.2r_r$、无文字/转录失败一律 Mask；⑧ 公式 (3)–(9) 全量演算：分轴 z-score → Gate → Veto → $R_i$ → $A_i=(R_i-\mu_{group})/\sigma_{batch}$ → $\tilde r_i=\frac12\mathrm{clip}(A_i/5,-1,1)+\frac12$，含 6 图完整数值演算与 Group Std vs Batch Std 深挖；⑨ Stage 1/2/3（**Stage 2 单跑不超 Stage 1**，收益来自融合）；⑩ LoRA 权重融合与 Rank Concatenation（r64×2→r128 精确平均） | 🟢 Part 1–10 完结 | [阅读笔记 →](./arena-preference-rubric-reward.md) |
 
 ---
 
 ## 本域待补主线（阅读路线图）
 
-1. **Part 8：Reward Composition 公式精读** —— 以公式 (3)–(9) 为准（引言的 $[0,1]$ 表述与 §3.3.1 的逐维 z-score 不一致）
-2. **Rubric 奖励体系** —— Faithfulness / Constraint checklist 与 Anti-Hack detector 的逐条定义
+1. **跨奖励轴相关性分析** —— 论文缺 Faithfulness / Constraint 重复计分（Figure 4 中 C0、C1 与 F1、F2 重叠）与 $w_a=1$ 敏感性的消融
+2. **$A_{\max}=5$ 的敏感性** —— 与 Sol-RL 的 `24-in-96` 探索策略直接冲突，值得在现有 NFT 训练中对照
+3. **Batch Std 的分布式口径** —— 论文未公开 `batch` 覆盖哪些 GPU、是否全局 All-Gather
+4. **Rubric 自动生产谱系** —— 与 `Arena-T2I-Hard`、`Auto-Rubric`、`Autorubric-T2I` 的关系尚未成篇
 
 ---
 
