@@ -6,12 +6,13 @@
 > **标题**：*RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time*
 > **模型**：Teacher Qwen3-VL-32B-Instruct → Student **Qwen3-VL-Instruct-8B**
 > **原图**：`Papers/RetionalReward.pdf`
-> **精读进度**：**Part 1–5 完结**
+> **精读进度**：**Part 1–6 完结**
 > **Part 1**：Abstract / §1 / §2 整体框架与核心创新 → §1–§6
 > **Part 2**：§3 Training Data / 附录 F.1 → §7–§12
 > **Part 3**：§2.1 + 附录 B、C、F，Figure 4 → §13–§18
 > **Part 4**：SFT 训练 + 官方开源配置 → §19–§25
 > **Part 5**：附录 D、E.1 + Algorithm 1 → §26–§31
+> **Part 6**：附录 E.1 RL Fine-Tuning Setup / Table 11 / Algorithm 1 → §32–§39
 > **子专题**：[🏅 偏好模型 (Preference Model)](./index.md)
 
 ---
@@ -1264,3 +1265,340 @@ RationalRewards 的改进究竟来自<mark class="hl-key">**更准确的 Reasoni
 :::
 
 **下一部分 Part 6：** 我们就进入实际训练——作者如何筛选 RL Prompt、16 张 Rollout 怎么组织、为什么选择 16 张 A100、NFT 的正负速度场怎样计算，以及论文中的 Mean / Std 过滤阈值究竟是怎么用的。
+
+---
+
+# Part 6：RationalRewards 如何进行 DiffusionNFT 后训练？
+
+> **对应原文**：附录 E.1 RL Fine-Tuning Setup、Table 11、Algorithm 1 + 官方开源训练代码
+
+最重要的结论是：<mark class="hl-key">**RationalRewards 没有提出新的图像 RL 算法，而是把训练好的 8B Reward Model 接入 DiffusionNFT，通过在线生成、评分、归一化和 Flow Matching Loss 更新图像生成模型。**</mark>
+
+核对官方代码还发现一个复现时必须注意的差异：<mark class="hl-trick">**论文 Table 11 写每个 Prompt 生成 16 张图片，但当前公开的 FLUX-Kontext 和 Qwen-Image-Edit 配置都设置为 8 张。因此不能直接认为下载代码后运行的就是论文表格中的完整实验配置。**</mark>
+
+---
+
+## 32. RL Prompt 如何构建？这里有一个容易忽略的筛选步骤
+
+<mark class="hl-key">**作者没有简单地从数据集中随机选取所有 Prompt，而是从 HPDv3 和 EditReward 中选择当前生成模型比较不擅长的任务。**</mark>
+
+具体来说，先让基础生成模型对候选 Prompt 生成图片，再用 RationalRewards 评分，<mark class="hl-trick">**优先保留初始生成的平均分数低于 3.0（原始 1–4 分制）的 Prompt**</mark>：
+
+$$
+\boxed{
+\bar{R}_{\mathrm{initial}}(p) < 3.0
+}
+$$
+
+例如，一条 Prompt 的初始图片评分均值为 2.6，那么可能进入 RL 训练池；另一条平均为 3.7，则不在这一筛选条件之内。
+
+::: tip 这样做的目的
+让训练资源<mark class="hl-key">**集中在当前模型还有改善空间的 Prompt 上，而不是反复训练模型已经做得很好的任务**</mark>。
+:::
+
+::: danger 但论文没有披露
+<mark class="hl-key">**候选 Prompt 总数、每条 Prompt 初始生成多少张图片，以及最终筛选后的训练池有多大**</mark>。
+
+因此<mark class="hl-trick">**不能把这个流程还原成一套完全确定的数据生产参数**</mark>。
+:::
+
+::: tip 这一步特别值得关注
+<mark class="hl-key">**它相当于在训练前做了一轮基于 Reward 的数据选择，而不是只在 Rollout 之后使用 Reward。**</mark>
+:::
+
+---
+
+## 33. 一次训练迭代具体在做什么？
+
+论文 Algorithm 1 可以还原成下面这个流程：
+
+$$
+\begin{aligned}
+&\textbf{Step 1} \quad \text{从 RL Prompt 池采样} \\
+&\quad \downarrow \\
+&\textbf{Step 2} \quad \text{当前模型 Rollout（论文配置：每条 Prompt 生成 } K = 16 \text{ 张图片）} \\
+&\quad \downarrow \\
+&\textbf{Step 3} \quad \text{RationalRewards 打分（每张图片的适用维度等权平均 → Scalar）} \\
+&\quad \downarrow \\
+&\textbf{Step 4} \quad \text{Reward 归一化（组内去均值、按尺度归一化，得到 NFT 权重）} \\
+&\quad \downarrow \\
+&\textbf{Step 5} \quad \text{Forward Flow Matching（Clean Latent + Noise → NFT 正负速度场损失）} \\
+&\quad \downarrow \\
+&\textbf{Step 6} \quad \text{更新 LoRA，并通过 EMA 更新采样模型}
+\end{aligned}
+$$
+
+<mark class="hl-key">**和 FlowGRPO 不同，DiffusionNFT 在训练阶段重新对生成的 Clean Latent 加噪，计算 Flow Matching 目标，不依赖反向采样轨迹的 Log Probability 来更新策略。**</mark>
+
+::: tip 一个容易忽略的工程细节
+官方训练代码<mark class="hl-key">**把 Reward 调用提交给线程池，先收集 Future，后面统一等待结果，并将不同 GPU 的评分汇总后计算 Advantage**</mark>。
+
+这相当于<mark class="hl-trick">**让图片生成与部分 Reward 计算能够重叠，减少等待时间**</mark>。
+:::
+
+---
+
+## 34. Reward 如何转换成 NFT 的训练权重？
+
+假设同一条 Prompt 生成四张图片，RationalRewards 给出这些综合评分：
+
+| 图片 | Raw Reward（1–4） | 相对组均值 |
+| :--- | ---: | ---: |
+| A | 3.6 | +0.6 |
+| B | 3.2 | +0.2 |
+| C | 2.8 | $-0.2$ |
+| D | 2.4 | $-0.6$ |
+| **均值** | **3.0** | **0** |
+
+<mark class="hl-key">**以上是演示算法的假设数据，不是论文真实结果。**</mark>
+
+论文 Algorithm 1 的归一化形式为：
+
+$$
+\widetilde{r}_i = 0.5 + 0.5\,\operatorname{clip}\left(\frac{r_i - \bar{r}_{\mathrm{group}}}{Z_c},\ -1,\ 1\right)
+$$
+
+因此，<mark class="hl-trick">**得分高于组均值的图片，NFT 权重趋向大于 0.5；低于组均值的图片则趋向小于 0.5**</mark>。
+
+::: tip 与 Arena-RL 的相似之处
+<mark class="hl-key">**都是通过相对评分将一组图片转成优化权重。**</mark>而进一步查当前公开的 `PerPromptStatTracker`，其默认配置<mark class="hl-trick">**使用 Prompt 级均值与当前收集批次的 Global Standard Deviation，而不是每条 Prompt 各自的标准差**</mark>——<mark class="hl-key">**这与 Arena-RL 公式 (9) 的 Group Mean + Batch Std 非常接近**</mark>。
+:::
+
+---
+
+## 35. NFT 到底怎么更新图像模型？
+
+这是 Part 6 最重要的公式。
+
+对于一张 Rollout 图片的 Clean Latent $x_0$，随机采样时间 $t$ 和高斯噪声 $\epsilon$，构造：
+
+$$
+x_t = \alpha_t x_0 + \sigma_t \epsilon
+$$
+
+对应的 Flow Matching 目标速度：
+
+$$
+v^{*} = \alpha'_t x_0 + \sigma'_t \epsilon
+$$
+
+NFT 再构造两个隐式速度场：
+
+$$
+v^{+} = (1 - \beta)\, v_{\mathrm{old}} + \beta\, v_{\theta}
+$$
+
+$$
+v^{-} = (1 + \beta)\, v_{\mathrm{old}} - \beta\, v_{\theta}
+$$
+
+其中 <mark class="hl-key">$v_{\mathrm{old}}$ 是采样策略的冻结快照，$v_{\theta}$ 是当前正在更新的模型**</mark>。
+
+最终 Loss：
+
+$$
+\boxed{
+\mathcal{L}_{\mathrm{NFT}} = \widetilde{r}\lVert v^{+} - v^{*}\rVert^2 + (1 - \widetilde{r})\lVert v^{-} - v^{*}\rVert^2
+}
+$$
+
+::: tip 理解起来并不复杂
+<mark class="hl-key">**高分图片增大第一项的权重，引导当前模型更接近这些图片；低分图片增大第二项的权重，通过隐式负方向减少模型对它们的偏好**</mark>。
+:::
+
+::: danger 但有两个必须点明的细节
+**第一**，<mark class="hl-trick">**这里的两项 Loss 并不是做两次独立 backward。它们组成同一个总损失，再统一反向传播更新当前模型的 LoRA 参数**</mark>。
+
+**第二**，<mark class="hl-key">**代码中还额外实现了预测误差的自适应权重和参考模型正则项，这比论文 Algorithm 1 展示的简化公式更多一些**</mark>。
+:::
+
+---
+
+## 36. 两个过滤阈值：Mean 0.9 和 Std 0.05 到底是什么意思？
+
+这是这一部分最值得研究的工程 Trick。
+
+论文 Table 11 给出：
+
+$$
+\text{Mean Threshold} = 0.9, \qquad \text{Std Threshold} = 0.05
+$$
+
+<mark class="hl-key">**它们不是最开始筛选 RL Prompt 的平均分小于 3.0，而是在线 Rollout 时的质量过滤参数。**</mark>
+
+从算法意图来看，主要想避免两种不适合继续训练的情况：
+
+| 情况 | 例子 | 理由 |
+| :--- | :--- | :--- |
+| **整组图片已经很好** | Reward 均值达到 0.95 | <mark class="hl-trick">**可能没有太多提升空间**</mark> |
+| **同组图片分数太接近** | 标准差只有 0.01 | <mark class="hl-trick">**难以产生可靠的组内排序信号**</mark> |
+
+对于在线 Rollout，一个合理的过滤条件可以写成：
+
+$$
+\boxed{
+\operatorname{Keep}(p) = \bigl[\mu_p < 0.9\bigr] \land \bigl[\sigma_p > 0.05\bigr]
+}
+$$
+
+| Prompt | Reward Mean | Reward Std | 按该规则 |
+| :--- | ---: | ---: | :---: |
+| A | 0.65 | 0.12 | **保留** |
+| B | 0.95 | 0.10 | 过滤 |
+| C | 0.65 | 0.02 | 过滤 |
+| D | 0.94 | 0.01 | 过滤 |
+
+::: warning 但注意
+<mark class="hl-key">**这是对阈值设计目的的解释，不能直接视为作者全部代码都严格按该公式实现。**</mark>
+:::
+
+### 核对实际实现后发现一个很重要的差异
+
+<mark class="hl-trick">**当前 `PerPromptStatTracker` 确实会计算每条 Prompt 的 `prompt_std` 和 `prompt_mean`，并依据「低方差且高均值」记录需要跳过的 Prompt；但同一份代码启用 `global_std=True` 时，返回给训练循环的 `stds` 是整个批次的标准差。**</mark>
+
+训练循环又使用：
+
+```python
+valid_mask = (stds > 0.05) & (means < 0.9)
+```
+
+因此，<mark class="hl-key">**当前代码里的 `valid_mask` 并不严格等价于每条 Prompt 的组内方差过滤；当使用 Global Std 时，`stds > 0.05` 比较的是全局尺度**</mark>。
+
+另有 `banned_prompts` 机制负责处理低组内方差且高均值的 Prompt。
+
+![RationalRewards Figure 11：四种配置的训练曲线对照（4 行 × 3 列：Train reward / Reward Std / Eval reward）。从上到下分别是 Qwen-Edit w/ EditReward（scalar RM）、Qwen-Image w/ MultiReward（scalar RM）、Qwen-Edit w/ RationalRewards、Qwen-Image w/ RationalRewards。注意中间列 Reward Std：MultiReward 那行的方差长期贴着 0.05–0.06 波动，正好压在 0.05 阈值附近；两个 RationalRewards 配置的方差分别稳定在约 0.075–0.2 与 0.05–0.15 区间。最上行的 Eval reward 在 step≈200 处出现明显下跌后回升，对应训练中期的退化。](/rational-fig11-training-curves.png)
+
+::: tip 从 Figure 11 能读出的一个细节
+中间列的 Reward Std 曲线<mark class="hl-trick">**直接可视化了 0.05 这个阈值在起作用**</mark>：
+
+- <mark class="hl-key">**MultiReward 那一行的方差长期贴在 $0.05 \sim 0.06$ 附近徘徊**</mark>——<mark class="hl-trick">**也就是说，如果按全局标准差过滤，这个配置会有大量 step 处在阈值边缘，训练是否真的被 `valid_mask` 大量筛掉，取决于实现是按 batch 还是按 prompt 统计**</mark>；
+- 两个 RationalRewards 配置的方差则分别稳定在明显更高的区间，<mark class="hl-key">**过滤阈值对它们的约束弱得多**</mark>。
+:::
+
+### 所以复现时不要只复制阈值
+
+<mark class="hl-key">**建议同时检查三件事：**</mark>
+
+| 检查项 | 为什么重要 |
+| :--- | :--- |
+| **标准差到底按 Group 计算，还是按 Batch 计算** | <mark class="hl-trick">**这决定了 `stds > 0.05` 到底在过滤什么**</mark> |
+| **被过滤的 Prompt 是完全跳过后续 Rollout，还是仅在当前更新中将 Loss Mask 为 0** | <mark class="hl-key">**两者对数据分布的影响完全不同**</mark> |
+| **低均值、低方差的 Prompt 应不应该保留** | <mark class="hl-trick">**因为可能代表当前模型始终无法完成的困难任务**</mark> |
+
+::: danger 特别是第三点
+<mark class="hl-key">**低方差不一定说明任务没有训练价值，也可能说明所有生成结果都失败了。把这些 Prompt 全部删除可能造成困难任务长期学不到。**</mark>
+:::
+
+---
+
+## 37. 作者具体用了多少卡？训练参数是什么？
+
+论文附录 Table 11 的配置：
+
+| 参数 | 论文报告 |
+| :--- | :--- |
+| **图像 RL 算法** | DiffusionNFT |
+| **训练 GPU** | 8 × A100-80GB |
+| **Reward GPU** | 8 × A100-80GB |
+| **总 GPU** | **16 × A100-80GB** |
+| **每 Prompt Rollout** | **16** |
+| **训练分辨率** | 512 × 512 |
+| **训练采样步数** | 15 |
+| **测试采样步数** | 20 |
+| **Noise Level** | 0.7 |
+| **Learning Rate** | 2e-4 |
+| **LoRA Rank / Alpha** | 64 / 128 |
+| **Per-GPU Batch Size** | 8 |
+| **Mean / Std 过滤阈值** | 0.9 / 0.05 |
+| **β（表格称 Guidance Strength）** | 1e-4 |
+
+### 但这里有一个很有价值的论文与代码一致性问题
+
+| 配置项 | 当前代码 |
+| :--- | :--- |
+| **每 Prompt Rollout** | <mark class="hl-trick">**8 张（不是论文的 16）**</mark> |
+| **FLUX-Kontext 采样步数** | 15 |
+| **Qwen-Image-Edit 采样步数** | 10 |
+| **每轮 Prompt Group 数量** | 64 |
+| **每轮生成数量** | 64 × 8 = 512 |
+| **训练 GPU** | 8 张 |
+
+配置来源：[`flux_kontext_nft.py`](https://github.com/TIGER-AI-Lab/RationalRewards/blob/main/diffusion_rl_training/config/flux_kontext_nft.py)、[`qwen_edit_nft.py`](https://github.com/TIGER-AI-Lab/RationalRewards/blob/main/diffusion_rl_training/config/qwen_edit_nft.py)。
+
+::: warning 范围声明
+<mark class="hl-key">**这里只描述这两个公开配置，不代表论文所有 T2I 实验都采用相同设置。**</mark>
+:::
+
+::: danger 代码里实际上有两个不同的 beta
+- <mark class="hl-key">`config.beta = 1.0`</mark>：用于 <mark class="hl-trick">**NFT 正负速度场的组合**</mark>；
+- <mark class="hl-key">`config.train.beta = 0.0001`</mark>：用于训练代码中的<mark class="hl-trick">**参考模型正则项**</mark>。
+
+因此，<mark class="hl-key">**论文表格里标为 Guidance Strength 的 `1e-4` 与当前代码的 NFT `config.beta = 1.0` 不能直接对应**</mark>。这属于<mark class="hl-trick">**复现前需要进一步核实的参数口径问题**</mark>。
+:::
+
+::: danger 还有一个复现入口的缺口
+官方公开的 `diffusion_rl_training/` README <mark class="hl-key">**目前主要提供 FLUX-Kontext 和 Qwen-Image-Edit 两种启动目标，并未提供论文三个 T2I 基模各自同等完整的启动入口**</mark>。
+
+所以虽然论文报告了 FLUX.1-dev、SD3.5-Medium、Qwen-Image 的结果，<mark class="hl-trick">**但直接运行公开脚本还不能保证完整复现这三组文生图实验**</mark>。
+:::
+
+---
+
+## 38. 这套后训练究竟有什么值得学习？
+
+<mark class="hl-key">**这篇论文的 DiffusionNFT 部分并没有特别新的训练算法，更值得学习的是它把三个环节结合起来了：**</mark>
+
+::: tip 第一，训练前按初始 Reward 选择当前基模表现较弱的 Prompt
+原始均值低于 3.0，<mark class="hl-trick">**把训练资源集中到困难任务**</mark>。
+:::
+
+::: tip 第二，在线 Rollout 后再用平均 Reward 和标准差控制哪些样本参与更新
+减少高分饱和和缺乏区分度的样本对梯度的影响。<mark class="hl-trick">**不过具体过滤实现还存在前面提到的代码口径问题**</mark>。
+:::
+
+::: tip 第三，用 RationalRewards 的多维评价替换传统 Scalar RM
+<mark class="hl-key">**仍然保持 DiffusionNFT 的整体算法不变**</mark>。因此论文中相对于 MultiReward 和通用 Qwen3-VL Judge 的结果可以为 Reward 设计提供参考，<mark class="hl-trick">**但不能完全排除数据选择、训练配置等因素的影响**</mark>。
+:::
+
+::: danger 一个自己设计图像 RL 系统时值得特别关注的潜在矛盾
+一方面，<mark class="hl-key">**作者优先挑选基础模型平均评分较低的困难 Prompt**</mark>；另一方面，<mark class="hl-key">**在线训练又可能因为 Reward 标准差过低而减少这些困难 Prompt 的贡献**</mark>。
+
+如果一个 Prompt 的所有图片都很差，且分数都接近 0.2，那么<mark class="hl-trick">**它到底应该被过滤，还是应该通过其他方式产生更强的训练信号？这是个值得独立验证的问题**</mark>。
+:::
+
+---
+
+## 39. Part 6 总结
+
+$$
+\boxed{
+\text{困难 Prompt 筛选}
+\rightarrow \text{在线 Rollout}
+\rightarrow \text{RationalRewards}
+\rightarrow \text{组相对 Reward}
+\rightarrow \text{DiffusionNFT + LoRA}
+}
+$$
+
+这一部分最需要记住的数字是：<mark class="hl-key">**论文 16 张 Rollout、8 张训练 A100 + 8 张 Reward A100、512 分辨率、LoRA 64/128，以及 0.9 / 0.05 的在线过滤阈值**</mark>。
+
+::: danger 但如果要直接复现
+<mark class="hl-key">**应该以实际训练入口和具体代码为准，不能直接照抄论文 Table 11**</mark>。
+:::
+
+::: info 把 Part 5 §29 与本节对照看
+RationalRewards 与 Arena-RL 的 NFT 接入路径<mark class="hl-key">**在优化器层面几乎完全一致**</mark>——都是 DiffusionNFT 的 $v^{\pm}$ 构造与两项加权损失。
+
+真正的差别只有一处，但很关键：
+
+| | RationalRewards | Arena-RL |
+| :--- | :--- | :--- |
+| **优化器** | DiffusionNFT（相同） | DiffusionNFT（相同） |
+| **Reward 来源** | <mark class="hl-trick">**一个多维生成式 RM**</mark> | <mark class="hl-key">**偏好 RM + Faithfulness + Constraint + Anti-Hack 四路**</mark> |
+| **多维合成** | <mark class="hl-trick">**适用维度等权平均**</mark> | <mark class="hl-key">**逐轴 z-score 后等权相加**</mark> |
+| **组内缩放** | <mark class="hl-trick">**$Z_c$，计算方式未说明**</mark> | <mark class="hl-key">**$A_{\max}=5$，明确为截断常数**</mark> |
+
+<mark class="hl-key">**也就是说，这两篇论文唯一真正可比的接口就是「一个标量 Reward 怎么进 NFT」——而这一步两边几乎是同一套。**</mark>
+:::
+
+**下一部分 Part 7：实验和消融。** 我们将重点看 RationalRewards 相比 MultiReward、通用 32B Judge 和直接蒸馏 Teacher 的优势究竟来自哪里，并结合 Reward Hacking 曲线判断：<mark class="hl-trick">**这些提升是 Reward 本身更可靠，还是只是更适合 UniGenBench++ 的评测方式**</mark>。
