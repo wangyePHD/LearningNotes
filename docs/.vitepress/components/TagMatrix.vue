@@ -2,7 +2,7 @@
   <div class="tag-matrix-container">
     <div class="matrix-header">
       <p class="matrix-desc">
-        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、RL 后训练、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
+        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、RL 后训练、偏好模型、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
       </p>
     </div>
 
@@ -227,6 +227,15 @@ const notesList = ref([
     date: '2026-10-12',
     summary: 'Arena。算法不变、只动奖励侧。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 1–10 完结**：10K Arena Prompt 经 Gemini-3.5-Flash 六条 VALID 规则过滤（未过滤 100K 低 0.0360）；BT Preference RM 5M 偏好对（Score 为无界 Logit，BT Loss 只依赖差值）；Faithfulness Checklist **182,230 问 / 18.2 每 Prompt**，Gemini-3-Pro 离线生成**依赖 DAG**，父失败子自动 No；Intent 三分类 strict/neutral/open，26,213 约束问题仅 3,140 启用（31.4%），人工审计 89.5%；Anti-Hack = 205 失败案例审计出的**两种固定 detector** + Applicability Gate + **One-sided Veto**（additive 化从 .635 崩到 .526）；Ideogram-4 Graded OCR = 0.5/0.3/0.2 三分量、无文字一律 Mask；公式 (3)–(9) 分轴 z-score → Gate → Veto → A_i=(R_i-μ_group)/σ_batch → r̃=½clip(A_i/5,-1,1)+½；Stage 1/2/3（Stage 2 单跑不超 Stage 1，收益来自 LoRA soup，r64×2→r128 精确平均）。',
     tags: ['RL', 'Reward System', 'Rubric', 'Bradley-Terry', 'Reward Hacking', 'DiffusionNFT', 'Prompt Filtering', 'Vision']
+  },
+  {
+    title: 'RationalRewards：让奖励模型学会「说出理由」',
+    link: '/domains/rl-aigc/preference-model/rational-rewards',
+    domain: '🏅 偏好模型',
+    domainClass: 'domain-pm',
+    date: '2026-10-12',
+    summary: '🏅 偏好模型子专题首篇。**不设计新 RL 算法，只改 Reward Model 的数据生产方式**。Teacher Qwen3-VL-32B-Instruct 在**已知偏好标签**的条件下解释「为什么 A 更好」→ 隐藏标签做一致性过滤（80K 原始对中约 72% 通过，剩 57.6K）→ **Pointwise Projection** 把成对理由投影成单图评价 → SFT 蒸馏到 **Qwen3-VL-8B** Student。输出四维评分 + 文字理由（Text Faithfulness / Image Faithfulness / Physical & Visual Quality / Text Rendering）。UniGenBench++ Overall：FLUX.1-dev 60.97→70.34、SD3.5-Medium 60.71→70.56、Qwen-Image 78.36→82.60。**Reasoning 文本不直接进入 NFT 梯度，只有数值评分进入**。原始数据复用 HPDv3+RapidData 50K T2I 与 EditReward 30K Editing，50K 的抽样规则未披露；Table 12 的 55K Pointwise 样本与「每对两条」的 72K 口径不一致；HF 公开集 348,189 条与论文 80K 对不同口径。',
+    tags: ['Preference Model', 'Reasoning Reward', 'Pointwise Projection', 'Pairwise', 'Consistency Filtering', 'SFT Distillation', 'Qwen3-VL', 'RL']
   },
   {
     title: 'DeepSeek-R1 推理涌现与强化学习机制',
@@ -574,6 +583,7 @@ const filteredNotes = computed(() => {
 .domain-llm { background: rgba(142, 68, 173, 0.15); color: #9c27b0; }
 .domain-multi { background: rgba(66, 165, 245, 0.15); color: #1e88e5; }
 .domain-rl { background: rgba(156, 39, 176, 0.15); color: #8e24aa; }
+.domain-pm { background: rgba(230, 74, 25, 0.15); color: #e64a19; }
 .domain-agent { background: rgba(0, 176, 255, 0.15); color: #039be5; }
 .domain-foundations { background: rgba(255, 179, 0, 0.18); color: #f57f17; }
 .domain-infra { background: rgba(76, 175, 80, 0.15); color: #43a047; }

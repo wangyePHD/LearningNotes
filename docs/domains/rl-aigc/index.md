@@ -7,6 +7,8 @@
 
 与 `图像与视觉` 域的分工：本域不讨论基模架构、VAE、蒸馏结构，只讨论**「用什么信号把已经很强的基模继续推上去」**。基模侧论文里的 RL 章节若以奖励体系为主要研究变量，也收录于本域并在原笔记中链回。
 
+本专区下设一个**偏好模型子专题**：[🏅 偏好模型 (Preference Model)](./preference-model/)——研究 **Reward Model 本身怎么造**（结构、数据、蒸馏、接口），与本层「奖励体系怎么组合」是不同的问题。
+
 ---
 
 ## 收录标准
@@ -18,6 +20,14 @@
 | ✅ 收录 | Reward Hacking 防御、One-sided Veto、权重空间集成等鲁棒性机制 |
 | ❌ 不收 | 仅提出新 Policy Optimization 算法且奖励为现成单信号的（归 `vision/image-rl-posttraining/` 算法篇） |
 | ❌ 不收 | RL 只作为基模训练三阶段中的一步、且无独立 RL 分析的（留在 `vision/` 原笔记） |
+
+---
+
+## 子专题
+
+| 子专题 | 关注问题 | 状态 | 链接 |
+| :--- | :--- | :--- | :--- |
+| **🏅 偏好模型 (Preference Model)** | **Reward Model 本身怎么造**：结构（scalar vs reasoning-based）、pairwise→pointwise 投影、偏好标签转 Reasoning 监督、评测口径 | 🔄 建设中 | [进入子专题 →](./preference-model/) |
 
 ---
 

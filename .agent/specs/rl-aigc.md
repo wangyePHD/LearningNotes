@@ -1,8 +1,17 @@
 # 🎲 AIGC 强化学习后训练 (RL for AIGC) 细粒度编写规范
 
-当用户口述 **RL 奖励体系设计 / RL Prompt 数据生产 / RL 训练配置 / RL 评测协议 / Reward Hacking 防御** 相关知识时，必须遵循本规范。
+当用户口述 **RL 奖励体系设计 / RL Prompt 数据生产 / RL 训练配置 / RL 评测协议 / Reward Hacking 防御 / 偏好模型（Reward Model）训练与蒸馏** 相关知识时，必须遵循本规范。
 
 本领域与 `vision-customization.md` 的分工：`vision` 关注**基模能力构建**（架构、VAE、蒸馏、数据引擎），本领域（RL-AIGC）关注**后训练阶段的优化器 + 奖励 + 数据 + 评测**闭环。算法侧（如 GRPO / DPO / NFT / Flow-GRPO）若以奖励体系为主要变量，落在本领域。
+
+**子专题路由**：
+
+| 用户内容 | 存放位置 |
+| :--- | :--- |
+| 奖励**体系**怎么组合（多奖励、Gating、Veto、归一化） | `docs/domains/rl-aigc/<论文>.md` |
+| **Reward Model 本身怎么造**（结构设计、pairwise→pointwise、偏好标签转 Reasoning 监督、RM 评测） | `docs/domains/rl-aigc/preference-model/<论文>.md` |
+
+判别问句：**「打分器怎么设计/怎么训练」→ 偏好模型子专题；「多个打分器怎么一起用」→ 本层。**
 
 ---
 
