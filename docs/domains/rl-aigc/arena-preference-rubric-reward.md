@@ -5,9 +5,10 @@
 > **arXiv**：[2610.02967](https://arxiv.org/html/2610.02967)
 > **标题**：*Post-Training Frontier Text-to-Image Models by Composing Preference and Rubric Rewards*
 > **涉及基模**：FLUX.2-dev · Ideogram-4
-> **精读进度**：**Part 1–2 完结**
+> **精读进度**：**Part 1–3 完结**
 > **Part 1**：Abstract / §1 Introduction / §2 Related Work → 见 §1–§8
-> **Part 2**：§4.1 Training and Evaluation Prompts / 附录 A.2.2 Training-prompt Filtering → 见 §9–§15
+> **Part 2**：§4.1 Training and Evaluation Prompts / 附录 A.2.2 Training-prompt Filtering → 见 §9–§16
+> **Part 3**：§3.2.1 / 附录 A.1 / §4.3 RM Scaling → 见 §17–§25
 > **专区**：[🎲 AIGC 强化学习后训练](./index.md)
 
 ---
@@ -646,3 +647,239 @@ $$
 **Part 2 到这里结束。** 对应的 §4.1 和 A.2.2 已经覆盖，包括完整筛选逻辑、输出格式、两类特别拒绝条件、数据规模、用途、对照实验与未披露细节。
 
 **下一部分 Part 3：Human Preference Reward Model 的数据生产与训练。** 那里我们会具体研究 Arena 的约 500 万对人类投票怎样组织成 Reward Model 训练数据，以及 Qwen3.6-27B 如何通过 Bradley–Terry Loss 学习人类偏好。
+
+---
+
+# Part 3｜Human Preference Reward Model 学习笔记
+
+> **对应原文**：§3.2.1、附录 A.1、§4.3（RM Scaling）
+
+## 17. 核心问题
+
+作者通过 Arena 上<mark class="hl-key">**同一个 Prompt 对两张图的用户投票**</mark>，训练一个输入 $(\text{prompt}, \text{image})$、输出实数 $R(p, x)$ 的 Reward Model。
+
+<mark class="hl-trick">**500 万左右的偏好对用于训练 RM，不是直接训练 DiT。**</mark>
+
+::: tip 关键区分
+<mark class="hl-key">**Pairwise 是监督形式；单图打分是模型的输出结构。**</mark>
+
+这两件事经常被混为一谈：训练时的监督信号天然是成对的（winner / loser），但**推理时模型只需要输入一张图就能输出一个实数**。§19 会说明为什么这在结构上是成立的。
+:::
+
+---
+
+## 18. 数据
+
+| 项 | 设置 |
+| :--- | :--- |
+| 来源 | Arena 人类偏好投票 |
+| 时间跨度 | **2025-04-16 → 2026-06-07** |
+| 覆盖模型 | **100+ 个 T2I 模型** |
+| 正文规模 | 约 **500 万** 对 |
+| 数据规模消融中的完整数据 | 约 **560 万（5.6M）** 对 |
+
+记录可表示为：
+
+$$
+(p,\ \text{winner\_image},\ \text{loser\_image})
+$$
+
+<mark class="hl-key">**人类只告诉模型前者优于后者，不给绝对 0–10 分。**</mark>
+
+::: warning 清洗规则的披露程度
+论文<mark class="hl-key">**只提及剔除不认真投票者和低质量 Prompt 对应的记录，未公布可复现的详细清洗规则**</mark>。
+:::
+
+---
+
+## 19. 模型结构：为什么能给一张图打分？
+
+$$
+\text{Prompt} + \text{单张 Image}
+\;\rightarrow\;
+\text{Qwen3.6-27B}
+\;\rightarrow\;
+\text{末尾 } \texttt{\textless{}|cls|\textgreater{}} \text{ Hidden State}
+\;\rightarrow\;
+\text{Linear Head}
+\;\rightarrow\;
+\text{Score}
+$$
+
+数学形式：
+
+$$
+h = \mathrm{Encoder}(p, x)_{\mathrm{cls}},
+\qquad
+R(p, x) = w^{\top} h + b \in \mathbb{R}
+$$
+
+::: info 为什么单张图也能拿到一个标量
+<mark class="hl-key">**即使未经训练，线性层也能给单张图输出一个数字**，只不过当时没有可靠的偏好意义。</mark>
+
+<mark class="hl-trick">**训练使这一评分函数学会如何正确排序。**</mark>
+:::
+
+---
+
+## 20. Pairwise 训练过程
+
+$$
+\begin{aligned}
+r_w &= R(p, x_w) && \text{（Winner 单独前向）} \\
+r_l &= R(p, x_l) && \text{（Loser 单独前向，两次共享同一模型参数）}
+\end{aligned}
+$$
+
+**Bradley–Terry 概率模型：**
+
+$$
+P(x_w \succ x_l \mid p) = \mathrm{sigmoid}\bigl(r_w - r_l\bigr)
+$$
+
+**Bradley–Terry Loss：**
+
+$$
+\mathcal{L} = -\log \mathrm{sigmoid}\bigl(r_w - r_l\bigr) = \mathrm{softplus}\bigl(r_l - r_w\bigr)
+$$
+
+**对评分的梯度：**
+
+$$
+\frac{\partial \mathcal{L}}{\partial r_w} = \mathrm{sigmoid}(r_w - r_l) - 1 < 0,
+\qquad
+\frac{\partial \mathcal{L}}{\partial r_l} = 1 - \mathrm{sigmoid}(r_w - r_l) > 0
+$$
+
+::: info 这两个梯度的符号本身就是在陈述监督信号
+<mark class="hl-key">**梯度下降使赢家相对更高、输家相对更低**</mark>——$r_w$ 的梯度恒为负（上升），$r_l$ 的梯度恒为正（下降）。
+:::
+
+**例子**：人类认为 $A > B$，但模型给 $A = 3$、$B = 5$，Loss 较大；反向传播就会调整评分函数，<mark class="hl-trick">**让 $A$ 的相对得分提高**</mark>。
+
+::: tip 推理不需要两张图
+$$
+\mathrm{score} = R(\text{prompt},\ \text{new\_image})
+$$
+
+<mark class="hl-key">**只需一张图即可**</mark>，这也是它能直接充当 RL Reward 的前提。
+:::
+
+---
+
+## 21. Score 范围（本轮问答新增）
+
+| 类型 | 范围 | 解释 |
+| :--- | :--- | :--- |
+| **原始单图 Score** $R(p,x)$ | $(-\infty, +\infty)$ | Linear Head 的<mark class="hl-key">**实数 Logit，不是 0–10 分**</mark> |
+| **偏好概率** $\mathrm{sigmoid}(r_A - r_B)$ | $(0, 1)$ | A 相对 B 获胜的概率 |
+| **最终 NFT 权重** $\tilde{r}_i$ | $[0, 1]$ | 多 Reward 组合、组相对归一化后映射而来 |
+
+**示例**：若 $R(A) = 3$、$R(B) = 1$，则
+
+$$
+P(A \succ B) = \mathrm{sigmoid}(3 - 1) = \mathrm{sigmoid}(2) \approx 0.881
+$$
+
+<mark class="hl-trick">**`Score = 3` 本身并不意味着 $3/10$，也不是 30%。**</mark>
+
+::: danger 原始分数不是唯一的绝对质量尺度
+BT Loss 只依赖两个 Score 的<mark class="hl-key">**差**</mark>：
+
+$$
+\mathcal{L} = \mathrm{softplus}\bigl(r_l - r_w\bigr)
+\;\Longrightarrow\;
+\mathcal{L}\bigl(r_w + c,\ r_l + c\bigr) = \mathcal{L}\bigl(r_w,\ r_l\bigr)
+$$
+
+<mark class="hl-key">**同时给两个 Score 加上 $100$，概率和 Loss 都不变。**</mark>
+
+所以<mark class="hl-trick">**原始分数并非唯一的绝对质量尺度，不同 Prompt 下的分数不宜直接比较。**</mark>
+:::
+
+---
+
+## 22. RM 训练参数
+
+| 项 | 设置 |
+| :--- | :--- |
+| Backbone | **Qwen3.6-27B**，末尾 `<\|cls\|>` 接 Linear Head |
+| Loss | **Bradley–Terry** |
+| Epoch | **1 Epoch** |
+| **Global Batch** | 附录 A.1 为 **1,032 pairs**；正文 §3.2.1 为 **1,024**，<mark class="hl-key">**原文不一致**</mark> |
+| LR | $2\times10^{-6}$，**Constant**，**No Warmup** |
+| Max Length | **8,192 Tokens** |
+
+**图像增强**（宽高比修正后应用于每张训练图像）：
+
+| 变换 | 幅度 |
+| :--- | :--- |
+| Brightness / Contrast / Saturation | 各 $\pm 0.05$ |
+| Hue | $\pm 0.025$ |
+| Gaussian Noise | $\sigma = 0.005$（像素归一到 $[0,1]$） |
+
+**Collator 格式**：
+
+$$
+\underbrace{\text{固定 System Instruction}}_{\text{reward-model system}}
+\;+\;
+\underbrace{\text{User Prompt}}_{p}
+\;+\;
+\underbrace{\text{Winner 或 Loser Image}}_{x}
+\;+\;
+\texttt{<|cls|>}
+$$
+
+---
+
+## 23. RM 数据规模与下游 RL 表现
+
+| RM 人类偏好数据 | MMRBv2 Stage-1 RL 胜率 |
+| :---: | :---: |
+| $\sim 10$K pairs | **53.7%** |
+| $\sim 100$K pairs | **60.7%** |
+| $\sim 500$K pairs | **61.1%** |
+| $\sim 5.6$M pairs | **64.2%** |
+
+::: warning 这里 Scale 的是什么
+<mark class="hl-key">**Scale 的是训练 RM 的偏好数据**</mark>，<mark class="hl-trick">**不是 RL Prompt，也不是 Rollout 数量**</mark>。
+
+它与 Part 2 的 10K RL Prompt 是<mark class="hl-key">**完全不同的两套数据**</mark>：前者是「人类选哪张图」，后者是「用户想让模型生成什么」。
+:::
+
+---
+
+## 24. 适用边界和披露不足
+
+::: warning 适用边界
+偏好 RM 能提供<mark class="hl-key">**整体美学 / 构图 / 视觉质量信号，但不能保证计数、关系、文字等逐条遵循**</mark>，因此论文进一步使用 Rubric Faithfulness / Constraint Reward。
+:::
+
+::: danger 披露不足清单
+- 投票清洗规则
+- 完整 System Prompt
+- 优化器与 GPU
+- <mark class="hl-key">**RM 是否全参训练**</mark>
+- 完整校准指标
+- 数据近重复审计
+:::
+
+---
+
+## 25. 最简伪代码
+
+```python
+r_w = reward_model(prompt, winner_image)
+r_l = reward_model(prompt, loser_image)
+loss = F.softplus(r_l - r_w)
+loss.backward()
+optimizer.step()
+optimizer.zero_grad()
+
+with torch.no_grad():
+    score = reward_model(prompt, generated_image)
+```
+
+> **一句话记忆**：<mark class="hl-key">**模型结构决定单图输出实数，Pairwise BT 训练决定这个实数怎样反映相对偏好。**</mark>
+
+**原文**：https://arxiv.org/html/2610.02967

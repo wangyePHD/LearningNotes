@@ -25,15 +25,14 @@
 
 | 篇目 | 核心机制 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
-| **Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模** | **算法不变、只动奖励侧**。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。四类奖励（Preference RM / presence-oriented Faithfulness / absence-oriented Intent-gated Constraint / Anti-Hack）+ 四个组合机制（Reward-decoupled Normalization / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 2**：Arena 真实用户 Prompt → Gemini-3.5-Flash 六条 VALID 规则二值过滤 → 10K 训练 / 1K 验证；100K 未过滤比 10K 过滤低 **0.0360** 胜率 | 🔄 Part 1–2 完结 | [阅读笔记 →](./arena-preference-rubric-reward.md) |
+| **Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模** | **算法不变、只动奖励侧**。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。四类奖励（Preference RM / presence-oriented Faithfulness / absence-oriented Intent-gated Constraint / Anti-Hack）+ 四个组合机制（Reward-decoupled Normalization / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 2**：Arena 真实用户 Prompt → Gemini-3.5-Flash 六条 VALID 规则二值过滤 → 10K 训练 / 1K 验证；100K 未过滤比 10K 过滤低 **0.0360** 胜率。**Part 3**：BT Preference RM（Qwen3.6-27B + `<\|cls\|>` Linear Head，5M 偏好对，1 Epoch，LR 2e-6）；Score 为无界 Logit，BT Loss 只依赖差值故不同 Prompt 分数不可直接比较；RM 数据 10K→5.6M 对应下游 RL 胜率 53.7%→64.2% | 🔄 Part 1–3 完结 | [阅读笔记 →](./arena-preference-rubric-reward.md) |
 
 ---
 
 ## 本域待补主线（阅读路线图）
 
-1. **Part 3：Human Preference Reward Model 的数据生产与训练** —— Arena 约 500 万对人类投票怎样组织成 RM 训练数据，Qwen3.6-27B 如何通过 Bradley–Terry Loss 学习偏好
-2. **Part 8：Reward Composition 公式精读** —— 以公式 (3)–(9) 为准（引言的 $[0,1]$ 表述与 §3.3.1 的逐维 z-score 不一致）
-3. **Rubric 奖励体系** —— Faithfulness / Constraint checklist 与 Anti-Hack detector 的逐条定义
+1. **Part 8：Reward Composition 公式精读** —— 以公式 (3)–(9) 为准（引言的 $[0,1]$ 表述与 §3.3.1 的逐维 z-score 不一致）
+2. **Rubric 奖励体系** —— Faithfulness / Constraint checklist 与 Anti-Hack detector 的逐条定义
 
 ---
 
