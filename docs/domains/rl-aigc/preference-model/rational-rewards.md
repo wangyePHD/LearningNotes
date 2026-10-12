@@ -6,11 +6,12 @@
 > **标题**：*RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time*
 > **模型**：Teacher Qwen3-VL-32B-Instruct → Student **Qwen3-VL-Instruct-8B**
 > **原图**：`Papers/RetionalReward.pdf`
-> **精读进度**：**Part 1–4 完结**
+> **精读进度**：**Part 1–5 完结**
 > **Part 1**：Abstract / §1 / §2 整体框架与核心创新 → §1–§6
 > **Part 2**：§3 Training Data / 附录 F.1 → §7–§12
 > **Part 3**：§2.1 + 附录 B、C、F，Figure 4 → §13–§18
 > **Part 4**：SFT 训练 + 官方开源配置 → §19–§25
+> **Part 5**：附录 D、E.1 + Algorithm 1 → §26–§31
 > **子专题**：[🏅 偏好模型 (Preference Model)](./index.md)
 
 ---
@@ -984,3 +985,282 @@ Pairwise 监督明明只规定 $A$ 比 $B$ 好，<mark class="hl-key">**经过 P
 这就涉及 <mark class="hl-trick">**Reward Calibration 和在线 RL 的有效性**</mark>。
 
 **下一部分 Part 5：Reward 推理与打分。** 我们会重点研究四个评分维度的完整 1–4 分定义、如何处理 N/A、不同维度怎么融合，以及为什么这种数值设计可能直接影响 DiffusionNFT 的训练结果。
+
+---
+
+# Part 5：RationalRewards 如何给图片打分，并转换成 DiffusionNFT Reward？
+
+> **对应原文**：附录 D（评分标准）、附录 E.1（Reward 聚合）、Algorithm 1
+
+这一部分直接关系到后训练。已知 RationalRewards 如何制作数据、如何 SFT，现在需要回答：<mark class="hl-key">**给定一条 Prompt 和一张 Rollout 图片，RationalRewards 究竟输出什么？这些分数怎样变成 DiffusionNFT 能使用的 Reward？**</mark>
+
+先说结论：<mark class="hl-key">**RationalRewards 不是直接预测一个 Scalar，也不是像 TRM 那样先生成动态 Rubric。它使用固定的多维评分标准，由 VLM 生成评价理由和各维度分数，再通过程序合成为单个 Reward。**</mark>
+
+---
+
+## 26. 模型的输入输出
+
+对于文生图，输入非常简单：
+
+$$
+(\text{Prompt},\ \text{Generated Image}) \longrightarrow \text{RationalRewards-8B}
+$$
+
+输出包含三个评价维度：
+
+| 维度 | 评价内容 | 分数 |
+| :--- | :--- | :--- |
+| **Text Faithfulness** | 主体、属性、数量、动作、关系是否符合 Prompt | 1–4 |
+| **Physical and Visual Quality** | 物理合理性、光照、纹理、透视、人体结构、伪影 | 1–4 |
+| **Text Rendering** | 文字是否正确、清晰、完整 | 1–4 或 N/A |
+
+对于图像编辑，<mark class="hl-key">**另外增加 Image Faithfulness，判断非编辑区域和原图信息是否得到保留**</mark>。
+
+::: warning 两个容易搞混的边界
+- <mark class="hl-key">**文生图没有 Image Faithfulness 这一评分维度**</mark>；
+- <mark class="hl-trick">**这和 TRM 的三个维度也不完全相同，RationalRewards 没有一个独立的 Aesthetics 分数**</mark>。
+:::
+
+### 真实推理格式
+
+官方 GitHub 的 Pointwise 推理模板采用如下结构，下面只保留关键字段：
+
+```text
+# User Request Analysis
+...
+
+# Detailed Judgement
+
+1. Text Faithfulness:
+## Justification: ...
+## Score: 3.5
+
+2. Physical and Visual Quality:
+## Justification: ...
+## Score: 3.0
+
+3. Text Rendering:
+## Justification: ...
+## Score: N/A
+
+# Summary:
+...
+
+# User Request Refinement:
+## Refinement Comments: ...
+## Refined Request: ...
+```
+
+<mark class="hl-key">**这里的分数是举例；格式来自官方 README。**</mark>模型甚至可以同时提出改进 Prompt 的建议，但 <mark class="hl-trick">**NFT 训练实际只使用解析得到的数值评分**</mark>。
+
+---
+
+## 27. 每个维度具体怎么评分？
+
+作者在附录 D 给出了完整评分标准：
+
+| 分数 | Text Faithfulness | Physical and Visual Quality | Text Rendering |
+| :--- | :--- | :--- | :--- |
+| **4** | <mark class="hl-key">**核心要求完全符合，没有多余或错误内容**</mark> | <mark class="hl-key">**光影、结构、几何自然，没有明显伪影**</mark> | <mark class="hl-key">**文字准确清晰，融入画面**</mark> |
+| **3** | 主要要求满足，少量细节错误 | 有轻微的纹理、光照等问题 | 少量拼写、大小写问题 |
+| **2** | 部分主体、属性或关系错误 | 明显透视、阴影、结构或视觉缺陷 | 明显错字或文字变形 |
+| **1** | 核心要求缺失或被违背 | 严重畸形、不可能的几何结构或伪影 | 文字无法识别或完全缺失 |
+
+::: danger 这里存在一个很关键的设计
+<mark class="hl-key">**1、2、3、4 是评分锚点，而不是只能输出四个离散值。**</mark>
+
+模型实际可以输出 <mark class="hl-trick">**3.2、3.6、3.85 等浮点分数**</mark>。
+
+官方 Prompt 规定了两个步骤：<mark class="hl-key">**先根据整体表现选择一个整数锚点，再通过具体视觉问题进行加减调整**</mark>。
+
+例如图片整体不错，但人物手指稍微变形，那么 Physical Quality 不一定直接从 4 掉到 3，<mark class="hl-trick">**可以得到 3.6**</mark>。
+
+这样做的目的就是<mark class="hl-key">**提高相似质量图片之间的评分分辨率**</mark>。
+
+::: warning 但要区分两件事
+<mark class="hl-trick">**论文没有充分证明模型能稳定地区分 3.6 和 3.7。这是评分分辨率与实际评分准确性之间的区别。**</mark>
+:::
+
+---
+
+## 28. 用一个例子理解完整评分过程
+
+假设 Prompt 是：
+
+> 一只橘猫站在蓝色汽车左侧，背景是雪山，写实摄影风格。
+
+同一个生成模型 Rollout 两张图片。
+
+| | Image A | Image B |
+| :--- | ---: | ---: |
+| **Text Faithfulness** | 3.8 | 3.2 |
+| **Physical Quality** | 3.6 | 3.0 |
+| **Text Rendering** | N/A | N/A |
+| **Raw Reward** | **3.70** | **3.10** |
+
+<mark class="hl-key">**为什么 Text Rendering 是 N/A？因为原始 Prompt 没有要求生成文字。**</mark>
+
+### Reward 如何融合？
+
+<mark class="hl-key">**论文 Appendix E.1 中明确规定：所有适用维度等权平均，N/A 不参与计算。**</mark>
+
+$$
+\boxed{
+R_{\mathrm{raw}}(p, x) = \frac{1}{\bigl|\mathcal{D}_{\mathrm{active}}\bigr|} \sum_{d \in \mathcal{D}_{\mathrm{active}}} s_d(p, x)
+}
+$$
+
+例如 Image A：
+
+$$
+R_A = \frac{3.8 + 3.6}{2} = 3.70
+$$
+
+Image B：
+
+$$
+R_B = \frac{3.2 + 3.0}{2} = 3.10
+$$
+
+如果 Prompt 明确要求文字，例如在海报中写出 `"HELLO"`，那么 Text Rendering 就需要参与评分，<mark class="hl-trick">**分母相应变成 3**</mark>。
+
+::: tip 所以作者没有训练一个额外的网络融合这些 Reward
+<mark class="hl-key">**也没有使用自适应权重，而是直接采用 Equal-weight Average。**</mark>
+:::
+
+---
+
+## 29. 原始 Reward 如何进入 DiffusionNFT？
+
+<mark class="hl-key">**这里容易混淆两个归一化步骤。**</mark>
+
+### 第一步：把评分维度转换为 Raw Reward
+
+刚才 Image A 得到 $3.70$。
+
+官方公开的推理解析示例还会将 1–4 分转换到 0–1：
+
+$$
+R_{01} = \frac{R_{\mathrm{raw}} - 1}{3}
+$$
+
+因此：
+
+$$
+R_A^{01} = 0.90, \qquad R_B^{01} = 0.70
+$$
+
+::: danger 但要注意归因
+<mark class="hl-key">**这一步是官方 README 推理解析示例里的实现。论文 Appendix E.1 的算法直接从多维均值出发，没有明确说明训练代码是否采用完全相同的预归一化。**</mark>
+:::
+
+### 第二步：在 DiffusionNFT 中进行组内归一化
+
+论文 Algorithm 1 第 7 行给出的形式是：
+
+$$
+\boxed{
+\widetilde{R}_i = 0.5 + 0.5\,\operatorname{clip}\left(\frac{R_i - \bar{R}_{\mathrm{group}}}{Z_c},\ -1,\ 1\right)
+}
+$$
+
+其中 $\bar{R}_{\mathrm{group}}$ 是<mark class="hl-key">**同一 Prompt 下 Rollout 的平均 Reward**</mark>；$Z_c$ 是论文使用的归一化尺度。
+
+::: danger 这里有一个必须保留的空白
+<mark class="hl-key">**附录没有在此公式附近充分说明 $Z_c$ 的具体计算方式，因此不能直接认定它就是组内标准差。**</mark>
+:::
+
+归一化后的 $\widetilde{R}_i \in [0,1]$，才作为 NFT 正负方向的权重。
+
+$$
+\begin{aligned}
+&\textbf{Prompt} \rightarrow \textbf{16 张 Rollout} \\
+&\quad \downarrow \\
+&\textbf{RationalRewards-8B 分别评分} \\
+&\qquad \text{Faithfulness / Physical Quality / Text Rendering} \\
+&\quad \downarrow \\
+&\textbf{过滤 N/A} \rightarrow \textbf{适用维度等权平均} \\
+&\quad \downarrow \\
+&\textbf{Group Normalization} \rightarrow [0, 1] \\
+&\quad \downarrow \\
+&\textbf{DiffusionNFT Loss} \rightarrow \textbf{更新图像生成模型}
+\end{aligned}
+$$
+
+![RationalRewards Figure 2(a)：RationalRewards 到 RL 的完整回路。Image Generator 生成图片 → RationalRewards 输出 Rationale（四维带 Justification 与 Score）→ 合成为 Reward 1–4 → 通过 RL Update 箭头回传到 Image Generator。图中明确画出了 Score 与 Reward 之间存在一次「合成」步骤，而不是模型直接吐出一个标量。](/rational-fig2-reasoning-reward-model.png)
+
+::: tip 这里必须记住
+<mark class="hl-key">**Reasoning 主要用于帮助 Reward Model 做出评分，而不是作为文本直接参与 DiffusionNFT 的反向传播。**</mark>
+
+论文 Algorithm 1 中，真正进入 NFT Loss 的是归一化数值 Reward：
+
+$$
+\mathcal{L}_{\mathrm{NFT}} = \widetilde{R}_i \lVert v_{\theta}^{+} - v \rVert_2^2 + (1 - \widetilde{R}_i)\lVert v_{\theta}^{-} - v \rVert_2^2
+$$
+
+<mark class="hl-trick">**更具体的 $v_{\theta}^{+}$、$v_{\theta}^{-}$ 如何构建，Part 6 再拆。**</mark>
+:::
+
+---
+
+## 30. 这种评分设计有三个值得注意的问题
+
+::: danger 首先，等权平均不一定合理
+例如一张图的 Faithfulness 是 2.0、Physical Quality 是 4.0，最终 Reward 是 3.0；另一张图两个维度均为 3.0，<mark class="hl-trick">**Reward 也是 3.0。它们在 NFT 中得到相同 Raw Reward，但错误类型完全不同**</mark>。
+
+若某个核心 Prompt 要求不可妥协，<mark class="hl-key">**等权平均可能掩盖严重错误**</mark>。
+:::
+
+::: danger 其次，Physical and Visual Quality 并不等价于真正的人类审美偏好
+它的重点是物理合理性、结构和可见缺陷。<mark class="hl-trick">**虽然官方推理模板也提及构图和视觉质量，但没有单独的美学偏好轴**</mark>。
+
+因此<mark class="hl-key">**自然质感、低饱和度、真实摄影感，未必能被充分优化**</mark>。
+:::
+
+::: danger 最后，生成式评分可能不稳定
+官方示例使用 Temperature 0.1，<mark class="hl-trick">**虽然较低，但仍不等于完全确定性的 Scalar Head**</mark>。相同图片多次评价，可能出现不同 Reasoning 或小幅分数波动。
+
+此外，<mark class="hl-key">**解析失败时官方 README 示例会给出 0.0 的归一化分数；真正用于训练时需要确认异常样本怎样处理，避免把解析失败错误地当作低质量图片**</mark>。
+:::
+
+::: warning 范围声明
+这三点是<mark class="hl-key">**从算法设计与公开实现提出的风险，不是论文通过实验已经证明存在的失效现象**</mark>。
+:::
+
+---
+
+## 31. Part 5 总结
+
+RationalRewards 的 Reward 设计可以概括为：
+
+$$
+\boxed{
+\text{Prompt + Image}
+\rightarrow \text{Reasoning + Dimension Scores}
+\rightarrow \text{Equal-weight Average}
+\rightarrow \text{Group Normalization}
+\rightarrow \text{NFT}
+}
+$$
+
+<mark class="hl-key">**它的技术创新主要发生在前半段：让 VLM 学会依据视觉证据进行多维评价，而不是设计了新的 Reward 融合算法。**</mark>
+
+::: tip 值得重点关注的疑问
+RationalRewards 的改进究竟来自<mark class="hl-key">**更准确的 Reasoning**</mark>，还是来自<mark class="hl-key">**多维评分及其组合方式**</mark>？
+
+<mark class="hl-trick">**论文没有通过完全解耦的实验充分回答这一点**</mark>。
+:::
+
+::: info 把它和 Arena-RL 放在一起看
+两者在「最终 Reward 如何进入 NFT」这一步的处理非常接近——<mark class="hl-key">**都是组内去均值 + clip 到 $[0,1]$**</mark>：
+
+| | RationalRewards | Arena-RL |
+| :--- | :--- | :--- |
+| **分组统计量** | 同 Prompt 的 $K$ 张 rollout 均值 | 同 Prompt 的 $K$ 张 rollout 均值 |
+| **缩放常数** | $Z_c$（<mark class="hl-trick">**计算方式未说明**</mark>） | $A_{\max}=5$（<mark class="hl-trick">**明确是截断缩放常数**</mark>） |
+| **多奖励合成** | <mark class="hl-trick">**适用维度等权平均**</mark> | <mark class="hl-key">**逐轴 z-score 后等权相加**</mark> |
+
+<mark class="hl-key">**差别恰恰落在「等权平均」和「逐轴标准化」上——这正是 Arena-RL §64 论证过会出问题的地方**</mark>：等权平均没有解决量纲与话语权解耦（这里是 1–4 同量纲所以风险较小），但也没有逐轴标准化带来的分布对齐。
+:::
+
+**下一部分 Part 6：** 我们就进入实际训练——作者如何筛选 RL Prompt、16 张 Rollout 怎么组织、为什么选择 16 张 A100、NFT 的正负速度场怎样计算，以及论文中的 Mean / Std 过滤阈值究竟是怎么用的。
