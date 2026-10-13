@@ -104,6 +104,16 @@ http://export.arxiv.org/api/query?search_query=cat:cs.CV+AND+(...)+&sortBy=submi
 
 <mark class="hl-key">**一行一篇：标题 + 一句话大白话印象。有开源代码就把链接带上，不许展开。**</mark>这个小节的价值是「防重复扫」与「留个模糊印象」，不是摘要库。
 
+::: danger 表格内的高亮写法（易踩坑）
+**`<mark>` 与 `**` 必须在同一侧闭合**，否则 markdown-it 无法配对，直接让构建失败：
+
+```markdown
+✅ <mark class="hl-key">**加粗内容**</mark> 后接普通文字
+❌ <mark class="hl-key">**加粗内容</mark>** 后接普通文字   ← 构建报错
+```
+
+写完记得检查：`<mark>` 与 `**` 各多少个、数量是否相等。
+
 ### 2.1.3 ✅ 今日动作
 
 Checklist 形式，0–3 条：<mark class="hl-key">**要建的正式笔记 / 要跑的实验 / 存疑待验证的问题**</mark>。
