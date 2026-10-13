@@ -61,6 +61,7 @@ export default defineConfig({
       { text: '🚀 实战项目', link: '/projects/' },
       { text: '🏷️ 知识标签', link: '/tags/' },
       { text: '💡 Idea 池', link: '/ideas/' },
+      { text: '📥 每日 arXiv', link: '/daily-arxiv/' },
       { text: '📅 研习复盘', link: '/reviews/' },
       { text: '🧪 研习白板', link: '/whiteboard/' },
       { text: '📖 使用指南', link: '/guide/' }
@@ -101,6 +102,17 @@ export default defineConfig({
             { text: '周报时光机总览', link: '/reviews/' },
             { text: '2026年第41周复盘 (arXiv六赛道雷达)', link: '/reviews/2026-W41' },
             { text: '2026年第38周复盘 (视频/算力)', link: '/reviews/2026-W38' }
+          ]
+        }
+      ],
+
+      // 0.3 每日 arXiv 速览
+      '/daily-arxiv/': [
+        {
+          text: '📥 每日 arXiv 速览',
+          items: [
+            { text: '每日速览索引与用法', link: '/daily-arxiv/' },
+            { text: '2026-10-13', link: '/daily-arxiv/2026-10-13' }
           ]
         }
       ],
