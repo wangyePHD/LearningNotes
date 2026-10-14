@@ -219,7 +219,8 @@ export default defineConfig({
         {
           text: '🚨 Reward Hacking 子专题',
           items: [
-            { text: '概览 · 收录标准 · 候选池', link: '/domains/rl-aigc/reward-hacking/' }
+            { text: '概览 · 收录标准 · 候选池', link: '/domains/rl-aigc/reward-hacking/' },
+            { text: 'CRD：中心化奖励蒸馏做 Diffusion RL', link: '/domains/rl-aigc/reward-hacking/crd-centered-reward-distillation' }
           ]
         }
       ],
