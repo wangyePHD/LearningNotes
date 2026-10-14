@@ -1602,3 +1602,14 @@ RationalRewards 与 Arena-RL 的 NFT 接入路径<mark class="hl-key">**在优�
 :::
 
 **下一部分 Part 7：实验和消融。** 我们将重点看 RationalRewards 相比 MultiReward、通用 32B Judge 和直接蒸馏 Teacher 的优势究竟来自哪里，并结合 Reward Hacking 曲线判断：<mark class="hl-trick">**这些提升是 Reward 本身更可靠，还是只是更适合 UniGenBench++ 的评测方式**</mark>。
+---
+
+## 40. 本笔记与 Reward Hacking 子专题的关系
+
+本篇 **Part 5、Part 6** 的内容（生成式评分的非确定性、解析失败给 0.0 的风险、训练中期的 reward 曲线退化、低方差 rollout 过滤的副作用）已在新建立的 [🚨 RL Reward Hacking 与分布偏移](../reward-hacking/) 里建立索引。
+
+| 本笔记位置 | 归入该专题的哪个问题 |
+| :--- | :--- |
+| §28、§30 | 攻击面：Temperature 0.1 的非确定性；解析失败示例给 0.0 有被误当低质量图的风险 |
+| §36 | 分布侧：两个过滤阈值与「低方差过滤可能把困难任务永久排除」 |
+| §36 / Fig.11 | 训练中期的 eval reward 明显下跌后回升（对应退化再恢复） |

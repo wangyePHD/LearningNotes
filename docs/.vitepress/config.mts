@@ -215,6 +215,12 @@ export default defineConfig({
             { text: '偏好模型概览与收录标准', link: '/domains/rl-aigc/preference-model/' },
             { text: 'RationalRewards：让奖励模型学会说出理由', link: '/domains/rl-aigc/preference-model/rational-rewards' }
           ]
+        },
+        {
+          text: '🚨 Reward Hacking 子专题',
+          items: [
+            { text: '概览 · 收录标准 · 候选池', link: '/domains/rl-aigc/reward-hacking/' }
+          ]
         }
       ],
 

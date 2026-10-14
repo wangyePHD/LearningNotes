@@ -3612,3 +3612,15 @@ $$
 $$
 
 其中 <mark class="hl-key">**Rank Concatenation 只是实现这个公式的一种技巧**</mark>。
+---
+
+## 86. 本笔记与 Reward Hacking 子专题的关系
+
+本篇 **Part 1、Part 6、Part 8** 的内容（Goodhart 实证、Anti-Hack detector、One-sided Veto、$A_{\max}=5$ 的截断信任域）已在新建立的 [🚨 RL Reward Hacking 与分布偏移](./reward-hacking/) 里建立索引。
+
+| 本笔记位置 | 归入该专题的哪个问题 |
+| :--- | :--- |
+| §2.3 / §39 | Goodhart：单一偏好 RM 训练让 faithfulness 胜率跌破 50% 并持续下滑 |
+| §44–§52 | 攻击面：205 个失败案例审计出的两种固定 detector |
+| §49 | 防御面：为什么用 One-sided Veto 而不是加一项 anti-hack reward |
+| §64–§75 | 分布侧：分轴归一化 + 组内 $A_i$ + $\tilde r$ 的截断信任域 |

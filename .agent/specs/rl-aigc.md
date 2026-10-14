@@ -9,9 +9,14 @@
 | 用户内容 | 存放位置 |
 | :--- | :--- |
 | 奖励**体系**怎么组合（多奖励、Gating、Veto、归一化） | `docs/domains/rl-aigc/<论文>.md` |
-| **Reward Model 本身怎么造**（结构设计、pairwise→pointwise、偏好标签转 Reasoning 监督、RM 评测） | `docs/domains/rl-aigc/preference-model/<论文>.md` |
+| **Reward Model 本身**怎么造（结构设计、pairwise→pointwise、偏好标签转 Reasoning 监督、RM 评测） | `docs/domains/rl-aigc/preference-model/<论文>.md` |
+| **优化过程里奖励与分布怎么被钻空子**（Goodhart 饱和、mode collapse、具体 hack 形态与检测器、惩罚项设计、信任域、rollout 过滤、分布塌缩与 off-policy 失配） | `docs/domains/rl-aigc/reward-hacking/<论文>.md` |
 
-判别问句：**「打分器怎么设计/怎么训练」→ 偏好模型子专题；「多个打分器怎么一起用」→ 本层。**
+判别问句：
+
+- **「打分器怎么设计/怎么训练」** → 偏好模型子专题
+- **「多个打分器怎么一起用」** → 本层
+- **「模型怎么利用奖励的漏洞 / 训练分布怎么漂」** → Reward Hacking 子专题
 
 ---
 
