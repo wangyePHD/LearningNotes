@@ -153,6 +153,7 @@ export default defineConfig({
             { text: '单流扩散基模 Z-Image', link: '/domains/vision/z-image' },
             { text: '轻量统一多模态 DeepGen 1.0', link: '/domains/vision/deepgen' },
             { text: '原生分辨率高效基模 Mage-Flow', link: '/domains/vision/mage-flow' },
+            { text: '多分辨率高效训练 (Native Resolution + Packing)', link: '/domains/vision/native-resolution-training' },
             { text: '统一生编基模 Qwen-Image-2.0', link: '/domains/vision/qwen-image-2' },
             { text: '理解优先 Agentic 基模 Boogu-Image-0.1', link: '/domains/vision/boogu-image' },
             { text: '图像基模训练 Playbook v1.0', link: '/domains/vision/training-playbook' },

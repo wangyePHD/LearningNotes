@@ -145,6 +145,15 @@ const notesList = ref([
     tags: ['Vision', 'Diffusion', 'MMDiT', 'Flow Matching', 'VAE', 'RL', 'DiffusionNFT', 'Distillation', 'Efficiency']
   },
   {
+    title: '多分辨率图像高效训练 (Native Resolution + Packing + VarLen Attention)',
+    link: '/domains/vision/native-resolution-training',
+    domain: '🖼️ 图像视觉',
+    domainClass: 'domain-vision',
+    date: '2026-10-17',
+    summary: '跨模型技术专题：Native Resolution 保长宽比 + 面积约束 + 16 对齐；变长 Tokens（1024²→4096，1280×720→3600）；Packing 固定 token budget（MOSS-Image 8576/pack）；VarLen Attention 用 cu_seqlens 隔离样本；Progressive Resolution 256→512→1024，并与数据质量/文本长度同步。对照 Mage-Flow §6 与 MOSS-Image Stage 3/4，附伪代码、复杂度对比与 14 条避坑清单。',
+    tags: ['Vision', 'Diffusion', 'DiT', 'Native Resolution', 'Packing', 'VarLen Attention', 'Efficiency']
+  },
+  {
     title: '统一生编基模 Qwen-Image-2.0 (Data Curation)',
     link: '/domains/vision/qwen-image-2',
     domain: '🖼️ 图像视觉',
