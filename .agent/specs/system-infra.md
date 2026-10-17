@@ -1,10 +1,10 @@
 # ⚡ 算力基建与系统工程 (Infra & Systems) 细粒度编写规范
 
-当用户让 Agent 记录 CUDA 算子优化、显存层级分析、Roofline 模型、分布式训练（Megatron/FSDP/Deepspeed/SP）、推理吞吐（vLLM/TensorRT-LLM）等底层工程知识时，必须遵循本规范。
+当用户让 Agent 记录 CUDA 算子优化、显存层级分析、Roofline 模型、分布式训练（Megatron/FSDP/Deepspeed/SP）、推理吞吐（vLLM/TensorRT-LLM）等底层工程知识时，可参考本规范。
 
 ---
 
-## 1. 结构大纲标准 (必须包含以下 6 个小节)
+## 1. 结构参考（可选，不作强制要求）
 
 ```markdown
 # [工程主题中文名] ([英文技术名称])

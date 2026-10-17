@@ -1,10 +1,10 @@
 # 🎬 视频模型 (Video Intelligence) 细粒度编写规范
 
-当用户让 Agent 记录视频生成、时序建模、时空注意力、Video DiT、Sora/Wan/Hunyuan 等相关笔记时，必须遵循本规范。
+当用户让 Agent 记录视频生成、时序建模、时空注意力、Video DiT、Sora/Wan/Hunyuan 等相关笔记时，可参考本规范。
 
 ---
 
-## 1. 结构大纲标准 (必须包含以下 6 个小节)
+## 1. 结构参考（可选，不作强制要求）
 
 ```markdown
 # [中文标题] ([英文模型/算法简称])

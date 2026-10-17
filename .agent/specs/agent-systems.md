@@ -1,6 +1,6 @@
 # 🤖 智能体系统与工具编排 (Agent Systems) 细粒度编写规范
 
-当用户让 Agent 记录 LLM 智能体架构、Agent Loop、工具调用 (Tool Use)、结构化输出契约、记忆系统、规划 (Planning) / 任务图、上下文工程、多智能体编排、智能体评测 (Evals) 与可观测性 (Telemetry / Tracing) 等相关笔记时，必须遵循本规范。
+当用户让 Agent 记录 LLM 智能体架构、Agent Loop、工具调用 (Tool Use)、结构化输出契约、记忆系统、规划 (Planning) / 任务图、上下文工程、多智能体编排、智能体评测 (Evals) 与可观测性 (Telemetry / Tracing) 等相关笔记时，可参考本规范。
 
 ---
 
@@ -13,7 +13,7 @@
 3. **可靠性必须给出定量公式**：token 级合法率 $q^n$、$k$ 次重试残余失败率 $(1-p)^k$、错误累积 $1-(1-\epsilon)^{N}$，禁止只写「更稳定」；
 4. **禁止隐藏的中间推理**：笔记只记录可观测的 state transition 与 span，不记录也不美化 unexposed 的思维链。
 
-## 1. 结构大纲标准 (必须包含以下 7 个小节)
+## 1. 结构参考（可选，不作强制要求）
 
 ```markdown
 # [中文标题] ([英文机制/模式])

@@ -1199,8 +1199,6 @@ $$
 $$
 
 <mark class="hl-key">**这正好对应论文的 Finding 2 和 Finding 3**</mark>，见 §6.7。
-
-跨模型对照（Mage-Flow vs MOSS-Image）、四机制公式与可复用伪代码见 → [多分辨率图像高效训练](./native-resolution-training.md)。
 :::
 
 ### 6.1 为什么不用传统 resolution bucket

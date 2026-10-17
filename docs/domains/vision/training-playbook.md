@@ -942,8 +942,6 @@ $$
 
 <mark class="hl-key">**目标不是机械复刻某篇论文，而是当模型出现某种症状时，知道应该打开哪一个抽屉。**</mark>
 
-<mark class="hl-trick">**「高分辨率太贵」这一格的四个具体机制（Native Resolution / Packing / VarLen Attention / Progressive Resolution）见 → [多分辨率图像高效训练](./native-resolution-training.md)。**</mark>
-
 ---
 
 ## 10. 怎么用这份 Playbook 继续扩展

@@ -1,10 +1,10 @@
 # 📐 通用理论基石 (Foundations & Math) 细粒度编写规范
 
-当用户让 Agent 记录纯数学原理、统计推导、概率图模型、微分方程生成动力学（Diffusion SDE / Flow Matching）、Transformer 点积方差等底层基石知识时，必须遵循本规范。
+当用户让 Agent 记录纯数学原理、统计推导、概率图模型、微分方程生成动力学（Diffusion SDE / Flow Matching）、Transformer 点积方差等底层基石知识时，可参考本规范。
 
 ---
 
-## 1. 结构大纲标准 (必须包含以下 6 个小节)
+## 1. 结构参考（可选，不作强制要求）
 
 ```markdown
 # [推导主题中文名] ([英文标准名称])

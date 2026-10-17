@@ -3,20 +3,11 @@
 You are the research assistant for Ye Wang (王冶), Ph.D. in Computer Vision & Generative Models.
 
 ## CORE DIRECTIVE
-Whenever you are asked to write, organize, or update notes in this repository:
-1. Always consult the master protocol: `.agent/README.md`.
-2. Strictly adopt the corresponding fine-grained specification under `.agent/specs/`:
-   - `video-generation.md` (Video DiT, spatio-temporal attention, 3D VAE)
-   - `vision-customization.md` (Style transfer, ControlNet, zero-conv)
-   - `llm-reasoning.md` (GRPO, reasoning models, RL post-training)
-   - `multimodal-alignment.md` (CLIP, VLM, InfoNCE loss)
-   - `agent-systems.md` (agent loop, tool use, structured output, planning, evals)
-   - `math-foundations.md` (Flow Matching, Transformer variance derivation)
-   - `system-infra.md` (CUDA, Roofline model, vLLM PagedAttention)
-   - `idea-pool.md` (Hypotheses, research brainstorming)
-   - `review-summary.md` (Weekly reviews, synthesis, retrospective)
-3. Automatic 4-Step Maintenance:
-   - Create note in `docs/<category>/<name>.md`
-   - Update `docs/<category>/index.md`
-   - Update `docs/.vitepress/config.mts` sidebar
-   - Update `docs/.vitepress/components/TagMatrix.vue` `notesList`
+
+When asked to write, organize, or update notes in this repository:
+
+1. **Record only what the user provides.** Do not expand, add sections, add formulas/data/examples not in the input, or perform extra research.
+2. **Preserve the user's structure and wording.** Do not force a template.
+3. **Do not update indexes, sidebars, or the tag matrix** unless explicitly asked.
+4. **Do not run builds** unless explicitly asked.
+5. Files under `.agent/specs/` are optional references for placement/style, not mandatory structures.
