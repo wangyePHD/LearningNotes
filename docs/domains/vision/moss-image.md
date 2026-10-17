@@ -8,7 +8,7 @@
 
 先看论文原始架构图。
 
-![MOSS-Image Figure 2 模型架构](MOSS_Part1_Figure2.png)
+<!-- 图片待补：MOSS-Image Figure 2 模型架构（原路径：MOSS_Part1_Figure2.png） -->
 
 整个系统实际上由两个相对独立的部分组成。
 
@@ -397,7 +397,7 @@ $$
 
 先看论文 Figure 3，左侧是数据构建，中间是 Caption，右侧是渐进训练。
 
-![MOSS-Image Figure 3 预训练方案](MOSS_Part2_Figure_3.png)
+<!-- 图片待补：MOSS-Image Figure 3 预训练方案（原路径：MOSS_Part2_Figure_3.png） -->
 
 作者的整体流程可以概括成：
 
@@ -624,7 +624,7 @@ MOSS-Image 在去重和 AI 图像过滤之后，**没有再使用这些启发式
 
 这是附录 Figure 5 的完整曲线。
 
-![MOSS-Image Figure 5 数据过滤消融实验](MOSS_Part2_Figure_5.png)
+<!-- 图片待补：MOSS-Image Figure 5 数据过滤消融实验（原路径：MOSS_Part2_Figure_5.png） -->
 
 蓝线是不过滤，橙线是额外过滤。
 
@@ -712,7 +712,7 @@ FDR6-LAION 不是简单的美学分数。它使用 Inception-v3、CLIP、ConvNeX
 
 先看 Figure 3 中的数据标注部分。
 
-![MOSS-Image Figure 3 数据标注流程](moss_part3_figure_3.png)
+<!-- 图片待补：MOSS-Image Figure 3 数据标注流程（原路径：moss_part3_figure_3.png） -->
 
 对一张训练图像，作者构建两类文本监督：
 
@@ -864,7 +864,7 @@ Short Caption 让模型适应简洁指令；Medium Caption 提供更多视觉描
 
 论文 Appendix C.3 给出了两类主要的结构化格式。
 
-![MOSS-Image Figure 6 两种 Layout JSON 格式](moss_part3_figure_6.png)
+<!-- 图片待补：MOSS-Image Figure 6 两种 Layout JSON 格式（原路径：moss_part3_figure_6.png） -->
 
 左边是 **Scene/element**，右边是 **Summary/items**。
 
