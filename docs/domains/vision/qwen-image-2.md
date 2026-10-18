@@ -2,7 +2,7 @@
 
 > **标签**：`Vision` `Unified Model` `MMDiT` `Flow Matching` `RL` `GRPO` `Data-centric` `Data Flywheel`
 > **更新时间**：2026-10-05
-> **原文**：本地 `Papers/Qwen-image-2.0.pdf`（30 页，Qwen Team）
+> **原文**：本地 `Papers/image-foundation/Qwen-Image-2.0.pdf`（30 页，Qwen Team）
 > **精读重点**：§2 Data ✅ → §3.3 Prompt Enhancer ✅ → §4.1 Training Recipe ✅ → §4.2 RLHF / GRPO ✅
 > **精读进度**：§2 全五小节 ✅ ｜ §3.3 ✅ ｜ §4.1 ✅ ｜ §4.2 ✅ ｜ §3.1–3.2 ⬜ ｜ §4.3 ⬜ ｜ §5 ⬜
 > **已有相关笔记**：[Qwen-Image-2.0 RLHF 专辑](./image-rl-posttraining/qwen-image-2-rl.md)（RL 专题，spec 格式）｜ [图像基模训练 Playbook](./training-playbook.md)（跨论文方法论字典）

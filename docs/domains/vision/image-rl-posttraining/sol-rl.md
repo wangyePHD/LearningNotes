@@ -2,7 +2,7 @@
 
 > **标签**：`Vision` `RL` `GRPO` `Diffusion RL` `FP4` `NVFP4` `Quantization` `Rollout Scaling` `Systems`
 > **更新时间**：2026-10-06
-> **原文**：`Papers/Sol-RL.pdf`（20 页，NVIDIA / HKU / MIT）
+> **原文**：`Papers/rl-posttraining/Sol-RL.pdf`（20 页，NVIDIA / HKU / MIT）
 > **标题**：*FP4 Explore, BF16 Train: Diffusion Reinforcement Learning via Efficient Rollout Scaling*
 > **arXiv**：[2604.06916](https://arxiv.org/abs/2604.06916) v1（2026-04-08）
 > **作者**：Yitong Li, Junsong Chen, Shuchen Xue, Pengcuo Zeren, Siyuan Fu, Dinghao Yang, Yangyang Tang, Junjie Bai, Ping Luo, Song Han, Enze Xie

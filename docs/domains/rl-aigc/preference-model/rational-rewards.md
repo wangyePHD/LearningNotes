@@ -5,7 +5,7 @@
 > **arXiv**：[2604.11626](https://arxiv.org/html/2604.11626)（2026 年 4 月）
 > **标题**：*RationalRewards: Reasoning Rewards Scale Visual Generation Both Training and Test Time*
 > **模型**：Teacher Qwen3-VL-32B-Instruct → Student **Qwen3-VL-Instruct-8B**
-> **原图**：`Papers/RetionalReward.pdf`
+> **原图**：`Papers/reward-models/RationalRewards.pdf`
 > **精读进度**：**Part 1–6 完结**
 > **Part 1**：Abstract / §1 / §2 整体框架与核心创新 → §1–§6
 > **Part 2**：§3 Training Data / 附录 F.1 → §7–§12

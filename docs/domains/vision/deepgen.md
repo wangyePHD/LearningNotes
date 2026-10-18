@@ -3,7 +3,7 @@
 > **标签**：`Vision` `Unified Model` `VLM-DiT` `Flow Matching` `RL` `GRPO` `Data-centric`
 > **更新时间**：2026-09-29
 > **参考来源**：[DeepGen 1.0: A Lightweight Unified Multimodal Model for Advancing Image Generation and Editing (arXiv:2602.12205v2)](https://arxiv.org/abs/2602.12205) · [GitHub: DeepGenTeam/DeepGen](https://github.com/DeepGenTeam/DeepGen) · [HuggingFace: DeepGenT](https://huggingface.co/DeepGenT) · [Datasets](https://huggingface.co/datasets/DeepGenTeam/DeepGen-1.0)
-> **原文**：本地 `Papers/DeepGen.pdf`（21 页，正文 18 页 + 附录 A/B）
+> **原文**：本地 `Papers/image-foundation/DeepGen-1.0.pdf`（21 页，正文 18 页 + 附录 A/B）
 > **精读重点**：§3 Training（data train）+ §3.3 RL + §4 Data
 > **精读进度**：§4 Data ★ ✅ ｜ §3.1 Alignment Pre-Training ✅ ｜ §3.2 Joint SFT ✅ ｜ **§3.3 MR-GRPO ★ ✅**（Eq. 2–7 全部核对）｜ §5.3.2 RL 消融 ✅ ｜ §2 Architecture ｜ §5.1/§5.2 ｜ §6 Conclusion（笔记随学习逐节增补）
 
