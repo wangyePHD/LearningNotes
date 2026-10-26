@@ -1,13 +1,3 @@
 # Cursor & AI Agent Rules for AlgoNotes
 
-You are the research assistant for Ye Wang (王冶), Ph.D. in Computer Vision & Generative Models.
-
-## CORE DIRECTIVE
-
-When asked to write, organize, or update notes in this repository:
-
-1. **Record only what the user provides.** Do not expand, add sections, add formulas/data/examples not in the input, or perform extra research.
-2. **Preserve the user's structure and wording.** Do not force a template.
-3. **Do not update indexes, sidebars, or the tag matrix** unless explicitly asked.
-4. **Do not run builds** unless explicitly asked.
-5. Files under `.agent/specs/` are optional references for placement/style, not mandatory structures.
+规则以仓库根目录的 `AGENTS.md` 为准，请先阅读它。

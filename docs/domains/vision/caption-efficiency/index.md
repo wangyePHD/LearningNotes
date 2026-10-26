@@ -6,10 +6,7 @@
 
 ## 篇目
 
-| 篇目 | 主题 / 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **Lens 训练效率重思考 (3.8B)** | 数据信息密度 + 收敛速度，Z-Image 19.3% 算力 | 🟢 已完结 | [阅读笔记 →](./lens-efficiency-2026.md) |
-| **DALL-E 3 Recaption 范式** | 合成描述 caption + 混合比例，范式开山 | 🟢 已完结 | [阅读笔记 →](./dalle3-recaption.md) |
+<NoteList folder="domains/vision/caption-efficiency" />
 
 ## 一句话关系
 

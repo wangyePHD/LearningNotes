@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['Video Gen', 'DiT', 'Attention', 'Linear Attention', 'Distillation', 'Efficiency']
+status: done
+models: ['MiniMax H3', 'SGLang']
+summary: '精炼解构 5 大核心机制：双轨混合注意力、自适应正规方程更新、三阶段微创训练法、DMD2 8步蒸馏与 5:3 异构多卡切分。'
+---
+
 # VideoDeltaNet on MiniMax H3 (VDN-H3)：超越播放速度的实时视频生成架构
 
-> **标签**：`Video Gen` `DiT` `Hybrid Attention` `Linear Attention` `DMD2` `Real-Time`  
-> **更新时间**：2026-09-19  
 > **论文/代码**：[OpenVDN/vdn-minimax-h3](https://github.com/OpenVDN/vdn-minimax-h3) · [技术博客](https://openvdn.github.io/)
 
 ---

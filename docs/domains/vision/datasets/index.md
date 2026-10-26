@@ -53,4 +53,4 @@
 
 ## 4. 本专栏收录篇目
 
-- [Fine-T2I: 6M 规模开源全维度文生图精调数据集与过滤工程](./fine-t2i.md)
+<NoteList folder="domains/vision/datasets" />

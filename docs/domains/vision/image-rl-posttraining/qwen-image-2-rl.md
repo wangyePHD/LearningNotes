@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'GRPO', 'Image Editing', 'Prompt Rewriting']
+status: done
+group: '模型 RL 篇'
+summary: '五奖励 GRPO + CFG 杂交 + PE 的 GRPO'
+---
+
 # Qwen-Image-2.0 RLHF 统一对齐 (阿里)
 
-> **标签**：`Vision` `RL` `GRPO` `Image Editing` `Prompt Enhancer`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2605.10730](https://arxiv.org/abs/2605.10730)
 
 ---

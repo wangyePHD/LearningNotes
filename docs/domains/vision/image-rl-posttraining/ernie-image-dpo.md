@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'DPO', 'Distillation']
+status: done
+group: '模型 RL 篇'
+summary: 'Flow Matching DPO + 双 anchor + MT-DMD'
+---
+
 # ERNIE-Image 轻量 DPO 与多教师蒸馏 (百度 8B)
 
-> **标签**：`Vision` `RL` `DPO` `Distillation` `Aesthetics`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2605.25347](https://arxiv.org/abs/2605.25347)
 
 ---

@@ -1,7 +1,11 @@
+---
+type: idea
+tags: ['Image Editing', 'RL', 'Hypothesis']
+summary: 'scale token编码真实尺寸+单向注意力+7维foveated reward，珠宝多件2K尺度不飘。'
+---
+
 # 小物体试穿：先对准大小，再谈像不像 (Scale-Aware Try-On)
 
-> **标签**：`Vision` `Virtual Try-On` `Fashion` `Reward`  
-> **更新时间**：2026-09-23  
 > **参考来源**：JewelTry 2609.16626 · DAT 2608.29804 · TryOnReward 2609.13259
 
 ---

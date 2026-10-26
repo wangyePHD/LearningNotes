@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Unified Model', 'DiT', 'Flow Matching', 'RL', 'GRPO', 'Data-centric']
+status: reading
+summary: '3B VLM + 2B DiT = 5B 统一生成/编辑/推理模型。SCB 从 6 个 VLM 层抽特征 + learnable think tokens 桥接；训练三阶段：只训 connector 的对齐预训练 → 解冻 DiT + VLM LoRA 的联合 SFT → MR-GRPO（Eq.2–7：多奖励解耦归一化 + velocity-space KL + auxiliary SFT loss + 噪声保持随机采样，仅训 1,500 steps；RL 数据无 Edit，RISE 13.3→10.8）；仅 ~50M 样本即超越 80B HunyuanImage。'
+---
+
 # 轻量统一多模态模型 DeepGen 1.0 (SCB + 三阶段训练 + MR-GRPO)
 
-> **标签**：`Vision` `Unified Model` `VLM-DiT` `Flow Matching` `RL` `GRPO` `Data-centric`
-> **更新时间**：2026-09-29
 > **参考来源**：[DeepGen 1.0: A Lightweight Unified Multimodal Model for Advancing Image Generation and Editing (arXiv:2602.12205v2)](https://arxiv.org/abs/2602.12205) · [GitHub: DeepGenTeam/DeepGen](https://github.com/DeepGenTeam/DeepGen) · [HuggingFace: DeepGenT](https://huggingface.co/DeepGenT) · [Datasets](https://huggingface.co/datasets/DeepGenTeam/DeepGen-1.0)
 > **原文**：本地 `Papers/image-foundation/DeepGen-1.0.pdf`（21 页，正文 18 页 + 附录 A/B）
 > **精读重点**：§3 Training（data train）+ §3.3 RL + §4 Data

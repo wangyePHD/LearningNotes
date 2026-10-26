@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Reward Hacking', 'RL', 'Distillation', 'GRPO', 'DiffusionNFT']
+status: reading
+summary: '核心问题即本专题：Forward-Process RL 会不会 **Distribution Drift**、会不会被 **Reward Hacking**。两条路线——Flow-GRPO 代表反向去噪轨迹 RL（每步去噪是一次决策，可复用策略梯度/优势函数/重要性采样，但**开销大、梯度方差高**）；GPO / AWM / DiffusionNFT / CRD 同属 **Forward-Process RL**（先生成完整图算 Reward、再**重加噪**构造目标，高效收敛快但会漂移与投机）。**两个概念必须分开**：Distribution Drift 是分布层面逐渐偏离预训练分布；Reward Hacking 是目标层面找到拿高分的捷径。论文判「**参考模型不断更新**」是长期漂移的重要原因之一。概念性例子：教室墙上时钟写 `Time for Lunch`，只追 OCR Reward 时模型会退化成**简单背景上直接写出这句话——文字对了场景没了**；Figure 5 展示满足文字奖励却丧失场景一致性的退化。**CRD 从两头下手**：① 不只用单图 Reward 绝对值，改用**同一 Prompt 下多张图的相对奖励关系**构造目标；② 显式约束生成分布不偏离原始预训练模型。**Table 1（SD3.5-Medium，OCR 与质量指标用不同 Prompt 集合）**：原始 0.59/5.39/0.87，Flow-GRPO+KL 0.92/5.32/0.95，**DiffusionNFT 0.97/4.89/-0.81**，**CRD 0.92/5.33/0.87**——最高 OCR 换来最差 ImageReward，且两个质量指标降幅不对等。CRD 保留收敛效率，但并非所有指标超 Flow-GRPO，论文定位是**奖励优化/训练效率/生成质量的综合权衡**。**Part 1 未答**：组内相对奖励如何构成损失、与组内 $A_i$ 的关系；分布约束是 KL 还是其他、参考模型如何处理；CRD 能否与 DiffusionNFT 叠加；GenEval 结果。'
+---
+
 # CRD：用中心化奖励蒸馏做 Diffusion RL（Diffusion Reinforcement Learning via Centered Reward Distillation)
 
-> **标签**：`Reward Hacking` `Distribution Drift` `Forward-Process RL` `Centered Reward Distillation` `KL` `Flow-GRPO` `DiffusionNFT` `SD3.5`
-> **更新时间**：2026-10-13
 > **arXiv**：[2603.14128](https://arxiv.org/abs/2603.14128)
 > **涉及基模**：SD3.5-Medium
 > **精读进度**：**Part 1 完结**（Abstract / §1 Introduction / §2 Related Work）

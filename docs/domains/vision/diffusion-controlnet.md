@@ -1,7 +1,11 @@
+---
+type: method
+tags: ['Diffusion', 'Controllability']
+summary: 'ControlNet 解决的核心问题是：如何在引入强空间先验（如 Canny 边缘、OpenPose 姿态、Depth 图）的同时，不破坏预训练文生图大模型的生成能力？'
+---
+
 # ControlNet 空间结构可控生成原理解析
 
-> **标签**：`Vision` `Diffusion` `ControlNet` `Zero-Conv`  
-> **更新时间**：2026-09-19
 
 ---
 

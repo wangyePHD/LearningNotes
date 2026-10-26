@@ -1,7 +1,11 @@
+---
+type: idea
+tags: ['Image Editing', 'Attention', 'Hypothesis']
+summary: '阻断C-to-N单向流+解耦调制+VLM残差梯度，PIE-Bench背景与CLIP双优。'
+---
+
 # 非对称保持编辑：先保住背景，再做指令修改 (Asymmetric Preservation Editing)
 
-> **标签**：`Vision` `Image Editing` `FLUX Kontext` `Attention`  
-> **更新时间**：2026-09-23  
 > **参考来源**：RealFit 2609.25881 · SR-Edit 2609.02504 · IABEdit 2609.12691
 
 ---

@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Diffusion', 'DiT', 'Flow Matching', 'VAE', 'RL', 'DiffusionNFT', 'Distillation', 'Efficiency']
+status: draft
+summary: '微软 4B 原生分辨率基模，tokenizer–backbone–系统三层协同：Mage-VAE（one-step diffusion 编解码 + anchor-latent KL，tokenization 成本降 >10×）+ Native-Resolution MMDiT（variable-length packing + per-sample 2D RoPE）+ 栈级 CUDA 融合（MFU 13.88%→29.28%，2.48×）。训练线：Data 10B→1.3B / Edit 90M→45M → progressive pretrain/SFT → Diffusion-NFT（T2I 20K prompts 单 reward 路由；Edit 30K + RationalRewards，Edit:Gen=4:1）→ 4-step D-DMD + adversarial guidance。Turbo 单 A100 1024² 出图 0.59s。'
+---
+
 # 微软原生分辨率基模 Mage-Flow (Mage-VAE + Native-Resolution MMDiT + Diffusion-NFT)
 
-> **标签**：`Vision` `Diffusion` `MMDiT` `Flow Matching` `VAE` `RL` `DiffusionNFT` `Distillation` `Efficiency`
-> **更新时间**：2026-10-03
 > **参考来源**：[Mage-Flow: An Efficient Native-Resolution Foundation Model for Image Generation and Editing (arXiv:2607.19064v2)](https://arxiv.org/abs/2607.19064) · [Project Page](https://microsoft.github.io/Mage) · [GitHub](https://github.com/microsoft/mage) · [HuggingFace](https://huggingface.co/collections/microsoft/mage)
 > **原文**：本地 `Papers/image-foundation/Mage-Flow.pdf`（59 页，微软 Mage Team，2026-07-22）
 > **精读重点**：§4 Data → §5.1 Pre-train/SFT/Edit → §5.2 Diffusion-NFT → §5.3 Distillation → §3.2/§3.3 Native-Res + Infra → §3.1 Mage-VAE

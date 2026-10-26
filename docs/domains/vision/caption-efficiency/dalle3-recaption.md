@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Diffusion', 'Caption']
+status: done
+summary: '合成描述 caption 治 prompt following，混合比例越高越好；范式演进指向 SeFi 笔记 §2.1 的三原则原文级展开。'
+---
+
 # 用更好的 Caption 改进图像生成：DALL-E 3 的 Recaption 范式
 
-> **标签**：`Vision` `Diffusion` `Caption` `Recaption` `Prompt Following`
-> **更新时间**：2026-09-23
 > **参考来源**：[Improving Image Generation with Better Captions](https://cdn.openai.com/papers/dall-e-3.pdf)（Betker et al., OpenAI, 2023，DALL-E 3 系统报告）
 
 ![recaption 与效率演进 lineage](/sefi-caption-lineage.svg)

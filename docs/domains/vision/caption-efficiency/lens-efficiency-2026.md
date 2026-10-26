@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Diffusion', 'Efficiency', 'Caption']
+status: done
+summary: '效率三因素：模型大小、每 batch 数据信息密度、收敛速度；GPT-4.1 长 caption 平均 109 词，约 Z-Image 19.3% 算力。'
+---
+
 # Lens：训练效率重思考与 3.8B 小模型的越级 (Lens Efficiency)
 
-> **标签**：`Vision` `Diffusion` `Efficiency` `Dense Caption` `Lens`
-> **更新时间**：2026-09-23
 > **参考来源**：[Lens: Rethinking Training Efficiency for Foundational Text-to-Image Models](https://arxiv.org/abs/2605.21573) · [GitHub](https://github.com/microsoft/Lens) · [HuggingFace](https://huggingface.co/microsoft/Lens)
 
 ![recaption 与效率演进 lineage](/sefi-caption-lineage.svg)

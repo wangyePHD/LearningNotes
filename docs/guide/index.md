@@ -43,15 +43,22 @@ git push
 
 ### 3.1 笔记头部元信息 (Frontmatter)
 
-```markdown
-# 笔记主标题
+每篇笔记开头用 YAML frontmatter 记录分类信息。侧边栏、领域索引表和标签矩阵都从这里自动生成，不需要手动登记：
 
-> **标签**：`Video Gen` `DiT` `Math Derivation`  
-> **更新时间**：2026-09-19  
-> **核心引用**：[Paper Link](https://arxiv.org/...) · [Code](https://github.com/...)
-
+```yaml
+---
+type: paper
+tags: ['Diffusion', 'DiT']
+status: reading
+summary: '一句话摘要'
 ---
 ```
+
+- `type`：paper / survey / method / playbook / dataset / project / idea / log / runbook
+- `tags`：只能从 `docs/.vitepress/lib/tags.mjs` 的 `TAG_VOCAB` 中选
+- `status`（可选）：draft / reading / done / ongoing
+- 标题取正文第一个标题；日期由 git 历史自动生成，不用手写
+- 完整规则见仓库根目录的 `AGENTS.md`
 
 ### 3.2 数学公式排版规范
 
@@ -119,8 +126,8 @@ git push
 ## 5. 常见问题排查 (FAQ)
 
 - **Q: 新增了一篇 Markdown，为什么左侧侧边栏没有出现？**  
-  A: 请检查 `docs/.vitepress/config.mts` 对应的 `sidebar` 分支，只需追加一行 `{ text: '你的标题', link: '/对应路径' }` 即可。
+  A: 侧边栏由笔记 frontmatter 自动生成，不需要手动登记。请确认文件开头有 frontmatter（`type`、`tags`、`summary`）；缺失时构建会直接报错并指出文件。
 - **Q: 公式渲染报错或未解析？**  
   A: 检查公式块前后是否空行隔开，反斜杠 `\` 是否有未闭合的括号匹配。
 - **Q: 想要添加全新的研究模态（如 3D 具身智能）怎么办？**  
-  A: 在 `docs/domains/` 下新建 `embodied/` 文件夹，然后在 `.vitepress/config.mts` 的 `nav` 和 `sidebar` 中各添加一项即可无缝集成。
+  A: 在 `docs/domains/` 下新建文件夹并写入笔记即可。如需在侧边栏单独成组，在 `docs/.vitepress/config.mts` 的 `sections` 里登记一项，并在 `nav` 中加入口。

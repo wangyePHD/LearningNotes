@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Diffusion', 'Flow Matching', 'Math Derivation']
+status: done
+summary: '从传统弯曲扩散轨迹到直线最优传输 (Optimal Transport)，推导条件流匹配 (CFM) 速度场回归损失。'
+---
+
 # Flow Matching 与连续流生成动力学推导
 
-> **标签**：`Generative Models` `Flow Matching` `ODE` `Optimal Transport`  
-> **更新时间**：2026-09-19
 
 ---
 

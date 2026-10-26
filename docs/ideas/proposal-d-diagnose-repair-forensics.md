@@ -1,7 +1,11 @@
+---
+type: idea
+tags: ['Image Editing', 'Agent', 'Hypothesis']
+summary: 'GLARE定位+VLM缺陷描述+VCoT自纠+STOP准则，检测修复统一跨生成器泛化。'
+---
+
 # 多轮编辑修复：先定位哪坏了，再修，修好就停 (Diagnose-then-Repair)
 
-> **标签**：`Vision` `Forensics` `AIGC Detection` `Agentic`  
-> **更新时间**：2026-09-23  
 > **参考来源**：FUSED 2608.28302 · GLARE ECCV26 · Mi-Ripple 2609.11317
 
 ---

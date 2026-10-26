@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'Reward Hacking']
+status: done
+group: '算法篇'
+summary: '全离线组级优化 + corrected score 抗 hacking'
+---
+
 # GDRO 组级直接奖励优化 (Group-level Direct Reward Optimization)
 
-> **标签**：`Vision` `RL` `GDRO` `Reward Hacking` `Offline`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2601.02036](https://arxiv.org/abs/2601.02036) · 港大 + CUHK + 通义 · [代码待查]
 
 ---

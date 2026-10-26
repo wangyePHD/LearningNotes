@@ -1,7 +1,12 @@
+---
+type: playbook
+tags: ['Diffusion', 'Flow Matching', 'RL', 'GRPO', 'Distillation', 'Data-centric']
+status: done
+summary: '不是论文笔记而是方法论字典：Data Engine → Pretrain/SFT → Generation/Edit → Post-training/RL → Evaluation → 实验系统 → 工业项目闭环。核心主张是「先看分布再看算法」与「RL 失败时第一检查项往往不是 RL 公式」。含三张诊断表（Data / SFT / 全局症状）与 A/B/C 证据等级标注，末尾给出八格工具箱（数据问题→Data Engine、分布不对→SFT、能力到瓶颈→capability RL、RL 漂→SFT/KL/Replay、Edit 忘 Gen→Generation Replay、多 reward 打架→Normalization/Routing、高分辨率贵→Tokenizer/System、latent 不好学→重审 VAE）。'
+---
+
 # 图像基模训练 Playbook / Recipe v1.0
 
-> **标签**：`Vision` `Diffusion` `Flow Matching` `RL` `GRPO` `Distillation` `Data-centric` `Playbook`
-> **更新时间**：2026-10-05
 > **性质**：<mark class="hl-trick">**方法论字典，不是论文笔记**</mark>。本文是读完 Z-Image / SeFi-Image / Mage-Flow / DeepGen / Qwen-Image-2.0 / Sol-RL 六篇技术报告后蒸馏出的操作手册，按「数据 → 预训练/SFT → 生成与编辑 → 后训练 → 评估 → 实验系统 → 工业流程」组织。
 > **怎么用**：<mark class="hl-key">**当模型出现某种症状时，知道应该打开哪一个抽屉**</mark>。不是用来机械复刻某篇论文的。
 > **来源笔记**：[Z-Image](./z-image.md) · [SeFi-Image](./image-rl-posttraining/sefi-image-rl.md) · [Mage-Flow](./mage-flow.md) · [DeepGen 1.0](./deepgen.md) · [Qwen-Image-2.0](./qwen-image-2.md) · [Sol-RL 扩散 RL 高效 Rollout Scaling](./image-rl-posttraining/sol-rl.md) · [语义先行扩散范式 SFD](./sfd-semantic-first-diffusion.md) · [图像 RL 后训练专辑](./image-rl-posttraining/)

@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['Distillation']
+status: done
+group: '模型 RL 篇'
+summary: 'TwinFlow 蒸馏替代对齐'
+---
+
 # LLaDA-Image 全开源配方：无 RLHF 也 SOTA (Inclusion AI)
 
-> **标签**：`Vision` `Distillation` `TwinFlow` `Open Recipe`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2609.03796](https://arxiv.org/abs/2609.03796) · [GitHub](https://github.com/inclusionAI/LLaDA-Image)
 
 ---

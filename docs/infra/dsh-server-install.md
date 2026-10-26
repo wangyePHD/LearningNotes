@@ -1,3 +1,9 @@
+---
+type: runbook
+tags: ['Infra', 'Agent']
+summary: '交给 Claude Code（或任何执行型 Agent）在 Linux 服务器上按步骤安装。'
+---
+
 # DSH + dsh-TUI 服务器安装手册（支持 1017 版模型）
 
 > **用途**：交给 Claude Code（或任何执行型 Agent）在 Linux 服务器上按步骤安装。

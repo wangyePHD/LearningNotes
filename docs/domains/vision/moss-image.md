@@ -1,3 +1,9 @@
+---
+type: paper
+tags: ['Diffusion', 'DiT']
+summary: '这一部分我们要理解三个问题：MOSS-Image 的模型结构是什么？文本和图像信息如何在 DiT 中交互？模型如何通过扩散过程生成图像？'
+---
+
 # Part 1：MOSS-Image 模型整体架构
 
 **本部分对应论文第 3–4 页的 Figure 2、公式（1）（2），以及附录 A.1（第 14 页）。**

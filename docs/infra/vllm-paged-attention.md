@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['LLM', 'Infra']
+status: done
+summary: '借鉴 OS 虚拟内存分页解决自回归推理中 60%~80% 的 KV Cache 显存碎片，实现显存零浪费与多采样共享。'
+---
+
 # vLLM PagedAttention 与高并发吞吐优化
 
-> **标签**：`LLM Infra` `vLLM` `PagedAttention` `KV Cache`  
-> **更新时间**：2026-09-19
 
 ---
 

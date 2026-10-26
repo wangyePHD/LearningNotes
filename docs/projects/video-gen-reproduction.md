@@ -1,7 +1,11 @@
+---
+type: project
+tags: ['Video Gen', 'Benchmark', 'Infra', 'DiT']
+summary: 'Wan2.1 14B 模型在 8 卡 H800 上的序列并行 (SP) 与算子优化评测，生成耗时缩减 35.3%。'
+---
+
 # 开源视频生成模型本地复现与评测报告
 
-> **标签**：`Video Gen` `Wan2.1` `Benchmark` `FSDP`  
-> **更新时间**：2026-09-19
 
 ---
 

@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'DiffusionNFT', 'Distillation']
+status: done
+group: '模型 RL 篇'
+summary: '并行专家 NFT → 多教师在线蒸馏'
+---
+
 # Swift-Image 并行专家 RL 与多教师蒸馏 (6B 小算力范本)
 
-> **标签**：`Vision` `RL` `DiffusionNFT` `Distillation` `MoE-RL`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2608.20334](https://arxiv.org/abs/2608.20334)
 
 ---

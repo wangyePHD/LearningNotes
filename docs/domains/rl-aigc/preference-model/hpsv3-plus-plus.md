@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Reward Model', 'RL', 'T2I']
+status: reading
+summary: '让奖励模型跨「模型能力 × RL 迭代」校准（Part 1）'
+---
+
 # HPSv3++：让奖励模型跨「模型能力 × RL 迭代」校准（Part 1）
 
-> **标签**：`Preference Model` `Reward Model` `Continual Learning` `OGD` `Semi-supervised` `FiLM` `RLHF` `T2I`
-> **更新时间**：2026-10-18
 > **arXiv**：[HPSv3++: Scaling Reward Models Across the Full Spectrum of Diffusion Model Capabilities（2606.14657v1）](https://arxiv.org/abs/2606.14657)（2026-06-12）
 > **原文**：本地 `Papers/reward-models/HPSv3++.pdf`（16 页：正文 pp.1–9，附录 pp.10–16）
 > **代码**：<https://github.com/PlantPotatoOnMoon/HPSv3-PlusPlus>

@@ -1,3 +1,9 @@
+---
+type: method
+tags: ['DiT', 'Efficiency']
+summary: '保留图像原始长宽比，将不同尺寸的图像转换成变长 Tokens，通过 Packing + VarLen Attention 实现高效训练。'
+---
+
 ### 知识点：如何高效训练不同分辨率的图像？（Mage-Flow / MOSS-Image）
 
 **核心思想：** 保留图像原始长宽比，将不同尺寸的图像转换成变长 Tokens，通过 Packing + VarLen Attention 实现高效训练。

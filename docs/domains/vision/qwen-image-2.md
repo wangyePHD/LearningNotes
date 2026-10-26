@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Unified Model', 'DiT', 'Flow Matching', 'RL', 'GRPO', 'Data-centric']
+status: reading
+summary: 'Qwen3-VL 作条件编码器 + MMDiT 联合建模 T2I 与指令编辑。Data 五小节：Capability-driven data taxonomy（Fig.5）、四类 task-specific Caption、六阶段数据 curriculum（Fig.6 Sankey，S1 八过滤器按先便宜后昂贵排序）、Error-attribution Flywheel（Fig.7 三轨：Pre-training / RL / PE，PE Track 不需重训模型）。Prompt Enhancer（§3.3）：从精细标注反向随机退化造真实短 prompt，退化逆过程即 CoT，训练 (短 prompt, CoT, 精细标注) 三元组；SFT 后用 GRPO 对齐下游成图质量（冻结生成器）；Editing 侧改用 MLLM summarize 以保 Instruction Preservation。Training（§4.1）：700K→250K→10K 三段，Resolution ↑ / T2I:TI2I 9:1→7:3 / LR 1e-4→2e-5→1e-5。RLHF（§4.2）：T2I 三 reward（美学/图文对齐/人像）+ Editing 两 reward（指令遵循/视觉一致性），先 scale calibration 再动态权重；Hybrid CFG 只省 policy update 的 backward，不省 rollout 的两次 forward。全篇零 ablation，阈值与比例均未公开，给的是设计原则而非可复现 recipe。'
+---
+
 # 千问 Qwen-Image-2.0 技术报告精读（统一生成 + 指令编辑 + Flywheel）
 
-> **标签**：`Vision` `Unified Model` `MMDiT` `Flow Matching` `RL` `GRPO` `Data-centric` `Data Flywheel`
-> **更新时间**：2026-10-05
 > **原文**：本地 `Papers/image-foundation/Qwen-Image-2.0.pdf`（30 页，Qwen Team）
 > **精读重点**：§2 Data ✅ → §3.3 Prompt Enhancer ✅ → §4.1 Training Recipe ✅ → §4.2 RLHF / GRPO ✅
 > **精读进度**：§2 全五小节 ✅ ｜ §3.3 ✅ ｜ §4.1 ✅ ｜ §4.2 ✅ ｜ §3.1–3.2 ⬜ ｜ §4.3 ⬜ ｜ §5 ⬜

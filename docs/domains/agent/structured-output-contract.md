@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Agent', 'Structured Output', 'Tool Use', 'Math Derivation']
+status: done
+summary: '合法率 P_L ≈ q^n 随 schema 指数衰减；k 次重试 (1-p)^k 与贪心解码相关失败使重试完全失效；self-consistency 投票；三层强制等级与 GBNF 约束解码。'
+---
+
 # 结构化输出即可靠性契约：$q^n$ 指数衰减、相关重试陷阱与语法约束解码
 
-> **标签**：`Agent` `Structured Output` `Tool Use` `Reliability` `Probability` `Math Derivation`
-> **更新时间**：2026-09-27
 > **参考来源**：[pguso/agents-from-scratch](https://github.com/pguso/agents-from-scratch) · `agent/agent.py:111-146` · `shared/utils.py:27-110` · `agent/tools.py:36-59`
 
 ---

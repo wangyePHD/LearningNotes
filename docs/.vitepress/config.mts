@@ -1,4 +1,38 @@
 import { defineConfig } from 'vitepress'
+import { buildSidebar, collectNotes } from './lib/notes.mjs'
+
+// 板块结构：侧边栏的标题与概览页文字。笔记条目由 frontmatter 自动生成，这里不用手动登记。
+const sections = [
+  { dir: 'domains/video', title: '🎬 视频生成与理解', overview: '领域概览与路线图' },
+  {
+    dir: 'domains/vision',
+    title: '🖼️ 图像与计算机视觉',
+    overview: '领域概览与路线图',
+    subgroups: {
+      'caption-efficiency': '📝 Caption 与效率专题',
+      'datasets': '🗂️ AIGC 数据集专题',
+      'image-rl-posttraining': '🖼️ 图像基模 RL 后训练',
+    },
+  },
+  { dir: 'domains/llm', title: '💬 语言模型与推理思考', overview: '领域概览与路线图' },
+  { dir: 'domains/multimodal', title: '🎙️ 多模态与跨模态对齐', overview: '领域概览与路线图' },
+  {
+    dir: 'domains/rl-aigc',
+    title: '🎲 AIGC 强化学习后训练',
+    overview: '专区概览与收录标准',
+    subgroups: {
+      'preference-model': '🏅 偏好模型子专题',
+      'reward-hacking': '🚨 Reward Hacking 子专题',
+    },
+  },
+  { dir: 'domains/agent', title: '🤖 智能体系统与工具编排', overview: '领域概览与 12 课路线图' },
+  { dir: 'foundations', title: '📐 通用理论基石', overview: '基石模块概览' },
+  { dir: 'infra', title: '⚡ 算力与系统工程', overview: '工程基建概览' },
+  { dir: 'projects', title: '🚀 个人复现与落地项目', overview: '项目概览与看板' },
+  { dir: 'ideas', title: '💡 科研灵感空间', overview: '科研 Idea 灵感池' },
+  { dir: 'daily-arxiv', title: '📥 每日 arXiv 速览', overview: '每日速览索引与用法' },
+  { dir: 'reviews', title: '📅 研习复盘与时光机', overview: '周报时光机总览' },
+]
 
 export default defineConfig({
   title: 'AlgoNotes',
@@ -42,9 +76,8 @@ export default defineConfig({
       }
     },
 
-    // 顶部导航栏
+    // 顶部导航栏（仪表盘通过左上角 logo 进入）
     nav: [
-      { text: '仪表盘', link: '/' },
       {
         text: '📚 研究领域',
         items: [
@@ -56,14 +89,29 @@ export default defineConfig({
           { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' }
         ]
       },
-      { text: '📐 通用基石', link: '/foundations/' },
-      { text: '⚡ 算力与工程', link: '/infra/' },
-      { text: '🚀 实战项目', link: '/projects/' },
+      {
+        text: '🧱 基石与工程',
+        items: [
+          { text: '📐 通用基石', link: '/foundations/' },
+          { text: '⚡ 算力与工程', link: '/infra/' }
+        ]
+      },
+      {
+        text: '🗓️ 日志',
+        items: [
+          { text: '📥 每日 arXiv', link: '/daily-arxiv/' },
+          { text: '📅 研习复盘', link: '/reviews/' },
+          { text: '🧪 研习白板', link: '/whiteboard/' }
+        ]
+      },
+      {
+        text: '💡 灵感与项目',
+        items: [
+          { text: '💡 Idea 池', link: '/ideas/' },
+          { text: '🚀 实战项目', link: '/projects/' }
+        ]
+      },
       { text: '🏷️ 知识标签', link: '/tags/' },
-      { text: '💡 Idea 池', link: '/ideas/' },
-      { text: '📥 每日 arXiv', link: '/daily-arxiv/' },
-      { text: '📅 研习复盘', link: '/reviews/' },
-      { text: '🧪 研习白板', link: '/whiteboard/' },
       { text: '📖 使用指南', link: '/guide/' }
     ],
 
@@ -71,210 +119,8 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/wangyephd' }
     ],
 
-    // 侧边栏联动
-    sidebar: {
-      // 0. 研习白板
-      '/whiteboard/': [
-        {
-          text: '🧪 实时研习攻坚区',
-          items: [
-            { text: 'VideoDeltaNet (VDN-H3) 实时课堂', link: '/whiteboard/' }
-          ]
-        }
-      ],
-
-      // 0.1 使用指南
-      '/guide/': [
-        {
-          text: '📖 知识库使用与维护',
-          items: [
-            { text: '系统使用与协作总览', link: '/guide/' },
-            { text: 'Agent 自动化协作规范', link: '/agent-guide' }
-          ]
-        }
-      ],
-
-      // 0.2 研习复盘与周报
-      '/reviews/': [
-        {
-          text: '📅 研习复盘与时光机',
-          items: [
-            { text: '周报时光机总览', link: '/reviews/' },
-            { text: '2026年第41周复盘 (arXiv六赛道雷达)', link: '/reviews/2026-W41' },
-            { text: '2026年第38周复盘 (视频/算力)', link: '/reviews/2026-W38' }
-          ]
-        }
-      ],
-
-      // 0.3 每日 arXiv 速览
-      '/daily-arxiv/': [
-        {
-          text: '📥 每日 arXiv 速览',
-          items: [
-            { text: '每日速览索引与用法', link: '/daily-arxiv/' },
-            { text: '2026-10-13', link: '/daily-arxiv/2026-10-13' }
-          ]
-        }
-      ],
-
-      // 0.5 科研 Idea 灵感池
-      '/ideas/': [
-        {
-          text: '💡 科研灵感空间',
-          items: [
-            { text: '科研 Idea 灵感池', link: '/ideas/' },
-            { text: 'A. 盲连续指令统一复原编辑', link: '/ideas/proposal-a-blind-continuous-instruction' },
-            { text: 'B. 非对称保持高保真编辑', link: '/ideas/proposal-b-asymmetric-preservation-editing' },
-            { text: 'C. 尺度保真小物体试穿', link: '/ideas/proposal-c-scale-aware-tryon' },
-            { text: 'D. 检测诊断修复闭环', link: '/ideas/proposal-d-diagnose-repair-forensics' }
-          ]
-        }
-      ],
-
-      // 1. 视频模型专属侧边栏
-      '/domains/video/': [
-        {
-          text: '🎬 视频生成与理解',
-          items: [
-            { text: '领域概览与路线图', link: '/domains/video/' },
-            { text: 'VideoDeltaNet 实时架构精简剖析', link: '/domains/video/video-deltanet-h3' },
-            { text: '时空注意力 (3D/Spatio-Temporal Attention)', link: '/domains/video/spatio-temporal-attention' },
-            { text: 'Video DiT 架构与时空一致性', link: '/domains/video/video-diffusion-dit' }
-          ]
-        }
-      ],
-
-      // 2. 图像与视觉专属侧边栏（2026-09-23 起仅保留 SeFi + Caption 效率专题，其余摘入口）
-      '/domains/vision/': [
-        {
-          text: '🖼️ 图像与计算机视觉',
-          items: [
-            { text: '领域概览与路线图', link: '/domains/vision/' },
-            { text: '单流扩散基模 Z-Image', link: '/domains/vision/z-image' },
-            { text: '轻量统一多模态 DeepGen 1.0', link: '/domains/vision/deepgen' },
-            { text: '原生分辨率高效基模 Mage-Flow', link: '/domains/vision/mage-flow' },
-            { text: '统一生编基模 Qwen-Image-2.0', link: '/domains/vision/qwen-image-2' },
-            { text: '理解优先 Agentic 基模 Boogu-Image-0.1', link: '/domains/vision/boogu-image' },
-            { text: '图像基模训练 Playbook v1.0', link: '/domains/vision/training-playbook' },
-            { text: '语义先行扩散范式 (SFD)', link: '/domains/vision/sfd-semantic-first-diffusion' },
-            { text: '语义先行文生图基模 (SeFi-Image)', link: '/domains/vision/image-rl-posttraining/sefi-image-rl' },
-            { text: 'Sol-RL 扩散 RL 高效 Rollout Scaling', link: '/domains/vision/image-rl-posttraining/sol-rl' }
-          ]
-        },
-        {
-          text: '📝 Caption 与效率专题',
-          items: [
-            { text: '专题索引', link: '/domains/vision/caption-efficiency/' },
-            { text: 'Lens 训练效率重思考 (3.8B)', link: '/domains/vision/caption-efficiency/lens-efficiency-2026' },
-            { text: 'DALL-E 3 Recaption 范式', link: '/domains/vision/caption-efficiency/dalle3-recaption' }
-          ]
-        },
-        {
-          text: '🗂️ AIGC 数据集专题',
-          items: [
-            { text: '数据集总览与知识库', link: '/domains/vision/datasets/' },
-            { text: 'Fine-T2I (6M 开源精调集)', link: '/domains/vision/datasets/fine-t2i' }
-          ]
-        }
-      ],
-
-      // 3. 语言与推理专属侧边栏
-      '/domains/llm/': [
-        {
-          text: '💬 语言模型与推理思考',
-          items: [
-            { text: '领域概览与路线图', link: '/domains/llm/' },
-            { text: 'DeepSeek-R1 推理涌现与强化学习机制', link: '/domains/llm/deepseek-r1-reasoning' }
-          ]
-        }
-      ],
-
-      // 4. 多模态专属侧边栏
-      '/domains/multimodal/': [
-        {
-          text: '🎙️ 多模态与跨模态对齐',
-          items: [
-            { text: '领域概览与路线图', link: '/domains/multimodal/' },
-            { text: 'CLIP 跨模态对比表征学习数学解析', link: '/domains/multimodal/clip-alignment' }
-          ]
-        }
-      ],
-
-      // 5. AIGC 强化学习后训练专属侧边栏
-      '/domains/rl-aigc/': [
-        {
-          text: '🎲 AIGC 强化学习后训练',
-          items: [
-            { text: '专区概览与收录标准', link: '/domains/rl-aigc/' },
-            { text: 'Arena-RL：Preference × Rubric 复合奖励', link: '/domains/rl-aigc/arena-preference-rubric-reward' }
-          ]
-        },
-        {
-          text: '🏅 偏好模型子专题',
-          items: [
-            { text: '偏好模型概览与收录标准', link: '/domains/rl-aigc/preference-model/' },
-            { text: 'RationalRewards：让奖励模型学会说出理由', link: '/domains/rl-aigc/preference-model/rational-rewards' }
-          ]
-        },
-        {
-          text: '🚨 Reward Hacking 子专题',
-          items: [
-            { text: '概览 · 收录标准 · 候选池', link: '/domains/rl-aigc/reward-hacking/' },
-            { text: 'CRD：中心化奖励蒸馏做 Diffusion RL', link: '/domains/rl-aigc/reward-hacking/crd-centered-reward-distillation' }
-          ]
-        }
-      ],
-
-      // 6. 智能体系统专属侧边栏
-      '/domains/agent/': [
-        {
-          text: '🤖 智能体系统与工具编排',
-          items: [
-            { text: '领域概览与 12 课路线图', link: '/domains/agent/' },
-            { text: '智能体循环的形式化 (Loop + State)', link: '/domains/agent/agent-loop-formalization' },
-            { text: '结构化输出即可靠性契约 (q^n 与重试)', link: '/domains/agent/structured-output-contract' },
-            { text: '规划作为数据与 AoT 依赖图 (DAG)', link: '/domains/agent/planning-aot-dependency-graph' }
-          ]
-        }
-      ],
-
-      // 7. 通用理论基石专属侧边栏
-      '/foundations/': [
-        {
-          text: '📐 通用理论基石',
-          items: [
-            { text: '基石模块概览', link: '/foundations/' },
-            { text: 'Transformer 缩放点积注意力与方差推导', link: '/foundations/transformer-attention' },
-            { text: 'Softmax vs 线性注意力：记忆容量极限对比', link: '/foundations/linear-attention-capacity' },
-            { text: 'Flow Matching 与连续生成动力学', link: '/foundations/flow-matching-derivation' }
-          ]
-        }
-      ],
-
-      // 8. 算力与工程专属侧边栏
-      '/infra/': [
-        {
-          text: '⚡ 算力与系统工程',
-          items: [
-            { text: '工程基建概览', link: '/infra/' },
-            { text: 'CUDA 显存层级与 Roofline 性能模型', link: '/infra/cuda-memory-hierarchy' },
-            { text: 'vLLM PagedAttention 与吞吐优化', link: '/infra/vllm-paged-attention' }
-          ]
-        }
-      ],
-
-      // 9. 实战项目专属侧边栏
-      '/projects/': [
-        {
-          text: '🚀 个人复现与落地项目',
-          items: [
-            { text: '项目概览与看板', link: '/projects/' },
-            { text: 'LLM 7B 模型 LoRA 微调与吞吐评测', link: '/projects/llm-finetuning-benchmark' },
-            { text: '开源视频生成模型本地复现与评测', link: '/projects/video-gen-reproduction' }
-          ]
-        }
-      ]
-    },
+    // 侧边栏由笔记 frontmatter 生成（见 docs/.vitepress/lib/notes.mjs）
+    sidebar: buildSidebar(sections, collectNotes()),
 
     outline: {
       level: [2, 3],

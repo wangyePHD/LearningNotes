@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Multimodal', 'Contrastive Learning']
+status: done
+summary: '双塔视觉与语言对齐机制，严格推导对称式交叉熵 (InfoNCE) 损失函数及超球面余弦相似度几何意义。'
+---
+
 # CLIP 跨模态对比表征学习数学解析
 
-> **标签**：`Multimodal` `CLIP` `Contrastive Learning` `InfoNCE`  
-> **更新时间**：2026-09-19
 
 ---
 

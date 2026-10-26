@@ -1,7 +1,6 @@
 # 🚨 RL Reward Hacking 与分布偏移
 
 > **标签**：`Reward Hacking` `Distribution Shift` `Mode Collapse` `One-sided Veto` `Rollout Filtering` `Trust Region`
-> **更新时间**：2026-10-12
 
 RL-AIGC 专区的第三个子专题。本专题研究一个具体问题：**模型在长期优化中如何「骗」奖励，以及训练分布如何在压力下漂移。**
 
@@ -50,9 +49,7 @@ RL-AIGC 专区的第三个子专题。本专题研究一个具体问题：**模�
 
 ## 论文篇
 
-| 篇目 | 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **CRD：用中心化奖励蒸馏做 Diffusion RL** `2603.14128` | **Forward-Process RL 的漂移与投机诊断 + 事前防**。问题设定即本专题核心：Flow-GRPO 代表反向轨迹 RL（开销大、梯度方差高），GPO / AWM / DiffusionNFT / CRD 同属 Forward-Process RL（先生成完整图算 Reward、再重加噪构造目标，高效但会 **Distribution Drift + Reward Hacking**）。CRD 从两头下手：① 不只用单图 Reward 绝对值，改用**同一 Prompt 下多张图的相对奖励关系**构造目标；② 显式约束生成分布不偏离原始预训练模型。论文判「参考模型不断更新」是长期漂移的重要原因之一。**Table 1（SD3.5-Medium，OCR 与质量指标用不同 Prompt 集合）**：原始 0.59/5.39/0.87，Flow-GRPO+KL 0.92/5.32/0.95，**DiffusionNFT 0.97/4.89/-0.81**，**CRD 0.92/5.33/0.87**——最高 OCR 换来了最差 ImageReward。概念性例子：`Time for Lunch` 写在简单背景上即得高分，**文字对了场景没了**；Figure 5 展示满足文字奖励却丧失场景一致性的退化。CRD 保留 Forward-Process 的收敛效率，但并非所有指标都超 Flow-GRPO，论文定位是**奖励优化 / 训练效率 / 生成质量的综合权衡** | 🔄 Part 1 完结 | [阅读笔记 →](./crd-centered-reward-distillation.md) |
+<NoteList folder="domains/rl-aigc/reward-hacking" />
 
 ---
 

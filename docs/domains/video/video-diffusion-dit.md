@@ -1,7 +1,13 @@
+---
+type: method
+tags: ['Video Gen', 'DiT', 'Diffusion', 'VAE']
+status: done
+models: ['Sora', 'Wan2.1', 'CogVideoX']
+summary: '从 2D UNet 级联到 3D Causal VAE 与 DiT 主干的演变，解析连续潜空间压缩与物理一致性建模。'
+---
+
 # Video DiT 架构演进与时空物理一致性
 
-> **标签**：`Video Gen` `DiT` `Diffusion` `3D VAE`  
-> **更新时间**：2026-09-19
 
 ---
 

@@ -4,7 +4,4 @@
 
 ## 核心篇目
 
-| 篇目 | 主题 / 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **CUDA 显存层级与 Roofline 模型** | HBM, SRAM, Warp 合并访存与瓶颈判定 | 🟢 已完结 | [阅读笔记 →](./cuda-memory-hierarchy.md) |
-| **vLLM PagedAttention** | 类似虚拟内存分页管理的 KV Cache 极致复用 | 🟢 已完结 | [阅读笔记 →](./vllm-paged-attention.md) |
+<NoteList folder="infra" />

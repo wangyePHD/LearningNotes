@@ -9,11 +9,7 @@
 
 ## 核心篇目
 
-| 篇目 | 主题 / 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **智能体循环的形式化** | Agent = 受控马尔可夫链；闭集约束 argmax、状态转移方程、终止条件、上下文 $O(T^2)$ 预算与显存带宽延迟模型 | 🟢 已完结 | [阅读笔记 →](./agent-loop-formalization.md) |
-| **结构化输出即可靠性契约** | 合法率 $q^n$ 指数衰减、$k$ 次重试残余失败 $(1-p)^k$、贪心解码的相关失败陷阱、语法约束解码 $P_{\mathcal{L}}=1$、闭集投影降级 | 🟢 已完结 | [阅读笔记 →](./structured-output-contract.md) |
-| **规划作为数据与 AoT 依赖图** | 计划即偏序程序、Kahn $O(\lvert V\rvert+\lvert E\rvert)$ 拓扑执行、关键路径与并行上界、误差累积 $1-(1-\epsilon)^{N}$、DAG 校验与静默部分失败 | 🟢 已完结 | [阅读笔记 →](./planning-aot-dependency-graph.md) |
+<NoteList folder="domains/agent" />
 
 ## 学习路线图（对齐仓库 12 课）
 

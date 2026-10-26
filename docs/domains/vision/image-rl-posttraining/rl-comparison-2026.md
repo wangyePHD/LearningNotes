@@ -1,7 +1,13 @@
+---
+type: survey
+tags: ['RL']
+status: done
+group: '模型 RL 篇'
+summary: '六条主线 + 工程 checklist'
+---
+
 # 图像基模 RL 对比总表与演进主线 (2026-only)
 
-> **标签**：`Vision` `RL` `Survey` `Comparison`
-> **更新时间**：2026-09-23
 > **参考来源**：本目录 A/B 系列笔记
 
 ---

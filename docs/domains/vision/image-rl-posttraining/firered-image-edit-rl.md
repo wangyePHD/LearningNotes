@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'DPO', 'DiffusionNFT', 'Image Editing']
+status: done
+group: '模型 RL 篇'
+summary: '非对称 DPO → DiffusionNFT + Layout-OCR 奖励'
+---
+
 # FireRed-Image-Edit RL 落地全链路
 
-> **标签**：`Vision` `RL` `DPO` `DiffusionNFT` `Image Editing`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2602.13344](https://arxiv.org/abs/2602.13344) · [GitHub](https://github.com/FireRedTeam/FireRed-Image-Edit)
 
 ---

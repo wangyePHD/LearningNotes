@@ -1,7 +1,6 @@
 # 🎲 AIGC 强化学习后训练 (RL for AIGC)
 
 > **标签**：`RL` `Reward System` `Rubric` `DiffusionNFT` `Reward Hacking` `Data Pipeline`
-> **更新时间**：2026-10-12
 
 本专区聚焦 **扩散 / 流匹配生成模型的后训练阶段**：优化器（NFT / GRPO / DPO）× 奖励体系（Preference RM / Verifiable / Rubric）× Prompt 与标注数据管线 × 评测协议。
 
@@ -37,9 +36,7 @@
 
 ## 论文篇
 
-| 篇目 | 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模** | **算法不变、只动奖励侧**。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。四类奖励（Preference RM / presence-oriented Faithfulness / absence-oriented Intent-gated Constraint / Anti-Hack）+ 四个组合机制（Reward-decoupled Normalization / Prompt-conditioned Gating / One-sided Veto / Weight Ensembling）。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**已完结 Part 1–10**：① 三问题动机与 Related Work 三分类定位；② Arena 真实用户 Prompt → Gemini-3.5-Flash 六条 VALID 规则二值过滤 → 10K/1K，100K 未过滤低 **0.0360**；③ BT Preference RM（Qwen3.6-27B + `<\|cls\|>` Linear Head，5M 偏好对），Score 为无界 Logit 且 BT Loss 只依赖差值；④ Faithfulness Checklist = **182,230 问 / 18.2 每 Prompt**，Gemini-3-Pro 离线生成**依赖 DAG**（F4←{F0,F3} 多父节点），父失败子自动 No，$R_{\mathrm{faith}}$ = Yes 比例；⑤ Intent 三分类 strict/neutral/open，**26,213 约束问题 / 3,140 启用（31.4%）**，人工审计三分类 77.8%、strict 二分类 89.5%、κ=0.66；⑥ Anti-Hack = **205 个失败案例审计出的两种固定 detector**（Text Gibberish pointwise / Photo-style Drift reference-based 双序判）+ Applicability Gate + **One-sided Veto**；⑦ Ideogram-4 的 Graded OCR $=0.5r_e+0.3r_p+0.2r_r$、无文字/转录失败一律 Mask；⑧ 公式 (3)–(9) 全量演算：分轴 z-score → Gate → Veto → $R_i$ → $A_i=(R_i-\mu_{group})/\sigma_{batch}$ → $\tilde r_i=\frac12\mathrm{clip}(A_i/5,-1,1)+\frac12$，含 6 图完整数值演算与 Group Std vs Batch Std 深挖；⑨ Stage 1/2/3（**Stage 2 单跑不超 Stage 1**，收益来自融合）；⑩ LoRA 权重融合与 Rank Concatenation（r64×2→r128 精确平均） | 🟢 Part 1–10 完结 | [阅读笔记 →](./arena-preference-rubric-reward.md) |
+<NoteList folder="domains/rl-aigc" />
 
 ---
 

@@ -1,7 +1,13 @@
+---
+type: survey
+tags: ['RL', 'GRPO', 'Flow Matching']
+status: done
+group: '算法篇'
+summary: '稀疏奖励稠密化 / 树状信用分配 / 离线化三主线'
+---
+
 # Flow-GRPO 综述精读 (Advances in GRPO for Generation Models)
 
-> **标签**：`Vision` `RL` `GRPO` `Flow Matching` `Survey`
-> **更新时间**：2026-09-23
 > **参考来源**：[arXiv:2603.06623](https://arxiv.org/abs/2603.06623) · 200+ 篇文献，7 方法维度 × 9 任务扩展
 
 ---

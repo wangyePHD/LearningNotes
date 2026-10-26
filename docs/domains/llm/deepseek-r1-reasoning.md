@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['LLM', 'Reasoning', 'RL', 'GRPO']
+status: done
+summary: '纯 RL 激发慢思考 System 2 与 Aha 顿悟，推导 GRPO 组相对策略优化数学目标及无 Critic 显存减半优势。'
+---
+
 # DeepSeek-R1 推理涌现与强化学习机制
 
-> **标签**：`LLM` `Reasoning` `RL` `GRPO`  
-> **更新时间**：2026-09-19
 
 ---
 

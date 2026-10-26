@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['Diffusion', 'VAE', 'T2I', 'Caption']
+status: done
+group: '模型 RL 篇'
+summary: 'SFD 语义隐变量先行 + 450M 三原则 caption，5B 约 Z-Image 10–20% 算力；B.1 提示词中英可折叠。'
+---
+
 # 语义先行文生图基模 (SeFi-Image)
 
-> **标签**：`Vision` `Diffusion` `SeFi` `SFD` `VAE` `SemVAE` `DINOv2` `Text-to-Image`
-> **更新时间**：2026-09-26
 > **参考来源**：[SeFi-Image: A Text-to-Image Foundation Model with Semantic-First Diffusion](https://arxiv.org/abs/2606.22568) · [GitHub](https://github.com/jmliu206/SeFi-Image)
 
 ---

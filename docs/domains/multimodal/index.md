@@ -4,6 +4,4 @@
 
 ## 核心篇目
 
-| 篇目 | 主题 / 核心机制 | 状态 | 链接 |
-| :--- | :--- | :--- | :--- |
-| **CLIP 跨模态对比表征** | 双塔对比损失 (InfoNCE) 与对称余弦相似度 | 🟢 已完结 | [阅读笔记 →](./clip-alignment.md) |
+<NoteList folder="domains/multimodal" />

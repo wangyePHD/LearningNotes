@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Agent', 'Tool Use', 'Infra', 'Complexity']
+status: done
+summary: 'Agent = 受控马尔可夫链五元组；闭集约束 argmax 与状态转移方程；全量记忆注入致 O(T²) token 二次税与 T_max 上界；解码延迟 BW 模型；震荡/静默失败检测。'
+---
+
 # 智能体循环的形式化：Agent = 受控马尔可夫链 + 闭集动作投影
 
-> **标签**：`Agent` `Agent Loop` `State` `Tool Use` `Infra` `Complexity`
-> **更新时间**：2026-09-27
 > **参考来源**：[pguso/agents-from-scratch](https://github.com/pguso/agents-from-scratch) · `agent/agent.py:303-329` · `agent/state.py:21-55` · [vLLM PagedAttention](../../infra/vllm-paged-attention.md)
 
 ---

@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Attention', 'Linear Attention', 'Math Derivation', 'Complexity']
+status: done
+summary: '从矩阵结合律移位推导 O(N) 线性加速，基于连续 Hopfield 理论证明 exp(d) 与 d 的容量代数鸿沟及混合架构必然性。'
+---
+
 # Softmax 注意力 vs 线性注意力：联想记忆容量极限与结合律数学本质对比
 
-> **标签**：`Attention` `Linear Attention` `Math Derivation` `Hopfield Network` `Complexity`  
-> **更新时间**：2026-09-19  
 > **数学工具**：线性代数（结合律与矩阵秩）、核方法（Kernel Trick）、连续联想记忆理论（Modern Hopfield Networks）
 
 ---

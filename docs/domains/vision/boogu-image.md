@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Diffusion', 'DiT', 'Flow Matching', 'Agent', 'Prompt Rewriting', 'Data-centric', 'RL', 'Distillation']
+status: reading
+summary: '把「理解」当一等公民的 10B DiT 基模，全流程 208.62M 图 ≈$400K。架构：Reasoner(≈32B，线上 DeepSeek-V4-Flash) + Encoder(Qwen3-VL-8B 冻结)+ DiT(N_d 双流 → N_s 单流)，原 72B VLM+10B DiT 因成本被解耦。数据：187M 开源 + Boogu Syllabus 21.62M→按能力权重重采样 47.19M；**缺陷图标注而非删除**；分维度多 VLM Caption（计数/空间/属性/风格/文字，弱项上专家与人工）；汉字曝光阈值 ≈300 次/字（3,500 常用字方案，LongTextBench-ZH 0.9055→0.9538）；身份记忆需 ≈4,500 次语言匹配曝光。训练：512²→1024²→2048² 渐进（Table 11），**Rectified Dynamic Time Shifting** 把有效 token 夹在 4096，2K 中位数 0.04→0.24，解 over-squeezing。推理：Rewriter 是 Translator 而非 Enhancer（下界为恒等变换）+ 五类能力定向 PE Skill（Infographic 32.33× / Scene-Text 5.93）+ Router（Base↔Turbo 成本差 50–100×）+ Reflection；自建 Boogu Arena（1,200 双语 prompt 盲测 Bradley–Terry Elo，与 LMArena ρ=1.000）。RL：**刻意避免大规模美学 RL**保生成分布多样性，只做 anatomy/文字（算法未披露）；**BOG**（附录 C）把 CFG 更新当 H×W 矩阵做 MNorm/POD + Rolling-Sum Momentum + Newton–Schulz，training-free 抑制过饱和，Δ_BOG=2 为推荐默认值。'
+---
+
 # 理解优先的 Agentic 图像基模 Boogu-Image-0.1
 
-> **标签**：`Vision` `Diffusion` `DiT` `Flow Matching` `Agentic` `Prompt Rewriter` `Data-centric` `Timestep Sampling` `RL` `Distillation`
-> **更新时间**：2026-10-09
 > **参考来源**：[Boogu-Image-0.1: Boosting Open Agentic Multimodal Generation via Understanding under a Minimal Budget (arXiv:2607.13125v2)](https://arxiv.org/abs/2607.13125) · [GitHub: Boogu-Project/Boogu-Image](https://github.com/Boogu-Project/Boogu-Image) · [HF: Boogu/Boogu-Image-0.1-Base](https://huggingface.co/Boogu/Boogu-Image-0.1-Base)
 > **精读进度**：§1 Introduction ✅ ｜ §2.1 评测反思 ✅ ｜ §3.1.1–§3.1.4 ✅ ｜ §3.2.1–§3.2.3 ✅ ｜ 附录 B.2 宏观架构 / B.2.1 Reasoner / B.2.2 Encoder+DiT / B.3 微架构 / B.5 训练配置 ✅ ｜ 附录 C Boosted Orthogonal Guidance ✅
 > **未覆盖**：§2.2.2–§2.2.5 全部评测数值表（Table 1–6 的完整对比列）、§2.3 图像编辑（ImgEdit-Bench）方法细节、附录 B.4 未在正文出现的部分微架构超参

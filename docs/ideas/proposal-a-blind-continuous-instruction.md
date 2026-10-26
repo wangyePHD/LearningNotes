@@ -1,7 +1,11 @@
+---
+type: idea
+tags: ['Image Editing', 'Fine-tuning', 'Hypothesis']
+summary: '冻住Qwen-Image-Edit，轻量mapper预测干净指令，单LoRA六任务盲复原+alpha连续可控。'
+---
+
 # 盲复原统一指令：用退化图自身代替文本提示 (Blind Continuous Instruction)
 
-> **标签**：`Vision` `Image Editing` `All-in-One Restoration` `LoRA`  
-> **更新时间**：2026-09-23  
 > **参考来源**：ImIR 2609.25267 · AcFlow 2609.10723 · Qwen-Image-Edit
 
 ---

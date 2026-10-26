@@ -1,7 +1,13 @@
+---
+type: paper
+tags: ['RL', 'GRPO', 'Efficiency', 'Infra']
+status: done
+group: '模型 RL 篇'
+summary: 'NVIDIA/HKU/MIT。Cheap Explore, Expensive Learn：把 Exploration 与 Policy Training 彻底拆开。NVFP4 用 6 步探索 96 个 candidate，只按 reward 排序挑 top-12 + bottom-12 的 initial noise seed，再用 BF16 10 步重跑这 24 张做 DiffusionNFT update；每轮把新权重量化回已编译的 NVFP4 引擎（in-place，仅 2% 开销）。关键洞察是「FP4 不需要生成得准，只需要挑得准」——只要求 Rank 保真而非图像一致。排序保真度 Overall τ=0.798 / ρ=0.927，Top-4 命中 96.9%，CLIPScore 是四个 reward 里最差的一项。三个加速口径必须分开：rollout 1.41–2.41×、端到端 iteration 1.25–1.62×、收敛 1.91–4.64×。相对 naive scaling 基本打平（≤1% 差距），收益是同等质量更便宜。可迁移抽象是「Cheap Approximation for Exploration + Accurate Computation for Learning」。'
+---
+
 # Sol-RL：FP4 Explore, BF16 Train —— 扩散 RL 的高效 Rollout Scaling (NVIDIA)
 
-> **标签**：`Vision` `RL` `GRPO` `Diffusion RL` `FP4` `NVFP4` `Quantization` `Rollout Scaling` `Systems`
-> **更新时间**：2026-10-06
 > **原文**：`Papers/rl-posttraining/Sol-RL.pdf`（20 页，NVIDIA / HKU / MIT）
 > **标题**：*FP4 Explore, BF16 Train: Diffusion Reinforcement Learning via Efficient Rollout Scaling*
 > **arXiv**：[2604.06916](https://arxiv.org/abs/2604.06916) v1（2026-04-08）

@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['Diffusion', 'Flow Matching', 'VAE', 'Representation Alignment']
+status: done
+summary: 'SFD 前置精读：复合语义-纹理隐空间 + 固定偏移 Δt 异步去噪三阶段调度，ImageNet 256 FID 1.04、较 DiT 收敛快 100×，FLOPs 开销 <0.01%。'
+---
+
 # 语义先行扩散范式 (Semantic-First Diffusion, SFD)
 
-> **标签**：`Vision` `Diffusion` `SFD` `Flow Matching` `Latent Space` `REPA` `DINOv2`
-> **更新时间**：2026-09-26
 > **参考来源**：[Semantics Lead the Way: Harmonizing Semantic and Texture Modeling with Asynchronous Latent Diffusion (CVPR 2026)](https://arxiv.org/abs/2512.04926) · [GitHub](https://github.com/YuemingPan/SFD) · [项目页](https://yuemingpan.github.io/SFD.github.io/)
 
 ---

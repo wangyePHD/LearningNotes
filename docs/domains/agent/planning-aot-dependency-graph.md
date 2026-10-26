@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Agent', 'Planning', 'Complexity', 'Tool Use']
+status: done
+summary: '计划即偏序 DAG；原子动作 A1/A2/A3 公理与 εN 误差累积给出粒度判据 N ≤ lnρ/lnq；Kahn 拓扑调度与关键路径并行上界；环检测与静默部分失败防御。'
+---
+
 # 规划作为数据与 AoT 依赖图：偏序、拓扑执行、关键路径与静默部分失败
 
-> **标签**：`Agent` `Planning` `Atomic Action` `AoT` `DAG` `Complexity` `Tool Use`
-> **更新时间**：2026-09-27
 > **参考来源**：[pguso/agents-from-scratch](https://github.com/pguso/agents-from-scratch) · `agent/planner.py:96-206` · `lessons/10_atom_of_thought.md` · [Flow Matching 与连续流生成动力学](../../foundations/flow-matching-derivation.md)
 
 ---

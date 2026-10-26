@@ -1,7 +1,12 @@
+---
+type: paper
+tags: ['RL', 'Rubric', 'Reward Model', 'Reward Hacking', 'DiffusionNFT', 'Data-centric']
+status: done
+summary: 'Arena。算法不变、只动奖励侧。核心命题：高质量 RL = Reward Coverage + Reward Composition + Reward Robustness。FLUX.2-dev +69 Elo、Ideogram-4 达 1223.5。**Part 1–10 完结**：10K Arena Prompt 经 Gemini-3.5-Flash 六条 VALID 规则过滤（未过滤 100K 低 0.0360）；BT Preference RM 5M 偏好对（Score 为无界 Logit，BT Loss 只依赖差值）；Faithfulness Checklist **182,230 问 / 18.2 每 Prompt**，Gemini-3-Pro 离线生成**依赖 DAG**，父失败子自动 No；Intent 三分类 strict/neutral/open，26,213 约束问题仅 3,140 启用（31.4%），人工审计 89.5%；Anti-Hack = 205 失败案例审计出的**两种固定 detector** + Applicability Gate + **One-sided Veto**（additive 化从 .635 崩到 .526）；Ideogram-4 Graded OCR = 0.5/0.3/0.2 三分量、无文字一律 Mask；公式 (3)–(9) 分轴 z-score → Gate → Veto → A_i=(R_i-μ_group)/σ_batch → r̃=½clip(A_i/5,-1,1)+½；Stage 1/2/3（Stage 2 单跑不超 Stage 1，收益来自 LoRA soup，r64×2→r128 精确平均）。'
+---
+
 # Arena-RL：Preference × Rubric 复合奖励后训练前沿 T2I 基模 (Arena)
 
-> **标签**：`RL` `Reward System` `Rubric` `Bradley–Terry` `Reward Hacking` `DiffusionNFT` `Vision`
-> **更新时间**：2026-10-12
 > **arXiv**：[2610.02967](https://arxiv.org/html/2610.02967)
 > **标题**：*Post-Training Frontier Text-to-Image Models by Composing Preference and Rubric Rewards*
 > **涉及基模**：FLUX.2-dev · Ideogram-4

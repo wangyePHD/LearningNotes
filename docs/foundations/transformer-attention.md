@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Attention', 'Math Derivation']
+status: done
+summary: '从随机变量独立同分布统计期望与方差出发，严格证明为什么必须除以 sqrt(d_k) 以抵御 Softmax 梯度饱和。'
+---
+
 # Transformer 缩放点积注意力数学推导
 
-> **标签**：`Deep Learning` `Attention` `Transformer` `Math Derivation`  
-> **更新时间**：2026-09-19
 
 ---
 

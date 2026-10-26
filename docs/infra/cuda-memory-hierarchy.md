@@ -1,7 +1,12 @@
+---
+type: method
+tags: ['Infra']
+status: done
+summary: 'Registers, SRAM 到 HBM 带宽延迟金字塔，利用算术强度判定 Memory-Bound 与 Compute-Bound 并指导算子融合。'
+---
+
 # CUDA 显存层级与 Roofline 性能模型
 
-> **标签**：`CUDA` `Infra` `Roofline` `Memory Bound`  
-> **更新时间**：2026-09-19
 
 ---
 

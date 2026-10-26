@@ -1,7 +1,13 @@
+---
+type: method
+tags: ['Video Gen', 'Attention', 'Complexity', 'Math Derivation']
+status: done
+models: ['TimeSformer', 'Video-DiT']
+summary: '分析全时空联合注意力 O(N^2) 显存爆炸原因，推导空间-时间因子分解 (Factorized Attention) 降维证明。'
+---
+
 # 时空注意力机制 (Spatio-Temporal Attention) 数学推导
 
-> **标签**：`Video Model` `Attention` `Spatio-Temporal` `Complexity`  
-> **更新时间**：2026-09-19
 
 ---
 

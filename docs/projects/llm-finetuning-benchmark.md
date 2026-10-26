@@ -1,7 +1,11 @@
+---
+type: project
+tags: ['LLM', 'Fine-tuning', 'Benchmark']
+summary: '单卡 A100 下对比 Full SFT 与 LoRA 的可训练参数、显存峰值（节约 63.7%）与吞吐量提升实测。'
+---
+
 # LLM 7B 模型 LoRA 微调与吞吐评测
 
-> **标签**：`LLM` `LoRA` `Fine-tuning` `Benchmark`  
-> **更新时间**：2026-09-19
 
 ---
 

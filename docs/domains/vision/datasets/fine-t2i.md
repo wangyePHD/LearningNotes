@@ -1,7 +1,12 @@
+---
+type: dataset
+tags: ['Data-centric', 'Fine-tuning', 'Diffusion']
+status: done
+summary: '600万规模、2TB容量的T2I开源精调集；44.8M到6M的95%淘汰率过滤管线，合成(Z-Image/FLUX2)+真实摄影(Pexels/Pixabay/Unsplash)，被SeFi 9M持续训练采纳。'
+---
+
 # Fine-T2I: 6M 规模开源全维度文生图精调数据集与过滤工程
 
-> **标签**：`Vision` `Dataset` `Fine-T2I` `SFT` `Data Engineering` `Diffusion` `Autoregressive`  
-> **更新时间**：2026-09-23  
 > **参考来源**：[Fine-T2I: An Open, Large-Scale, and Diverse Dataset for High-Quality T2I Fine-Tuning](https://arxiv.org/abs/2602.09439) (arXiv:2602.09439, 东北大学 Xu Ma, Yitian Zhang, Qihua Dong, Yun Fu) · [HuggingFace Dataset](https://huggingface.co/datasets/ma-xu/fine-t2i) · [HuggingFace Space 预览](https://huggingface.co/spaces/ma-xu/fine-t2i-explore)
 
 ---
