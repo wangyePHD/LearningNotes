@@ -9,7 +9,7 @@
     <!-- 标签过滤器面板 -->
     <div class="tags-filter-panel">
       <div class="panel-top">
-        <span class="filter-label">🏷️ 标签快速穿透 (共 {{ allTags.length }} 个标签, {{ notesList.length }} 篇笔记)</span>
+        <span class="filter-label">标签快速穿透（共 {{ allTags.length }} 个标签，{{ notesList.length }} 篇笔记）</span>
         <button v-if="selectedTag" class="clear-btn" @click="selectedTag = ''">
           清除筛选 (查看全部)
         </button>
@@ -45,14 +45,14 @@
       </div>
 
       <div class="notes-grid">
-        <div v-for="note in filteredNotes" :key="note.link" class="note-card">
+        <div v-for="note in filteredNotes" :key="note.url" class="note-card">
           <div class="note-card-top">
             <span class="domain-badge" :class="note.domainClass">{{ note.domain }}</span>
             <span class="note-date">{{ note.date }}</span>
           </div>
 
           <h3 class="note-title">
-            <a :href="withBase(note.link)">{{ note.title }}</a>
+            <a :href="withBase(note.url)">{{ note.title }}</a>
           </h3>
 
           <p class="note-summary">{{ note.summary }}</p>
@@ -329,5 +329,175 @@ const filteredNotes = computed(() => {
   background: var(--vp-c-brand-soft);
   color: var(--vp-c-brand-1);
   font-weight: 600;
+}
+
+/* Editorial Lab：统一筛选器与知识卡片 */
+.tag-matrix-container {
+  max-width: 1080px;
+  padding-top: 0.5rem;
+}
+
+.matrix-header {
+  margin-bottom: 2rem;
+}
+
+.matrix-desc {
+  max-width: 760px;
+  color: var(--vp-c-text-2);
+  font-size: 0.9rem;
+  line-height: 1.85;
+}
+
+.tags-filter-panel {
+  margin-bottom: 2.5rem;
+  padding: 1.4rem;
+  border-color: var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg);
+}
+
+.panel-top {
+  margin-bottom: 1.2rem;
+}
+
+.filter-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.clear-btn {
+  font-size: 0.74rem;
+}
+
+.tags-cloud {
+  gap: 0.45rem;
+}
+
+.tag-pill {
+  padding: 0.32rem 0.65rem;
+  border-color: transparent;
+  border-radius: 7px;
+  background: var(--vp-c-bg-soft);
+  font-size: 0.76rem;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.tag-pill:hover {
+  border-color: transparent;
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-text-1);
+  transform: none;
+}
+
+.tag-pill.active {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-1);
+  font-weight: 550;
+}
+
+.tag-count {
+  background: transparent;
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.65rem;
+  opacity: 0.75;
+}
+
+.results-header {
+  margin-bottom: 1.3rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.results-header h4 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.results-count {
+  font-size: 0.75rem;
+}
+
+.notes-grid {
+  gap: 0.9rem;
+}
+
+.note-card {
+  min-height: 210px;
+  padding: 1.35rem;
+  border-color: var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.note-card:hover {
+  border-color: var(--vp-c-brand-2);
+  box-shadow: var(--vp-shadow-2);
+}
+
+.note-card-top {
+  margin-bottom: 1rem;
+}
+
+.domain-badge,
+.domain-video,
+.domain-vision,
+.domain-llm,
+.domain-multi,
+.domain-rl,
+.domain-pm,
+.domain-rh,
+.domain-agent,
+.domain-foundations,
+.domain-infra,
+.domain-projects,
+.domain-ideas,
+.domain-log {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--vp-c-brand-1);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.note-date {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.66rem;
+}
+
+.note-title {
+  margin-bottom: 0.65rem;
+  font-size: 1rem;
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.note-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.78rem;
+  line-height: 1.75;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.note-tags {
+  gap: 0.35rem 0.65rem;
+}
+
+.mini-tag {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.68rem;
+}
+
+.mini-tag:hover,
+.mini-tag.highlighted {
+  background: transparent;
+  color: var(--vp-c-brand-1);
+  font-weight: 500;
 }
 </style>

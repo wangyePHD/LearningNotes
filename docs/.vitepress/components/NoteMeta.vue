@@ -20,15 +20,17 @@ const meta = computed(() => frontmatter.value)
 .note-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 12px;
+  gap: 6px 14px;
+  margin: 0 0 20px;
 }
 .note-meta-chip {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  background: var(--vp-c-default-soft);
-  color: var(--vp-c-text-2);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--vp-c-text-3);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.03em;
 }
 .note-meta-tag {
   color: var(--vp-c-brand-1);

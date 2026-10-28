@@ -50,21 +50,63 @@ const sections = computed(() => {
 </template>
 
 <style scoped>
+.note-list {
+  margin-top: 1.25rem;
+}
+
+.note-list :deep(h3) {
+  margin-top: 2.4rem;
+  font-size: 1rem;
+}
+
+.note-list :deep(table) {
+  margin-top: 1rem;
+}
+
+.note-list :deep(th:first-child) {
+  width: 34%;
+}
+
+.note-list :deep(th:last-child) {
+  width: 76px;
+}
+
+.note-list :deep(td) {
+  vertical-align: top;
+}
+
+.note-list :deep(a) {
+  color: var(--vp-c-text-1);
+  font-weight: 550;
+}
+
+.note-list :deep(a:hover) {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+}
+
 .note-list-summary {
   display: -webkit-box;
+  overflow: hidden;
+  color: var(--vp-c-text-2);
+  font-size: 0.82rem;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  overflow: hidden;
 }
+
 .note-list-models {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--vp-c-text-2);
+  margin-top: 6px;
+  color: var(--vp-c-text-3);
+  font-size: 0.68rem;
 }
+
 .note-list-status {
+  color: var(--vp-c-text-3);
+  font-size: 0.72rem;
   white-space: nowrap;
 }
+
 .note-list-empty {
-  color: var(--vp-c-text-2);
+  color: var(--vp-c-text-3);
 }
 </style>

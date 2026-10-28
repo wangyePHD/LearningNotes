@@ -97,7 +97,7 @@
     <div class="heatmap-footer">
       <div class="hover-info">
         <span v-if="hoveredDay && !hoveredDay.isFuture">
-          📅 <strong>{{ hoveredDay.date }}</strong>：
+          <strong>{{ hoveredDay.date }}</strong>：
           <span v-if="hoveredDay.count > 0" class="active-text">
             贡献了 <strong>{{ hoveredDay.count }}</strong> 次知识推导与代码迭代
           </span>
@@ -536,5 +536,203 @@ const monthLabels = computed(() => {
   width: 10px;
   height: 10px;
   border-radius: 2px;
+}
+
+/* Editorial Lab：更安静的数据面板 */
+.repo-heatmap-card {
+  padding: 1.6rem;
+  border-color: var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
+  box-shadow: none;
+}
+
+.heatmap-header {
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.title-row {
+  gap: 0.55rem;
+}
+
+.pulse-dot,
+.theme-cyan .pulse-dot,
+.theme-amber .pulse-dot {
+  width: 6px;
+  height: 6px;
+  animation: none;
+  box-shadow: none;
+}
+
+.heatmap-title {
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.heatmap-subtitle {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+}
+
+.theme-picker {
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-color: var(--vp-c-divider);
+  border-radius: 9px;
+  background: var(--vp-c-bg-soft);
+}
+
+.picker-label {
+  padding-left: 0.45rem;
+  font-size: 0.68rem;
+}
+
+.theme-btn {
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+}
+
+.theme-btn.active {
+  border-color: var(--vp-c-divider);
+  background: var(--vp-c-bg);
+  box-shadow: var(--vp-shadow-1);
+}
+
+.color-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(0, 1.6fr);
+  gap: 0;
+  margin-bottom: 1.5rem;
+  padding: 0 0 1.4rem;
+  border: 0;
+  border-bottom: 1px solid var(--vp-c-divider);
+  border-radius: 0;
+  background: transparent;
+}
+
+.stat-item {
+  padding: 0 1.4rem;
+  border-right: 1px solid var(--vp-c-divider);
+}
+
+.stat-item:first-child {
+  padding-left: 0;
+}
+
+.stat-item:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.stat-divider {
+  display: none;
+}
+
+.stat-num {
+  font-size: 1.65rem;
+  font-weight: 550;
+  letter-spacing: -0.05em;
+  line-height: 1.25;
+}
+
+.stat-num.date-text {
+  overflow: hidden;
+  font-size: 0.9rem;
+  letter-spacing: -0.02em;
+  line-height: 2.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-desc {
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+}
+
+.truncate-text {
+  display: block;
+  max-width: 100%;
+}
+
+.months-row {
+  grid-template-columns: repeat(52, 12px);
+}
+
+.day-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.day-cell:hover {
+  outline-width: 1px;
+  transform: scale(1.2);
+}
+
+.theme-indigo .level-4,
+.theme-cyan .level-4,
+.theme-amber .level-4,
+:root.dark .theme-indigo .level-4,
+:root.dark .theme-cyan .level-4,
+:root.dark .theme-amber .level-4 {
+  box-shadow: none;
+}
+
+.heatmap-footer {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top-style: solid;
+}
+
+.hover-info,
+.tip-placeholder,
+.legend-text {
+  font-size: 0.7rem;
+}
+
+.legend-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+  .repo-heatmap-card {
+    padding: 1.1rem;
+  }
+
+  .heatmap-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .theme-picker {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 1.2rem;
+  }
+
+  .stat-item:nth-child(3) {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .stat-item.flex-grow {
+    grid-column: 1 / -1;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--vp-c-divider);
+  }
 }
 </style>
