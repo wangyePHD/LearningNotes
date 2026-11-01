@@ -6,10 +6,11 @@
 
 与 `图像与视觉` 域的分工：本域不讨论基模架构、VAE、蒸馏结构，只讨论**「用什么信号把已经很强的基模继续推上去」**。基模侧论文里的 RL 章节若以奖励体系为主要研究变量，也收录于本域并在原笔记中链回。
 
-本专区下设两个**子专题**：
+本专区下设三个**子专题**：
 
 - 🏅 [偏好模型 (Preference Model)](./preference-model/)——研究 **Reward Model 本身怎么造**（结构、数据、蒸馏、接口）
 - 🚨 [RL Reward Hacking 与分布偏移](./reward-hacking/)——研究 **优化过程里奖励与分布怎么被钻空子**（Goodhart 饱和、mode collapse、hack 检测与防御、分布塌缩）
+- 🎯 [DPO](./dpo/)——研究 **DPO 及其变体的优化器与训练配方**
 
 ---
 
@@ -31,6 +32,7 @@
 | :--- | :--- | :--- | :--- |
 | **🏅 偏好模型 (Preference Model)** | **打分器本身怎么造**：结构（scalar vs reasoning-based）、pairwise→pointwise 投影、偏好标签转 Reasoning 监督、评测口径 | 🔄 建设中 | [进入子专题 →](./preference-model/) |
 | **🚨 RL Reward Hacking 与分布偏移** | **优化过程里奖励与分布怎么被钻空子**：Goodhart 饱和、mode collapse、具体 hack 形态与检测、veto/信任域/rollout 过滤等防御、分布塌缩与 off-policy 失配 | 🔄 建设中 | [进入子专题 →](./reward-hacking/) |
+| **🎯 DPO** | **DPO 及其变体的优化器与训练配方** | 🔄 建设中 | [进入子专题 →](./dpo/) |
 
 ---
 

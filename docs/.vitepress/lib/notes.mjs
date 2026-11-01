@@ -91,6 +91,7 @@ const DOMAIN_RULES = [
   ['domains/multimodal', '🎙️ 多模态', 'domain-multi'],
   ['domains/rl-aigc/preference-model', '🏅 偏好模型', 'domain-pm'],
   ['domains/rl-aigc/reward-hacking', '🚨 Reward Hacking', 'domain-rh'],
+  ['domains/rl-aigc/dpo', '🎯 DPO', 'domain-rl'],
   ['domains/rl-aigc', '🎲 AIGC RL', 'domain-rl'],
   ['domains/agent', '🤖 智能体', 'domain-agent'],
   ['foundations', '📐 通用基石', 'domain-foundations'],

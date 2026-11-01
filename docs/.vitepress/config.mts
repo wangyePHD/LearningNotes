@@ -23,6 +23,7 @@ const sections = [
     subgroups: {
       'preference-model': '🏅 偏好模型子专题',
       'reward-hacking': '🚨 Reward Hacking 子专题',
+      'dpo': '🎯 DPO 子专题',
     },
   },
   { dir: 'domains/agent', title: '🤖 智能体系统与工具编排', overview: '领域概览与 12 课路线图' },
