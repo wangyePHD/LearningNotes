@@ -3,20 +3,18 @@ import { computed } from 'vue'
 import { withBase } from 'vitepress'
 import { data as notes } from '../data/notes.data.ts'
 
-// 列出某个目录下的笔记（只含直接子文件；子专题由各自的索引页列出）。
-// groups 非空时按笔记的 group 字段分组，并按 groups 的顺序显示。
+// 只列出当前目录的直接子笔记；子专题仍由各自索引页维护。
 const props = defineProps({
   folder: { type: String, required: true },
   groups: { type: Array, default: () => [] }
 })
 
-const items = computed(() => notes.filter(n => n.dir === props.folder))
-
+const items = computed(() => notes.filter(note => note.dir === props.folder))
 const sections = computed(() => {
   if (!props.groups.length) return [{ name: '', items: items.value }]
   return props.groups.map(name => ({
     name,
-    items: items.value.filter(n => n.group === name)
+    items: items.value.filter(note => note.group === name)
   }))
 })
 </script>
@@ -24,89 +22,182 @@ const sections = computed(() => {
 <template>
   <div class="note-list">
     <p v-if="!items.length" class="note-list-empty">暂无笔记。</p>
-    <template v-for="section in sections" :key="section.name">
-      <h3 v-if="section.name">{{ section.name }}</h3>
-      <table v-if="section.items.length">
-        <thead>
-          <tr>
-            <th>篇目</th>
-            <th>主题 / 核心机制</th>
-            <th>状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="n in section.items" :key="n.url">
-            <td>
-              <a :href="withBase(n.url)"><strong>{{ n.title }}</strong></a>
-              <div v-if="n.models.length" class="note-list-models">{{ n.models.join(' · ') }}</div>
-            </td>
-            <td class="note-list-summary" :title="n.summary">{{ n.summary }}</td>
-            <td class="note-list-status">{{ n.statusLabel }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </template>
+
+    <section v-for="section in sections" :key="section.name || 'all'" class="note-group">
+      <h3 v-if="section.name" class="note-group-title">{{ section.name }}</h3>
+      <div v-if="section.items.length" class="note-rows">
+        <a v-for="(note, index) in section.items" :key="note.url" :href="withBase(note.url)" class="note-row">
+          <span class="note-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
+          <span class="note-content">
+            <span class="note-title">{{ note.title }}</span>
+            <span v-if="note.models.length" class="note-models">{{ note.models.join(' · ') }}</span>
+            <span class="note-summary">{{ note.summary }}</span>
+          </span>
+          <span class="note-aside">
+            <span v-if="note.statusLabel" class="note-status" :data-status="note.status">{{ note.statusLabel }}</span>
+            <time :datetime="note.date">{{ note.date }}</time>
+          </span>
+          <span class="note-arrow" aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .note-list {
-  margin-top: 1.25rem;
+  margin: 1.5rem 0 2rem;
 }
 
-.note-list :deep(h3) {
-  margin-top: 2.4rem;
-  font-size: 1rem;
+.note-group + .note-group {
+  margin-top: 3rem;
 }
 
-.note-list :deep(table) {
-  margin-top: 1rem;
+.note-list :deep(.note-group-title) {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+  color: var(--vp-c-text-2);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
-.note-list :deep(th:first-child) {
-  width: 34%;
+.note-rows {
+  border-top: 1px solid var(--vp-c-divider);
 }
 
-.note-list :deep(th:last-child) {
-  width: 76px;
-}
-
-.note-list :deep(td) {
-  vertical-align: top;
-}
-
-.note-list :deep(a) {
-  color: var(--vp-c-text-1);
-  font-weight: 550;
-}
-
-.note-list :deep(a:hover) {
-  color: var(--vp-c-brand-1);
+.note-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 92px 16px;
+  gap: 1rem;
+  align-items: start;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--vp-c-divider);
   text-decoration: none;
 }
 
-.note-list-summary {
+.note-index {
+  padding-top: 0.2rem;
+  color: var(--vp-c-text-3);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.64rem;
+}
+
+.note-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.note-title {
+  color: var(--vp-c-text-1);
+  font-size: 0.93rem;
+  font-weight: 600;
+  line-height: 1.55;
+  transition: color 160ms ease;
+}
+
+.note-row:hover .note-title {
+  color: var(--vp-c-brand-1);
+}
+
+.note-models {
+  margin-top: 0.35rem;
+  color: var(--vp-c-text-3);
+  font-size: 0.67rem;
+  line-height: 1.6;
+}
+
+.note-summary {
   display: -webkit-box;
+  margin-top: 0.55rem;
   overflow: hidden;
   color: var(--vp-c-text-2);
-  font-size: 0.82rem;
-  -webkit-line-clamp: 3;
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.75;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.note-list-models {
-  margin-top: 6px;
+.note-aside {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.15rem;
+  text-align: right;
+}
+
+.note-status,
+.note-aside time {
   color: var(--vp-c-text-3);
-  font-size: 0.68rem;
+  font-size: 0.64rem;
+  white-space: nowrap;
 }
 
-.note-list-status {
+.note-status[data-status='reading'],
+.note-status[data-status='ongoing'] {
+  color: var(--vp-c-brand-1);
+}
+
+.note-aside time {
+  font-family: var(--vp-font-family-mono);
+}
+
+.note-arrow {
+  padding-top: 0.2rem;
   color: var(--vp-c-text-3);
   font-size: 0.72rem;
-  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.note-row:hover .note-arrow {
+  opacity: 1;
 }
 
 .note-list-empty {
   color: var(--vp-c-text-3);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .note-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 1rem;
+    padding: 1.1rem 0;
+  }
+
+  .note-index,
+  .note-arrow {
+    display: none;
+  }
+
+  .note-content {
+    grid-column: 1 / -1;
+  }
+
+  .note-aside {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: center;
+    flex-direction: row;
+    padding-top: 0;
+    text-align: left;
+  }
+
+  .note-summary {
+    -webkit-line-clamp: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-title,
+  .note-arrow {
+    transition: none;
+  }
 }
 </style>

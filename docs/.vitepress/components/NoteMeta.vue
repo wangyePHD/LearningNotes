@@ -11,7 +11,7 @@ const meta = computed(() => frontmatter.value)
 <template>
   <div v-if="meta.type" class="note-meta">
     <span class="note-meta-chip">{{ TYPE_LABEL[meta.type] ?? meta.type }}</span>
-    <span v-if="meta.status" class="note-meta-chip">{{ STATUS_LABEL[meta.status] }}</span>
+    <span v-if="meta.status" class="note-meta-chip note-meta-status" :data-status="meta.status">{{ STATUS_LABEL[meta.status] }}</span>
     <span v-for="tag in meta.tags" :key="tag" class="note-meta-chip note-meta-tag">#{{ tag }}</span>
   </div>
 </template>
@@ -31,6 +31,26 @@ const meta = computed(() => frontmatter.value)
   font-size: 11px;
   font-weight: 550;
   letter-spacing: 0.03em;
+}
+.note-meta-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.note-meta-status::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--vp-c-text-3);
+  content: '';
+}
+.note-meta-status[data-status='reading'],
+.note-meta-status[data-status='ongoing'] {
+  color: var(--vp-c-brand-1);
+}
+.note-meta-status[data-status='reading']::before,
+.note-meta-status[data-status='ongoing']::before {
+  background: var(--vp-c-brand-1);
 }
 .note-meta-tag {
   color: var(--vp-c-brand-1);

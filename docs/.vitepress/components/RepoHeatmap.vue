@@ -1,89 +1,95 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { data as repoCommitData } from '../data/commits.data.ts'
+
+const hoveredDay = ref(null)
+
+// 过去 52 周，按周一至周日排列；日期与提交次数来自现有 Git 数据加载器。
+const calendarWeeks = computed(() => {
+  const weeks = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const startDay = new Date(today)
+  const currentDayOfWeek = (startDay.getDay() + 6) % 7
+  startDay.setDate(startDay.getDate() - (51 * 7 + currentDayOfWeek))
+
+  const cursor = new Date(startDay)
+  let currentWeek = []
+  for (let i = 0; i < 52 * 7; i++) {
+    const year = cursor.getFullYear()
+    const month = String(cursor.getMonth() + 1).padStart(2, '0')
+    const day = String(cursor.getDate()).padStart(2, '0')
+    const date = `${year}-${month}-${day}`
+    const count = repoCommitData.commitCounts[date] || 0
+    const level = count >= 6 ? 4 : count >= 3 ? 3 : count >= 2 ? 2 : count >= 1 ? 1 : 0
+
+    currentWeek.push({
+      date,
+      count,
+      level,
+      isToday: cursor.getTime() === today.getTime(),
+      isFuture: cursor.getTime() > today.getTime(),
+      month: cursor.getMonth() + 1
+    })
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek)
+      currentWeek = []
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return weeks
+})
+
+const monthLabels = computed(() => {
+  const labels = []
+  let lastMonth = -1
+  calendarWeeks.value.forEach((week, index) => {
+    const month = week[0]?.month
+    if (month && month !== lastMonth) {
+      labels.push({ text: `${month}月`, col: index + 1 })
+      lastMonth = month
+    }
+  })
+  return labels
+})
+
+const dayLabel = day => `${day.date}，${day.count} 次提交`
+</script>
+
 <template>
-  <div class="repo-heatmap-card" :class="`theme-${currentTheme}`">
-    <div class="heatmap-header">
-      <div class="header-left">
-        <div class="title-row">
-          <span class="pulse-dot"></span>
-          <span class="heatmap-title">AlgoNotes 本地知识库迭代活跃度</span>
-        </div>
-        <span class="heatmap-subtitle">仅统计当前算法研习库提交，记录真实思考与代码推进历程</span>
+  <section class="activity-panel" aria-labelledby="activity-title">
+    <div class="activity-header">
+      <div>
+        <p class="activity-kicker">Activity</p>
+        <h2 id="activity-title">研习活跃度</h2>
+        <p>过去 52 周的知识库 Git 提交记录</p>
       </div>
-
-      <!-- 配色切换器 (告别千篇一律的 GitHub 绿色) -->
-      <div class="theme-picker">
-        <span class="picker-label">主题配色:</span>
-        <button 
-          v-for="t in themeOptions" 
-          :key="t.key" 
-          class="theme-btn" 
-          :class="{ active: currentTheme === t.key }"
-          :title="t.name"
-          @click="currentTheme = t.key"
-        >
-          <span class="color-dot" :style="{ background: t.color }"></span>
-          <span class="theme-name">{{ t.name }}</span>
-        </button>
+      <div class="activity-stats">
+        <div><strong>{{ repoCommitData.totalCommits }}</strong><span>总提交</span></div>
+        <div><strong>{{ repoCommitData.activeDays }}</strong><span>活跃天数</span></div>
+        <div><strong class="latest-date">{{ repoCommitData.latestDate || '—' }}</strong><span>最近更新</span></div>
       </div>
     </div>
 
-    <!-- 研习投入度核心指标 -->
-    <div class="stats-row">
-      <div class="stat-item">
-        <span class="stat-num">{{ repoCommitData.totalCommits }}</span>
-        <span class="stat-desc">知识迭代总次数</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-num">{{ repoCommitData.activeDays }}</span>
-        <span class="stat-desc">深度研习天数</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item flex-grow">
-        <span class="stat-num date-text">{{ repoCommitData.latestDate || '今日' }}</span>
-        <span class="stat-desc truncate-text" :title="repoCommitData.latestMessage">
-          最近推进: {{ repoCommitData.latestMessage || '系统构建' }}
-        </span>
-      </div>
-    </div>
-
-    <!-- 热力图网格主视窗 -->
-    <div class="grid-scroll-box">
+    <div class="heatmap-scroll">
       <div class="heatmap-chart">
-        <!-- 月份标尺 -->
-        <div class="months-row">
-          <span 
-            v-for="(m, idx) in monthLabels" 
-            :key="idx" 
-            class="month-label"
-            :style="{ gridColumnStart: m.col }"
-          >
-            {{ m.text }}
+        <div class="months-row" aria-hidden="true">
+          <span v-for="month in monthLabels" :key="`${month.col}-${month.text}`" :style="{ gridColumnStart: month.col }">
+            {{ month.text }}
           </span>
         </div>
-
-        <!-- 星期与格子阵列 -->
         <div class="days-container">
-          <div class="weekday-labels">
-            <span>一</span>
-            <span>三</span>
-            <span>五</span>
-            <span>日</span>
-          </div>
-
+          <div class="weekday-labels" aria-hidden="true"><span>一</span><span>三</span><span>五</span><span>日</span></div>
           <div class="weeks-grid">
-            <div 
-              v-for="(week, wIdx) in calendarWeeks" 
-              :key="wIdx" 
-              class="week-col"
-            >
-              <div 
-                v-for="(day, dIdx) in week" 
-                :key="dIdx" 
+            <div v-for="(week, weekIndex) in calendarWeeks" :key="weekIndex" class="week-col">
+              <div
+                v-for="day in week"
+                :key="day.date"
                 class="day-cell"
-                :class="[
-                  `level-${day.level}`,
-                  { 'is-today': day.isToday, 'is-future': day.isFuture }
-                ]"
+                :class="[`level-${day.level}`, { 'is-today': day.isToday, 'is-future': day.isFuture }]"
+                :title="dayLabel(day)"
+                :aria-label="dayLabel(day)"
                 @mouseenter="hoveredDay = day"
                 @mouseleave="hoveredDay = null"
               ></div>
@@ -93,323 +99,127 @@
       </div>
     </div>
 
-    <!-- 悬停详情气泡与图例 -->
     <div class="heatmap-footer">
-      <div class="hover-info">
-        <span v-if="hoveredDay && !hoveredDay.isFuture">
-          <strong>{{ hoveredDay.date }}</strong>：
-          <span v-if="hoveredDay.count > 0" class="active-text">
-            贡献了 <strong>{{ hoveredDay.count }}</strong> 次知识推导与代码迭代
-          </span>
-          <span v-else class="empty-text">当日无提交 (思考沉淀)</span>
-        </span>
-        <span v-else class="tip-placeholder">鼠标悬停在色块上方查看具体日期的研习记录</span>
-      </div>
-
-      <div class="legend-box">
-        <span class="legend-text">轻度</span>
-        <span class="legend-cell level-0"></span>
-        <span class="legend-cell level-1"></span>
-        <span class="legend-cell level-2"></span>
-        <span class="legend-cell level-3"></span>
-        <span class="legend-cell level-4"></span>
-        <span class="legend-text">高能</span>
+      <span class="hover-detail">
+        <template v-if="hoveredDay && !hoveredDay.isFuture">{{ hoveredDay.date }} · {{ hoveredDay.count }} 次提交</template>
+        <template v-else>每一个色块对应一天</template>
+      </span>
+      <div class="heatmap-legend" aria-label="提交次数由少到多">
+        <span>少</span>
+        <i v-for="level in 5" :key="level" :class="`level-${level - 1}`"></i>
+        <span>多</span>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
-<script setup>
-import { ref, computed } from 'vue'
-import { data as repoCommitData } from '../data/commits.data.ts'
-
-// 配色方案（支持极光紫绀、深海蔚蓝、熔岩暖金三种学术高质感配色）
-const currentTheme = ref('indigo')
-
-const themeOptions = [
-  { key: 'indigo', name: '极光紫绀', color: '#6366f1' },
-  { key: 'cyan', name: '深海蔚蓝', color: '#0284c7' },
-  { key: 'amber', name: '熔岩暖金', color: '#f59e0b' }
-]
-
-const hoveredDay = ref(null)
-
-// 生成过去 52 周（364 天）的日历网格
-const calendarData = computed(() => {
-  const weeks = []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  // 找到 52 周前的周一
-  const startDay = new Date(today)
-  const currentDayOfWeek = (startDay.getDay() + 6) % 7 // 0=Mon, 6=Sun
-  startDay.setDate(startDay.getDate() - (51 * 7 + currentDayOfWeek))
-
-  const cursor = new Date(startDay)
-  let currentWeek = []
-
-  for (let i = 0; i < 52 * 7; i++) {
-    const y = cursor.getFullYear()
-    const m = String(cursor.getMonth() + 1).padStart(2, '0')
-    const d = String(cursor.getDate()).padStart(2, '0')
-    const dateStr = `${y}-${m}-${d}`
-
-    const count = repoCommitData.commitCounts[dateStr] || 0
-    let level = 0
-    if (count >= 6) level = 4
-    else if (count >= 3) level = 3
-    else if (count >= 2) level = 2
-    else if (count >= 1) level = 1
-
-    const isToday = cursor.getTime() === today.getTime()
-    const isFuture = cursor.getTime() > today.getTime()
-
-    currentWeek.push({
-      date: dateStr,
-      count,
-      level,
-      isToday,
-      isFuture,
-      month: cursor.getMonth() + 1,
-      dayNum: cursor.getDate()
-    })
-
-    if (currentWeek.length === 7) {
-      weeks.push(currentWeek)
-      currentWeek = []
-    }
-
-    cursor.setDate(cursor.getDate() + 1)
-  }
-
-  return weeks
-})
-
-const calendarWeeks = computed(() => calendarData.value)
-
-// 提取月份标签与其所在的列数
-const monthLabels = computed(() => {
-  const labels = []
-  let lastMonth = -1
-  const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
-
-  calendarData.value.forEach((week, colIndex) => {
-    const firstDay = week[0]
-    if (firstDay && firstDay.month !== lastMonth) {
-      labels.push({
-        text: monthNames[firstDay.month - 1],
-        col: colIndex + 1
-      })
-      lastMonth = firstDay.month
-    }
-  })
-
-  return labels
-})
-</script>
-
 <style scoped>
-.repo-heatmap-card {
-  background: var(--vp-c-bg-soft);
+.activity-panel {
+  padding: 1.6rem;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 14px;
-  padding: 1.4rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s ease;
+  border-radius: 12px;
+  background: var(--vp-c-bg);
 }
 
-/* 头部 */
-.heatmap-header {
+.activity-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.2rem;
+  gap: 2rem;
+  margin-bottom: 2rem;
 }
 
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6366f1;
-  box-shadow: 0 0 8px #6366f1;
-  animation: pulse-glow 2s infinite ease-in-out;
-}
-
-.theme-cyan .pulse-dot {
-  background: #0284c7;
-  box-shadow: 0 0 8px #0284c7;
-}
-
-.theme-amber .pulse-dot {
-  background: #f59e0b;
-  box-shadow: 0 0 8px #f59e0b;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.3); opacity: 1; }
-}
-
-.heatmap-title {
-  font-size: 1.08rem;
+.activity-kicker {
+  margin: 0 0 0.45rem !important;
+  color: var(--vp-c-text-3) !important;
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.64rem !important;
   font-weight: 600;
-  color: var(--vp-c-text-1);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
-.heatmap-subtitle {
-  font-size: 0.82rem;
+.activity-header h2 {
+  margin: 0;
+  color: var(--vp-c-text-1);
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.activity-header p {
+  margin: 0.45rem 0 0;
   color: var(--vp-c-text-3);
-  display: block;
-  margin-top: 0.25rem;
+  font-size: 0.68rem;
 }
 
-/* 配色选择器 */
-.theme-picker {
+.activity-stats {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: var(--vp-c-bg-mute);
-  padding: 0.25rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--vp-c-divider);
+  gap: 2rem;
 }
 
-.picker-label {
-  font-size: 0.72rem;
-  color: var(--vp-c-text-3);
-  margin-right: 0.2rem;
-}
-
-.theme-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 999px;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--vp-c-text-2);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.theme-btn:hover {
-  color: var(--vp-c-text-1);
-}
-
-.theme-btn.active {
-  background: var(--vp-c-bg-soft);
-  border-color: var(--vp-c-divider);
-  color: var(--vp-c-text-1);
-  font-weight: 600;
-}
-
-.color-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-/* 核心投入指标行 */
-.stats-row {
+.activity-stats > div {
   display: flex;
-  align-items: center;
-  gap: 1.2rem;
-  padding: 0.8rem 1rem;
-  background: var(--vp-c-bg-mute);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 10px;
-  margin-bottom: 1.4rem;
-}
-
-.stat-item {
-  display: flex;
+  align-items: flex-end;
   flex-direction: column;
+  gap: 0.25rem;
 }
 
-.stat-item.flex-grow {
-  flex-grow: 1;
-}
-
-.stat-num {
-  font-size: 1.25rem;
-  font-weight: 700;
+.activity-stats strong {
   color: var(--vp-c-text-1);
   font-family: var(--vp-font-family-mono);
+  font-size: 1rem;
+  font-weight: 500;
 }
 
-.stat-num.date-text {
-  font-size: 0.95rem;
+.activity-stats strong.latest-date {
+  font-size: 0.72rem;
+  line-height: 1.55;
 }
 
-.stat-desc {
-  font-size: 0.75rem;
+.activity-stats span {
   color: var(--vp-c-text-3);
-  margin-top: 0.1rem;
+  font-size: 0.62rem;
 }
 
-.truncate-text {
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stat-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--vp-c-divider);
-}
-
-/* 图表滚动容器 */
-.grid-scroll-box {
+.heatmap-scroll {
   overflow-x: auto;
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
 }
 
 .heatmap-chart {
-  min-width: 720px;
+  min-width: 746px;
 }
 
 .months-row {
   display: grid;
-  grid-template-columns: repeat(52, 11px);
+  grid-template-columns: repeat(52, 12px);
   gap: 3px;
-  margin-left: 24px;
-  margin-bottom: 4px;
-  height: 14px;
+  height: 16px;
+  margin: 0 0 4px 25px;
 }
 
-.month-label {
-  font-size: 0.68rem;
+.months-row span {
   color: var(--vp-c-text-3);
+  font-size: 0.62rem;
   white-space: nowrap;
 }
 
 .days-container {
   display: flex;
-  gap: 6px;
+  gap: 7px;
 }
 
 .weekday-labels {
   display: flex;
+  width: 18px;
   flex-direction: column;
   justify-content: space-between;
-  padding: 2px 0;
-  font-size: 0.65rem;
+  padding: 1px 0;
   color: var(--vp-c-text-3);
-  width: 18px;
-  text-align: right;
+  font-size: 0.58rem;
   line-height: 1;
+  text-align: right;
 }
 
 .weeks-grid {
@@ -423,316 +233,101 @@ const monthLabels = computed(() => {
   gap: 3px;
 }
 
-.day-cell {
-  width: 11px;
-  height: 11px;
+.day-cell,
+.heatmap-legend i {
+  width: 12px;
+  height: 12px;
   border-radius: 2px;
-  transition: transform 0.15s ease;
-  cursor: pointer;
+  background: var(--vp-c-bg-soft);
+}
+
+.day-cell {
+  transition: transform 120ms ease;
 }
 
 .day-cell:hover {
-  transform: scale(1.35);
-  z-index: 10;
-  outline: 1.5px solid var(--vp-c-text-1);
-}
-
-.day-cell.is-future {
-  opacity: 0.2;
-  cursor: default;
+  outline: 1px solid var(--vp-c-text-2);
+  outline-offset: 1px;
+  transform: scale(1.15);
 }
 
 .day-cell.is-today {
-  outline: 1.5px solid var(--vp-c-brand-1);
+  outline: 1px solid var(--vp-c-brand-1);
   outline-offset: 1px;
 }
 
-/* ========================================================
-   三套自研专属配色系统 (非 GitHub 绿)
-   ======================================================== */
+.day-cell.is-future {
+  opacity: 0.25;
+}
 
-/* 1. 极光紫绀系 (Indigo / Violet) */
-.theme-indigo .level-0 { background: #e2e8f0; }
-.theme-indigo .level-1 { background: #c7d2fe; }
-.theme-indigo .level-2 { background: #818cf8; }
-.theme-indigo .level-3 { background: #6366f1; }
-.theme-indigo .level-4 { background: #4338ca; box-shadow: 0 0 6px rgba(99, 102, 241, 0.4); }
+.level-0 { background: #edefeb; }
+.level-1 { background: #c9dcd2; }
+.level-2 { background: #91b5a3; }
+.level-3 { background: #568773; }
+.level-4 { background: #2f6251; }
 
-:root.dark .theme-indigo .level-0 { background: #1e2230; }
-:root.dark .theme-indigo .level-1 { background: #312e81; }
-:root.dark .theme-indigo .level-2 { background: #4338ca; }
-:root.dark .theme-indigo .level-3 { background: #6366f1; }
-:root.dark .theme-indigo .level-4 { background: #818cf8; box-shadow: 0 0 6px rgba(129, 140, 248, 0.6); }
+:global(.dark) .level-0 { background: #252a27; }
+:global(.dark) .level-1 { background: #30493d; }
+:global(.dark) .level-2 { background: #426b57; }
+:global(.dark) .level-3 { background: #64947c; }
+:global(.dark) .level-4 { background: #9ac2ac; }
 
-/* 2. 深海蔚蓝系 (Sapphire / Cyan) */
-.theme-cyan .level-0 { background: #e2e8f0; }
-.theme-cyan .level-1 { background: #bae6fd; }
-.theme-cyan .level-2 { background: #38bdf8; }
-.theme-cyan .level-3 { background: #0284c7; }
-.theme-cyan .level-4 { background: #0369a1; box-shadow: 0 0 6px rgba(2, 132, 199, 0.4); }
-
-:root.dark .theme-cyan .level-0 { background: #182230; }
-:root.dark .theme-cyan .level-1 { background: #075985; }
-:root.dark .theme-cyan .level-2 { background: #0284c7; }
-:root.dark .theme-cyan .level-3 { background: #38bdf8; }
-:root.dark .theme-cyan .level-4 { background: #7dd3fc; box-shadow: 0 0 6px rgba(56, 189, 248, 0.6); }
-
-/* 3. 熔岩暖金系 (Lava Amber) */
-.theme-amber .level-0 { background: #e2e8f0; }
-.theme-amber .level-1 { background: #fde68a; }
-.theme-amber .level-2 { background: #fbbf24; }
-.theme-amber .level-3 { background: #f59e0b; }
-.theme-amber .level-4 { background: #d97706; box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
-
-:root.dark .theme-amber .level-0 { background: #26201b; }
-:root.dark .theme-amber .level-1 { background: #78350f; }
-:root.dark .theme-amber .level-2 { background: #b45309; }
-:root.dark .theme-amber .level-3 { background: #f59e0b; }
-:root.dark .theme-amber .level-4 { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.6); }
-
-/* 底部图例与气泡 */
 .heatmap-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   margin-top: 1rem;
-  padding-top: 0.8rem;
-  border-top: 1px dashed var(--vp-c-divider);
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.hover-info {
-  font-size: 0.82rem;
-  color: var(--vp-c-text-2);
-}
-
-.active-text strong {
-  color: var(--vp-c-brand-1);
-}
-
-.empty-text {
   color: var(--vp-c-text-3);
+  font-size: 0.62rem;
 }
 
-.tip-placeholder {
-  font-size: 0.78rem;
-  color: var(--vp-c-text-3);
+.hover-detail {
+  min-height: 1rem;
 }
 
-.legend-box {
+.heatmap-legend {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
-.legend-text {
-  font-size: 0.72rem;
-  color: var(--vp-c-text-3);
-  margin: 0 4px;
-}
-
-.legend-cell {
+.heatmap-legend i {
+  display: block;
   width: 10px;
   height: 10px;
-  border-radius: 2px;
 }
 
-/* Editorial Lab：更安静的数据面板 */
-.repo-heatmap-card {
-  padding: 1.6rem;
-  border-color: var(--vp-c-divider);
-  border-radius: 16px;
-  background: var(--vp-c-bg);
-  box-shadow: none;
+.heatmap-legend span {
+  margin: 0 3px;
 }
 
-.heatmap-header {
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.title-row {
-  gap: 0.55rem;
-}
-
-.pulse-dot,
-.theme-cyan .pulse-dot,
-.theme-amber .pulse-dot {
-  width: 6px;
-  height: 6px;
-  animation: none;
-  box-shadow: none;
-}
-
-.heatmap-title {
-  font-size: 0.98rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.heatmap-subtitle {
-  margin-top: 0.4rem;
-  font-size: 0.74rem;
-}
-
-.theme-picker {
-  gap: 0.2rem;
-  padding: 0.2rem;
-  border-color: var(--vp-c-divider);
-  border-radius: 9px;
-  background: var(--vp-c-bg-soft);
-}
-
-.picker-label {
-  padding-left: 0.45rem;
-  font-size: 0.68rem;
-}
-
-.theme-btn {
-  padding: 0.25rem 0.45rem;
-  border-radius: 6px;
-  font-size: 0.68rem;
-}
-
-.theme-btn.active {
-  border-color: var(--vp-c-divider);
-  background: var(--vp-c-bg);
-  box-shadow: var(--vp-shadow-1);
-}
-
-.color-dot {
-  width: 6px;
-  height: 6px;
-}
-
-.stats-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(0, 1.6fr);
-  gap: 0;
-  margin-bottom: 1.5rem;
-  padding: 0 0 1.4rem;
-  border: 0;
-  border-bottom: 1px solid var(--vp-c-divider);
-  border-radius: 0;
-  background: transparent;
-}
-
-.stat-item {
-  padding: 0 1.4rem;
-  border-right: 1px solid var(--vp-c-divider);
-}
-
-.stat-item:first-child {
-  padding-left: 0;
-}
-
-.stat-item:last-child {
-  padding-right: 0;
-  border-right: 0;
-}
-
-.stat-divider {
-  display: none;
-}
-
-.stat-num {
-  font-size: 1.65rem;
-  font-weight: 550;
-  letter-spacing: -0.05em;
-  line-height: 1.25;
-}
-
-.stat-num.date-text {
-  overflow: hidden;
-  font-size: 0.9rem;
-  letter-spacing: -0.02em;
-  line-height: 2.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stat-desc {
-  margin-top: 0.35rem;
-  font-size: 0.7rem;
-}
-
-.truncate-text {
-  display: block;
-  max-width: 100%;
-}
-
-.months-row {
-  grid-template-columns: repeat(52, 12px);
-}
-
-.day-cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-}
-
-.day-cell:hover {
-  outline-width: 1px;
-  transform: scale(1.2);
-}
-
-.theme-indigo .level-4,
-.theme-cyan .level-4,
-.theme-amber .level-4,
-:root.dark .theme-indigo .level-4,
-:root.dark .theme-cyan .level-4,
-:root.dark .theme-amber .level-4 {
-  box-shadow: none;
-}
-
-.heatmap-footer {
-  margin-top: 1.2rem;
-  padding-top: 1rem;
-  border-top-style: solid;
-}
-
-.hover-info,
-.tip-placeholder,
-.legend-text {
-  font-size: 0.7rem;
-}
-
-.legend-cell {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-}
-
-@media (max-width: 640px) {
-  .repo-heatmap-card {
-    padding: 1.1rem;
+@media (max-width: 720px) {
+  .activity-panel {
+    padding: 1.2rem;
   }
 
-  .heatmap-header {
+  .activity-header {
     align-items: flex-start;
     flex-direction: column;
+    gap: 1.3rem;
+    margin-bottom: 1.5rem;
   }
 
-  .theme-picker {
-    max-width: 100%;
-    overflow-x: auto;
+  .activity-stats {
+    width: 100%;
+    justify-content: space-between;
+    gap: 1rem;
   }
 
-  .stats-row {
-    grid-template-columns: 1fr 1fr;
-    row-gap: 1.2rem;
+  .activity-stats > div {
+    align-items: flex-start;
   }
+}
 
-  .stat-item:nth-child(3) {
-    padding-right: 0;
-    border-right: 0;
-  }
-
-  .stat-item.flex-grow {
-    grid-column: 1 / -1;
-    padding: 1rem 0 0;
-    border-top: 1px solid var(--vp-c-divider);
+@media (prefers-reduced-motion: reduce) {
+  .day-cell {
+    transition: none;
   }
 }
 </style>

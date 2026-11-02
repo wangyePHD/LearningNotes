@@ -22,8 +22,8 @@ export const TYPE_LABEL = {
 }
 
 export const STATUS_LABEL = {
-  draft: '📋 目录已建',
-  reading: '🔄 精读中',
-  done: '🟢 已完结',
-  ongoing: '🟢 持续建设中',
+  draft: '目录已建',
+  reading: '精读中',
+  done: '已完结',
+  ongoing: '持续更新',
 }

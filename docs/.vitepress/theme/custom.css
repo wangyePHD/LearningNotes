@@ -1,13 +1,13 @@
 /* ============================================================================
  * AlgoNotes · Editorial Lab
- * 暖白纸面、石墨文字与克制靛蓝。只覆盖视觉，不改变笔记内容与数据结构。
+ * 暖白纸面、石墨文字与克制墨绿。只覆盖视觉，不改变笔记内容与数据结构。
  * ========================================================================= */
 
 :root {
-  --vp-c-brand-1: #505aa8;
-  --vp-c-brand-2: #626cb4;
-  --vp-c-brand-3: #414a91;
-  --vp-c-brand-soft: rgba(80, 90, 168, 0.09);
+  --vp-c-brand-1: #2f6b57;
+  --vp-c-brand-2: #477e69;
+  --vp-c-brand-3: #245341;
+  --vp-c-brand-soft: rgba(47, 107, 87, 0.09);
 
   --vp-c-bg: #fbfbf9;
   --vp-c-bg-alt: #f7f7f4;
@@ -29,10 +29,10 @@
   --vp-c-tip-2: #3d6955;
   --vp-c-tip-3: #315744;
   --vp-c-tip-soft: #edf4ef;
-  --vp-c-note-1: #505aa8;
-  --vp-c-note-2: #626cb4;
-  --vp-c-note-3: #414a91;
-  --vp-c-note-soft: #eff0f7;
+  --vp-c-note-1: #2f6b57;
+  --vp-c-note-2: #477e69;
+  --vp-c-note-3: #245341;
+  --vp-c-note-soft: #edf2ee;
   --vp-c-info-1: #567489;
   --vp-c-info-soft: #edf2f4;
   --vp-c-warning-1: #98723c;
@@ -53,8 +53,9 @@
     "Microsoft YaHei", "Segoe UI", sans-serif;
   --vp-font-family-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas,
     "Liberation Mono", monospace;
-  --editorial-font: "Iowan Old Style", "Palatino Linotype", "Noto Serif SC",
-    "Songti SC", "SimSun", serif;
+  --editorial-font: "Inter", -apple-system, BlinkMacSystemFont,
+    "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Segoe UI", sans-serif;
 
   --vp-shadow-1: 0 1px 2px rgba(31, 32, 29, 0.03);
   --vp-shadow-2: 0 8px 24px rgba(31, 32, 29, 0.05);
@@ -65,18 +66,18 @@
   --editorial-radius: 12px;
   --editorial-radius-lg: 18px;
   --vp-code-block-bg: #191b20;
-  --vp-code-color: #505aa8;
-  --vp-code-bg: #efeff5;
+  --vp-code-color: #2f6b57;
+  --vp-code-bg: #edf2ee;
   --vp-code-line-number-color: #696d7a;
   --vp-layout-max-width: 1440px;
   --vp-sidebar-width: 280px;
 }
 
 .dark {
-  --vp-c-brand-1: #a7afe2;
-  --vp-c-brand-2: #bbc1ea;
-  --vp-c-brand-3: #9099d2;
-  --vp-c-brand-soft: rgba(167, 175, 226, 0.11);
+  --vp-c-brand-1: #9bc7b4;
+  --vp-c-brand-2: #b2d4c3;
+  --vp-c-brand-3: #7faf99;
+  --vp-c-brand-soft: rgba(155, 199, 180, 0.11);
   --vp-c-bg: #151614;
   --vp-c-bg-alt: #181916;
   --vp-c-bg-soft: #1d1e1b;
@@ -95,10 +96,10 @@
   --vp-c-tip-2: #9ac4aa;
   --vp-c-tip-3: #a8d0b6;
   --vp-c-tip-soft: #1c2921;
-  --vp-c-note-1: #a7afe2;
-  --vp-c-note-2: #bbc1ea;
-  --vp-c-note-3: #9099d2;
-  --vp-c-note-soft: #232533;
+  --vp-c-note-1: #9bc7b4;
+  --vp-c-note-2: #b2d4c3;
+  --vp-c-note-3: #7faf99;
+  --vp-c-note-soft: #202923;
   --vp-c-warning-1: #c7a36f;
   --vp-c-warning-2: #d4b582;
   --vp-c-warning-3: #dec493;
@@ -112,8 +113,8 @@
   --vp-c-caution-1: #ce8c8c;
   --vp-c-caution-soft: #302020;
   --vp-code-block-bg: #101114;
-  --vp-code-color: #b2bae8;
-  --vp-code-bg: #252733;
+  --vp-code-color: #9bc7b4;
+  --vp-code-bg: #222a25;
   --vp-code-line-number-color: #5d606b;
   --vp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18);
   --vp-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.2);
@@ -130,7 +131,7 @@ body {
 }
 
 ::selection {
-  background: rgba(80, 90, 168, 0.18);
+  background: rgba(47, 107, 87, 0.2);
 }
 
 :focus-visible {
@@ -161,7 +162,7 @@ body {
 .VPNavBar .logo {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: 50%;
 }
 
 .VPNavBarMenuLink,
@@ -322,8 +323,8 @@ body {
   margin-bottom: 1.5rem;
   font-family: var(--editorial-font);
   font-size: clamp(1.85rem, 3.2vw, 2.5rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-weight: 650;
+  letter-spacing: -0.035em;
   line-height: 1.3;
 }
 

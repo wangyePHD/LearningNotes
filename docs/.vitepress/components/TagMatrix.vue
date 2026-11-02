@@ -1,503 +1,275 @@
-<template>
-  <div class="tag-matrix-container">
-    <div class="matrix-header">
-      <p class="matrix-desc">
-        打破传统文件夹目录的物理隔离，通过<strong>多维技术标签</strong>穿透视频、视觉、RL 后训练、偏好模型、LLM、智能体、通用基石与算力基建，发掘跨模态的技术交点与研究启发。
-      </p>
-    </div>
-
-    <!-- 标签过滤器面板 -->
-    <div class="tags-filter-panel">
-      <div class="panel-top">
-        <span class="filter-label">标签快速穿透（共 {{ allTags.length }} 个标签，{{ notesList.length }} 篇笔记）</span>
-        <button v-if="selectedTag" class="clear-btn" @click="selectedTag = ''">
-          清除筛选 (查看全部)
-        </button>
-      </div>
-
-      <div class="tags-cloud">
-        <button 
-          class="tag-pill" 
-          :class="{ active: selectedTag === '' }"
-          @click="selectedTag = ''"
-        >
-          全部 ({{ notesList.length }})
-        </button>
-        <button 
-          v-for="tag in allTags" 
-          :key="tag.name"
-          class="tag-pill"
-          :class="{ active: selectedTag === tag.name }"
-          @click="selectedTag = tag.name"
-        >
-          #{{ tag.name }} <span class="tag-count">{{ tag.count }}</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 筛选结果列表 -->
-    <div class="results-container">
-      <div class="results-header">
-        <h4>
-          {{ selectedTag ? `包含标签 #${selectedTag} 的笔记` : '全部穿透检索结果' }}
-          <span class="results-count">({{ filteredNotes.length }} 篇)</span>
-        </h4>
-      </div>
-
-      <div class="notes-grid">
-        <div v-for="note in filteredNotes" :key="note.url" class="note-card">
-          <div class="note-card-top">
-            <span class="domain-badge" :class="note.domainClass">{{ note.domain }}</span>
-            <span class="note-date">{{ note.date }}</span>
-          </div>
-
-          <h3 class="note-title">
-            <a :href="withBase(note.url)">{{ note.title }}</a>
-          </h3>
-
-          <p class="note-summary">{{ note.summary }}</p>
-
-          <div class="note-tags">
-            <span 
-              v-for="t in note.tags" 
-              :key="t" 
-              class="mini-tag"
-              :class="{ highlighted: selectedTag === t }"
-              @click.stop="selectedTag = t"
-            >
-              #{{ t }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { withBase } from 'vitepress'
 import { data as notes } from '../data/notes.data.ts'
 
 const selectedTag = ref('')
 
-// 笔记列表由 frontmatter 生成（见 docs/.vitepress/lib/notes.mjs）
-const notesList = ref(notes)
-
-// 提取所有标签与频次
 const allTags = computed(() => {
-  const map = {}
-  notesList.value.forEach(item => {
-    item.tags.forEach(t => {
-      map[t] = (map[t] || 0) + 1
-    })
+  const counts = {}
+  notes.forEach(note => {
+    note.tags.forEach(tag => { counts[tag] = (counts[tag] || 0) + 1 })
   })
-  return Object.keys(map)
-    .sort((a, b) => map[b] - map[a])
-    .map(key => ({ name: key, count: map[key] }))
+  return Object.keys(counts)
+    .sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))
+    .map(name => ({ name, count: counts[name] }))
 })
 
-// 筛选笔记
-const filteredNotes = computed(() => {
-  if (!selectedTag.value) return notesList.value
-  return notesList.value.filter(item => item.tags.includes(selectedTag.value))
-})
+const filteredNotes = computed(() => selectedTag.value
+  ? notes.filter(note => note.tags.includes(selectedTag.value))
+  : notes
+)
 </script>
 
+<template>
+  <div class="tag-browser">
+    <p class="tag-intro">按技术标签跨目录检索，找到不同研究领域之间的关联。</p>
+
+    <section class="tag-filters" aria-label="标签筛选">
+      <div class="filter-heading">
+        <span>筛选标签</span>
+        <span>{{ allTags.length }} 个标签 · {{ notes.length }} 篇笔记</span>
+      </div>
+      <div class="tags-cloud">
+        <button class="tag-pill" :class="{ active: selectedTag === '' }" :aria-pressed="selectedTag === ''" @click="selectedTag = ''">
+          全部 <span>{{ notes.length }}</span>
+        </button>
+        <button
+          v-for="tag in allTags"
+          :key="tag.name"
+          class="tag-pill"
+          :class="{ active: selectedTag === tag.name }"
+          :aria-pressed="selectedTag === tag.name"
+          @click="selectedTag = tag.name"
+        >
+          {{ tag.name }} <span>{{ tag.count }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="tag-results" aria-live="polite">
+      <div class="results-heading">
+        <h2>{{ selectedTag ? selectedTag : '全部笔记' }}</h2>
+        <span>{{ filteredNotes.length }} 篇</span>
+      </div>
+
+      <div class="result-list">
+        <article v-for="note in filteredNotes" :key="note.url" class="result-item">
+          <div class="result-meta">
+            <span>{{ note.domain }}</span>
+            <time :datetime="note.date">{{ note.date }}</time>
+          </div>
+          <h3><a :href="withBase(note.url)">{{ note.title }}</a></h3>
+          <p>{{ note.summary }}</p>
+          <div class="result-tags">
+            <button
+              v-for="tag in note.tags"
+              :key="tag"
+              :class="{ active: selectedTag === tag }"
+              :aria-label="`筛选标签 ${tag}`"
+              @click="selectedTag = tag"
+            >
+              #{{ tag }}
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+  </div>
+</template>
+
 <style scoped>
-.tag-matrix-container {
-  max-width: 1000px;
+.tag-browser {
+  max-width: 960px;
   margin: 0 auto;
-  padding: 1rem 0 3rem 0;
+  padding: 0.5rem 0 3rem;
 }
 
-.matrix-header {
-  margin-bottom: 1.5rem;
-}
-
-.matrix-desc {
-  font-size: 0.95rem;
+.tag-intro {
+  max-width: 650px;
+  margin: 0 0 2.5rem;
   color: var(--vp-c-text-2);
-  line-height: 1.6;
+  font-size: 0.9rem;
+  line-height: 1.8;
 }
 
-/* 标签云面板 */
-.tags-filter-panel {
-  background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 14px;
-  padding: 1.2rem 1.4rem;
-  margin-bottom: 2rem;
+.tag-filters {
+  padding: 1.3rem 0 1.5rem;
+  border-top: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 
-.panel-top {
+.filter-heading,
+.results-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
+}
+
+.filter-heading {
   margin-bottom: 1rem;
 }
 
-.filter-label {
-  font-size: 0.9rem;
-  font-weight: 600;
+.filter-heading > span:first-child {
   color: var(--vp-c-text-1);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
-.clear-btn {
-  font-size: 0.8rem;
-  color: var(--vp-c-brand-1);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.clear-btn:hover {
-  text-decoration: underline;
+.filter-heading > span:last-child,
+.results-heading > span {
+  color: var(--vp-c-text-3);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.65rem;
 }
 
 .tags-cloud {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
 .tag-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  background: var(--vp-c-bg-mute);
-  color: var(--vp-c-text-2);
-  border: 1px solid var(--vp-c-divider);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tag-pill:hover {
-  border-color: var(--vp-c-brand-1);
-  color: var(--vp-c-brand-1);
-  transform: translateY(-1px);
-}
-
-.tag-pill.active {
-  background: var(--vp-c-brand-1);
-  color: #ffffff;
-  border-color: var(--vp-c-brand-1);
-  font-weight: 600;
-}
-
-.tag-pill.active .tag-count {
-  background: rgba(255, 255, 255, 0.25);
-  color: #ffffff;
-}
-
-.tag-count {
-  font-size: 0.72rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 999px;
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-3);
-}
-
-/* 结果区 */
-.results-header {
-  margin-bottom: 1rem;
-}
-
-.results-header h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--vp-c-text-1);
-}
-
-.results-count {
-  font-size: 0.85rem;
-  color: var(--vp-c-text-3);
-  font-weight: normal;
-}
-
-.notes-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.1rem;
-}
-
-@media (max-width: 768px) {
-  .notes-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.note-card {
-  background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  padding: 1.2rem;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.2s ease;
-}
-
-.note-card:hover {
-  border-color: var(--vp-c-brand-1);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-}
-
-.note-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.domain-badge {
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.15rem 0.5rem;
-  border-radius: 6px;
-}
-
-.domain-video { background: rgba(255, 112, 67, 0.15); color: #ff7043; }
-.domain-vision { background: rgba(38, 166, 154, 0.15); color: #26a69a; }
-.domain-llm { background: rgba(142, 68, 173, 0.15); color: #9c27b0; }
-.domain-multi { background: rgba(66, 165, 245, 0.15); color: #1e88e5; }
-.domain-rl { background: rgba(156, 39, 176, 0.15); color: #8e24aa; }
-.domain-pm { background: rgba(230, 74, 25, 0.15); color: #e64a19; }
-.domain-rh { background: rgba(211, 47, 47, 0.15); color: #d32f2f; }
-.domain-agent { background: rgba(0, 176, 255, 0.15); color: #039be5; }
-.domain-foundations { background: rgba(255, 179, 0, 0.18); color: #f57f17; }
-.domain-infra { background: rgba(76, 175, 80, 0.15); color: #43a047; }
-.domain-projects { background: rgba(100, 116, 139, 0.15); color: #64748b; }
-.domain-ideas { background: rgba(255, 193, 7, 0.18); color: #ff8f00; }
-.domain-log { background: rgba(120, 144, 156, 0.15); color: #607d8b; }
-
-.note-date {
-  font-size: 0.75rem;
-  color: var(--vp-c-text-3);
-}
-
-.note-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0.2rem 0 0.5rem 0;
-  line-height: 1.4;
-}
-
-.note-title a {
-  color: var(--vp-c-text-1);
-  text-decoration: none;
-}
-
-.note-title a:hover {
-  color: var(--vp-c-brand-1);
-}
-
-.note-summary {
-  font-size: 0.85rem;
-  color: var(--vp-c-text-2);
-  line-height: 1.5;
-  margin: 0 0 0.8rem 0;
-  flex-grow: 1;
-}
-
-.note-tags {
-  display: flex;
-  flex-wrap: wrap;
   gap: 0.4rem;
-}
-
-.mini-tag {
-  font-size: 0.72rem;
-  padding: 0.12rem 0.4rem;
-  border-radius: 4px;
-  background: var(--vp-c-bg-mute);
-  color: var(--vp-c-text-3);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.mini-tag:hover {
-  color: var(--vp-c-brand-1);
-  background: var(--vp-c-brand-soft);
-}
-
-.mini-tag.highlighted {
-  background: var(--vp-c-brand-soft);
-  color: var(--vp-c-brand-1);
-  font-weight: 600;
-}
-
-/* Editorial Lab：统一筛选器与知识卡片 */
-.tag-matrix-container {
-  max-width: 1080px;
-  padding-top: 0.5rem;
-}
-
-.matrix-header {
-  margin-bottom: 2rem;
-}
-
-.matrix-desc {
-  max-width: 760px;
-  color: var(--vp-c-text-2);
-  font-size: 0.9rem;
-  line-height: 1.85;
-}
-
-.tags-filter-panel {
-  margin-bottom: 2.5rem;
-  padding: 1.4rem;
-  border-color: var(--vp-c-divider);
-  border-radius: 14px;
-  background: var(--vp-c-bg);
-}
-
-.panel-top {
-  margin-bottom: 1.2rem;
-}
-
-.filter-label {
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.clear-btn {
-  font-size: 0.74rem;
-}
-
-.tags-cloud {
-  gap: 0.45rem;
-}
-
-.tag-pill {
-  padding: 0.32rem 0.65rem;
-  border-color: transparent;
-  border-radius: 7px;
+  padding: 0.34rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: var(--vp-c-bg-soft);
-  font-size: 0.76rem;
-  transition: color 160ms ease, background 160ms ease;
+  color: var(--vp-c-text-2);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.tag-pill span {
+  color: var(--vp-c-text-3);
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.6rem;
 }
 
 .tag-pill:hover {
-  border-color: transparent;
   background: var(--vp-c-bg-mute);
   color: var(--vp-c-text-1);
-  transform: none;
 }
 
 .tag-pill.active {
   border-color: var(--vp-c-brand-1);
   background: var(--vp-c-brand-1);
-  font-weight: 550;
+  color: #fff;
 }
 
-.tag-count {
-  background: transparent;
-  font-family: var(--vp-font-family-mono);
-  font-size: 0.65rem;
+.tag-pill.active span {
+  color: inherit;
   opacity: 0.75;
 }
 
-.results-header {
-  margin-bottom: 1.3rem;
-  padding-bottom: 0.9rem;
+.tag-results {
+  margin-top: 3rem;
+}
+
+.results-heading {
+  margin-bottom: 1.2rem;
+}
+
+.results-heading h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.2rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.result-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 2.5rem;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.result-item {
+  min-width: 0;
+  padding: 1.4rem 0 1.5rem;
   border-bottom: 1px solid var(--vp-c-divider);
 }
 
-.results-header h4 {
-  font-size: 1rem;
-  font-weight: 650;
+.result-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--vp-c-text-3);
+  font-size: 0.65rem;
 }
 
-.results-count {
-  font-size: 0.75rem;
-}
-
-.notes-grid {
-  gap: 0.9rem;
-}
-
-.note-card {
-  min-height: 210px;
-  padding: 1.35rem;
-  border-color: var(--vp-c-divider);
-  border-radius: 12px;
-  background: var(--vp-c-bg);
-  transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-
-.note-card:hover {
-  border-color: var(--vp-c-brand-2);
-  box-shadow: var(--vp-shadow-2);
-}
-
-.note-card-top {
-  margin-bottom: 1rem;
-}
-
-.domain-badge,
-.domain-video,
-.domain-vision,
-.domain-llm,
-.domain-multi,
-.domain-rl,
-.domain-pm,
-.domain-rh,
-.domain-agent,
-.domain-foundations,
-.domain-infra,
-.domain-projects,
-.domain-ideas,
-.domain-log {
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--vp-c-brand-1);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
-.note-date {
+.result-meta time {
+  flex-shrink: 0;
   font-family: var(--vp-font-family-mono);
-  font-size: 0.66rem;
 }
 
-.note-title {
-  margin-bottom: 0.65rem;
-  font-size: 1rem;
+.result-item h3 {
+  margin: 0.75rem 0 0.55rem;
+  font-size: 0.94rem;
   font-weight: 620;
   line-height: 1.55;
 }
 
-.note-summary {
+.result-item h3 a {
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+}
+
+.result-item h3 a:hover {
+  color: var(--vp-c-brand-1);
+}
+
+.result-item > p {
   display: -webkit-box;
+  margin: 0;
   overflow: hidden;
-  font-size: 0.78rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.75rem;
   line-height: 1.75;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 
-.note-tags {
-  gap: 0.35rem 0.65rem;
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.9rem;
 }
 
-.mini-tag {
+.result-tags button {
   padding: 0;
-  border-radius: 0;
+  border: 0;
   background: transparent;
-  font-size: 0.68rem;
+  color: var(--vp-c-text-3);
+  font-size: 0.65rem;
+  cursor: pointer;
 }
 
-.mini-tag:hover,
-.mini-tag.highlighted {
-  background: transparent;
+.result-tags button:hover,
+.result-tags button.active {
   color: var(--vp-c-brand-1);
-  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .result-list {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-results {
+    margin-top: 2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag-pill {
+    transition: none;
+  }
 }
 </style>
