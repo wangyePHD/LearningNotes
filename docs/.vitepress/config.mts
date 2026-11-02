@@ -3,36 +3,36 @@ import { buildSidebar, collectNotes } from './lib/notes.mjs'
 
 // 板块结构：侧边栏的标题与概览页文字。笔记条目由 frontmatter 自动生成，这里不用手动登记。
 const sections = [
-  { dir: 'domains/video', title: '视频生成与理解', overview: '板块概览' },
+  { dir: 'domains/video', title: '🎬 视频生成与理解', overview: '领域概览与路线图' },
   {
     dir: 'domains/vision',
-    title: '图像与计算机视觉',
-    overview: '板块概览',
+    title: '🖼️ 图像与计算机视觉',
+    overview: '领域概览与路线图',
     subgroups: {
-      'caption-efficiency': 'Caption 与效率',
-      'datasets': 'AIGC 数据集',
-      'image-rl-posttraining': '图像基模 RL 后训练',
+      'caption-efficiency': '📝 Caption 与效率专题',
+      'datasets': '🗂️ AIGC 数据集专题',
+      'image-rl-posttraining': '🖼️ 图像基模 RL 后训练',
     },
   },
-  { dir: 'domains/llm', title: '语言模型与推理', overview: '板块概览' },
-  { dir: 'domains/multimodal', title: '多模态与跨模态对齐', overview: '板块概览' },
+  { dir: 'domains/llm', title: '💬 语言模型与推理思考', overview: '领域概览与路线图' },
+  { dir: 'domains/multimodal', title: '🎙️ 多模态与跨模态对齐', overview: '领域概览与路线图' },
   {
     dir: 'domains/rl-aigc',
-    title: 'AIGC 强化学习后训练',
-    overview: '板块概览与收录标准',
+    title: '🎲 AIGC 强化学习后训练',
+    overview: '专区概览与收录标准',
     subgroups: {
-      'preference-model': '偏好模型',
-      'reward-hacking': 'Reward Hacking',
-      'dpo': 'DPO',
+      'preference-model': '🏅 偏好模型子专题',
+      'reward-hacking': '🚨 Reward Hacking 子专题',
+      'dpo': '🎯 DPO 子专题',
     },
   },
-  { dir: 'domains/agent', title: '智能体与工具编排', overview: '板块概览与学习路线' },
-  { dir: 'foundations', title: '通用理论基石', overview: '板块概览' },
-  { dir: 'infra', title: '算力与系统工程', overview: '板块概览' },
-  { dir: 'projects', title: '复现与落地项目', overview: '项目概览' },
-  { dir: 'ideas', title: '科研灵感', overview: '灵感池概览' },
-  { dir: 'daily-arxiv', title: '每日 arXiv', overview: '每日速览索引' },
-  { dir: 'reviews', title: '研习复盘', overview: '复盘归档' },
+  { dir: 'domains/agent', title: '🤖 智能体系统与工具编排', overview: '领域概览与 12 课路线图' },
+  { dir: 'foundations', title: '📐 通用理论基石', overview: '基石模块概览' },
+  { dir: 'infra', title: '⚡ 算力与系统工程', overview: '工程基建概览' },
+  { dir: 'projects', title: '🚀 个人复现与落地项目', overview: '项目概览与看板' },
+  { dir: 'ideas', title: '💡 科研灵感空间', overview: '科研 Idea 灵感池' },
+  { dir: 'daily-arxiv', title: '📥 每日 arXiv 速览', overview: '每日速览索引与用法' },
+  { dir: 'reviews', title: '📅 研习复盘与时光机', overview: '周报时光机总览' },
 ]
 
 export default defineConfig({
@@ -49,7 +49,7 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/avatar.jpeg',
-    siteTitle: 'AlgoNotes',
+    siteTitle: 'AlgoNotes | Ye Wang',
 
     // 全局本地离线毫秒级搜索
     search: {
@@ -80,39 +80,40 @@ export default defineConfig({
     // 顶部导航栏（仪表盘通过左上角 logo 进入）
     nav: [
       {
-        text: '研究领域',
+        text: '📚 研究领域',
         items: [
-          { text: '视频生成与理解', link: '/domains/video/' },
-          { text: '图像与计算机视觉', link: '/domains/vision/' },
-          { text: '语言模型与推理', link: '/domains/llm/' },
-          { text: '多模态与跨模态对齐', link: '/domains/multimodal/' },
-          { text: 'AIGC 强化学习后训练', link: '/domains/rl-aigc/' },
-          { text: '智能体与工具编排', link: '/domains/agent/' }
+          { text: '🎬 视频模型 (Video Intelligence)', link: '/domains/video/' },
+          { text: '🖼️ 图像与视觉 (CV & Image)', link: '/domains/vision/' },
+          { text: '💬 语言与推理 (LLM & Reasoning)', link: '/domains/llm/' },
+          { text: '🎙️ 多模态与语音 (Multimodal)', link: '/domains/multimodal/' },
+          { text: '🎲 AIGC 强化学习 (RL for AIGC)', link: '/domains/rl-aigc/' },
+          { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' }
         ]
       },
       {
-        text: '基石与工程',
+        text: '🧱 基石与工程',
         items: [
-          { text: '通用理论基石', link: '/foundations/' },
-          { text: '算力与系统工程', link: '/infra/' }
+          { text: '📐 通用基石', link: '/foundations/' },
+          { text: '⚡ 算力与工程', link: '/infra/' }
         ]
       },
       {
-        text: '研习记录',
+        text: '🗓️ 日志',
         items: [
-          { text: '每日 arXiv', link: '/daily-arxiv/' },
-          { text: '研习复盘', link: '/reviews/' },
-          { text: '研习白板', link: '/whiteboard/' }
+          { text: '📥 每日 arXiv', link: '/daily-arxiv/' },
+          { text: '📅 研习复盘', link: '/reviews/' },
+          { text: '🧪 研习白板', link: '/whiteboard/' }
         ]
       },
       {
-        text: '项目与灵感',
+        text: '💡 灵感与项目',
         items: [
-          { text: '复现与落地项目', link: '/projects/' },
-          { text: '科研灵感', link: '/ideas/' }
+          { text: '💡 Idea 池', link: '/ideas/' },
+          { text: '🚀 实战项目', link: '/projects/' }
         ]
       },
-      { text: '标签', link: '/tags/' }
+      { text: '🏷️ 知识标签', link: '/tags/' },
+      { text: '📖 使用指南', link: '/guide/' }
     ],
 
     socialLinks: [
@@ -124,7 +125,7 @@ export default defineConfig({
 
     outline: {
       level: [2, 3],
-      label: '本页目录'
+      label: '本页大纲'
     },
     docFooter: {
       prev: '上一篇',
@@ -133,7 +134,8 @@ export default defineConfig({
     lastUpdated: {
       text: '最后更新于',
       formatOptions: {
-        dateStyle: 'medium'
+        dateStyle: 'short',
+        timeStyle: 'short'
       }
     }
   }

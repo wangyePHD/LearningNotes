@@ -85,29 +85,29 @@ const statDate = file => new Date(statSync(file).mtimeMs).toISOString().slice(0,
 
 // 目录 -> 站内显示的领域名与徽章样式。more specific 的前缀要排在前面。
 const DOMAIN_RULES = [
-  ['domains/video', '视频模型', 'domain-video'],
-  ['domains/vision', '图像视觉', 'domain-vision'],
-  ['domains/llm', '语言与推理', 'domain-llm'],
-  ['domains/multimodal', '多模态', 'domain-multi'],
-  ['domains/rl-aigc/preference-model', '偏好模型', 'domain-pm'],
-  ['domains/rl-aigc/reward-hacking', 'Reward Hacking', 'domain-rh'],
-  ['domains/rl-aigc/dpo', 'DPO', 'domain-rl'],
-  ['domains/rl-aigc', 'AIGC RL', 'domain-rl'],
-  ['domains/agent', '智能体', 'domain-agent'],
-  ['foundations', '通用基石', 'domain-foundations'],
-  ['infra', '算力工程', 'domain-infra'],
-  ['projects', '实战项目', 'domain-projects'],
-  ['ideas', '科研灵感', 'domain-ideas'],
-  ['daily-arxiv', '每日 arXiv', 'domain-log'],
-  ['reviews', '研习复盘', 'domain-log'],
-  ['whiteboard', '研习白板', 'domain-log'],
+  ['domains/video', '🎬 视频模型', 'domain-video'],
+  ['domains/vision', '🖼️ 图像视觉', 'domain-vision'],
+  ['domains/llm', '💬 LLM', 'domain-llm'],
+  ['domains/multimodal', '🎙️ 多模态', 'domain-multi'],
+  ['domains/rl-aigc/preference-model', '🏅 偏好模型', 'domain-pm'],
+  ['domains/rl-aigc/reward-hacking', '🚨 Reward Hacking', 'domain-rh'],
+  ['domains/rl-aigc/dpo', '🎯 DPO', 'domain-rl'],
+  ['domains/rl-aigc', '🎲 AIGC RL', 'domain-rl'],
+  ['domains/agent', '🤖 智能体', 'domain-agent'],
+  ['foundations', '📐 通用基石', 'domain-foundations'],
+  ['infra', '⚡ 算力工程', 'domain-infra'],
+  ['projects', '🚀 实战项目', 'domain-projects'],
+  ['ideas', '💡 Idea', 'domain-ideas'],
+  ['daily-arxiv', '📥 每日 arXiv', 'domain-log'],
+  ['reviews', '📅 复盘', 'domain-log'],
+  ['whiteboard', '🧪 白板', 'domain-log'],
 ]
 
 function domainOf(dir) {
   const rule = DOMAIN_RULES.find(([prefix]) => dir === prefix || dir.startsWith(`${prefix}/`))
   return rule
     ? { domain: rule[1], domainClass: rule[2] }
-    : { domain: '其他', domainClass: '' }
+    : { domain: '📄 其他', domainClass: '' }
 }
 
 // 收集所有笔记（docs/ 下除 index.md 以外的 .md）。缺少 frontmatter 或字段不合法时直接报错。
@@ -180,8 +180,6 @@ export function buildSidebar(sections, notes) {
       const subNotes = notes.filter(n => n.dir === `${sec.dir}/${sub}`).sort(byDate)
       groups.push({
         text,
-        collapsible: true,
-        collapsed: true,
         items: [{ text: '专题概览', link: `/${sec.dir}/${sub}/` }, ...subNotes.map(toItem)],
       })
     }
