@@ -448,6 +448,7 @@ const filteredNotes = computed(() => {
 .domain-pm,
 .domain-rh,
 .domain-agent,
+.domain-opd,
 .domain-foundations,
 .domain-infra,
 .domain-projects,
