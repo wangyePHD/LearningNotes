@@ -19,7 +19,7 @@
 
 | 篇目 | 自蒸馏形态 | 归属 |
 | :--- | :--- | :--- |
-| [NLD-Uni](../opd/nld-uni.md) | **AR view（stop-grad）→ Diffusion view** 的 consistency loss，作为 AR teacher → student 的中转桥 | 主体归 OPD 子专题，其 §4.2.2 是本子专题的第一个实例 |
+| [NLD-Uni](/domains/rl-aigc/opd/nld-uni.md) | **AR view（stop-grad）→ Diffusion view** 的 consistency loss，作为 AR teacher → student 的中转桥 | 主体归 OPD 子专题，其 §4.2.2 是本子专题的第一个实例 |
 
 ---
 

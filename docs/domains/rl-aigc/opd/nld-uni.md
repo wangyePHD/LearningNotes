@@ -12,7 +12,7 @@ models: ['NLD-Uni', 'NLD', 'Nemotron-3 Nano Omni', 'Qwen-Image', 'LaViDa-O']
 > **作者**：Shufan Li, Hanrong Ye, Greg Heinrich, Yonggan Fu, Haotian Zhang, Sifei Liu, Aditya Grover, Pavlo Molchanov
 > **机构**：NVIDIA ｜ **发布时间**：2026 年 10 月 27 日
 > **研究方向**：Unified Multimodal Models、Discrete Diffusion Language Models、On-Policy Distillation、Multimodal Understanding and Generation
-> **专题归属**：[🔁 OPD 子专题：跨范式 On-Policy 蒸馏](/domains/distillation/opd/)（本专题第一篇）
+> **专题归属**：[🔁 OPD 子专题：跨范式 On-Policy 蒸馏](/domains/rl-aigc/opd/)（本专题第一篇）
 
 ---
 

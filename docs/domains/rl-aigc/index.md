@@ -2,15 +2,16 @@
 
 > **标签**：`RL` `Reward System` `Rubric` `DiffusionNFT` `Reward Hacking` `Data Pipeline`
 
-本专区聚焦 **扩散 / 流匹配生成模型的后训练阶段**：优化器（NFT / GRPO / DPO）× 奖励体系（Preference RM / Verifiable / Rubric）× Prompt 与标注数据管线 × 评测协议。
+本专区聚焦 **扩散 / 流匹配生成模型的后训练阶段**：优化器（NFT / GRPO / DPO）× 教师监督（OPD / OPSD）× 奖励体系（Preference RM / Verifiable / Rubric）× Prompt 与标注数据管线 × 评测协议。
 
-与 `图像与视觉` 域的分工：本域不讨论基模架构、VAE、蒸馏结构，只讨论**「用什么信号把已经很强的基模继续推上去」**。基模侧论文里的 RL 章节若以奖励体系为主要研究变量，也收录于本域并在原笔记中链回。
+与 `图像与视觉` 域的分工：本域不讨论基模架构、VAE，只讨论**「用什么信号把已经很强的基模继续推上去」**。基模侧论文里的 RL 章节若以奖励体系为主要研究变量，也收录于本域并在原笔记中链回。
 
-本专区下设三个**子专题**：
+本专区下设四个**子专题**：
 
 - 🏅 [偏好模型 (Preference Model)](./preference-model/)——研究 **Reward Model 本身怎么造**（结构、数据、蒸馏、接口）
 - 🚨 [RL Reward Hacking 与分布偏移](./reward-hacking/)——研究 **优化过程里奖励与分布怎么被钻空子**（Goodhart 饱和、mode collapse、hack 检测与防御、分布塌缩）
 - 🎯 [DPO](./dpo/)——研究 **DPO 及其变体的优化器与训练配方**
+- 🔁 [OPD](./opd/)——收录 **OPD / OPSD 相关论文与综述**
 
 ---
 
@@ -19,6 +20,7 @@
 | 判据 | 说明 |
 | :--- | :--- |
 | ✅ 收录 | 奖励体系（多奖励组合 / Rubric / VLM Judge）为主要研究变量 |
+| ✅ 收录 | OPD / OPSD 教师监督的后训练方法与综述（归 `opd/` 子专题） |
 | ✅ 收录 | RL Prompt / Checklist / 偏好对的生产与过滤管线 |
 | ✅ 收录 | Reward Hacking 防御、One-sided Veto、权重空间集成等鲁棒性机制 |
 | ❌ 不收 | 仅提出新 Policy Optimization 算法且奖励为现成单信号的（归 `vision/image-rl-posttraining/` 算法篇） |
@@ -33,6 +35,7 @@
 | **🏅 偏好模型 (Preference Model)** | **打分器本身怎么造**：结构（scalar vs reasoning-based）、pairwise→pointwise 投影、偏好标签转 Reasoning 监督、评测口径 | 🔄 建设中 | [进入子专题 →](./preference-model/) |
 | **🚨 RL Reward Hacking 与分布偏移** | **优化过程里奖励与分布怎么被钻空子**：Goodhart 饱和、mode collapse、具体 hack 形态与检测、veto/信任域/rollout 过滤等防御、分布塌缩与 off-policy 失配 | 🔄 建设中 | [进入子专题 →](./reward-hacking/) |
 | **🎯 DPO** | **DPO 及其变体的优化器与训练配方** | 🔄 建设中 | [进入子专题 →](./dpo/) |
+| **🔁 OPD** | **OPD / OPSD 相关论文与综述** | 🔄 建设中 | [进入子专题 →](./opd/) |
 
 ---
 

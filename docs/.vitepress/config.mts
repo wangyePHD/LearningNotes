@@ -24,6 +24,7 @@ const sections = [
       'preference-model': '🏅 偏好模型子专题',
       'reward-hacking': '🚨 Reward Hacking 子专题',
       'dpo': '🎯 DPO 子专题',
+      'opd': '🔁 OPD 子专题',
     },
   },
   { dir: 'domains/agent', title: '🤖 智能体系统与工具编排', overview: '领域概览与 12 课路线图' },
@@ -32,7 +33,6 @@ const sections = [
     title: '🔁 蒸馏专题：OPD / OPSD',
     overview: '专题概览与收录标准',
     subgroups: {
-      'opd': '🔁 OPD：跨范式 On-Policy 蒸馏',
       'opsd': '🪞 OPSD：On-Policy 自蒸馏',
     },
   },
@@ -96,6 +96,7 @@ export default defineConfig({
           { text: '💬 语言与推理 (LLM & Reasoning)', link: '/domains/llm/' },
           { text: '🎙️ 多模态与语音 (Multimodal)', link: '/domains/multimodal/' },
           { text: '🎲 AIGC 强化学习 (RL for AIGC)', link: '/domains/rl-aigc/' },
+          { text: '🔁 OPD 子专题', link: '/domains/rl-aigc/opd/' },
           { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' },
           { text: '🔁 蒸馏专题 (OPD / OPSD)', link: '/domains/distillation/' }
         ]

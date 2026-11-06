@@ -35,7 +35,7 @@
 
 | 子专题 | 关注问题 | 状态 | 链接 |
 | :--- | :--- | :--- | :--- |
-| **🔁 OPD：跨范式 On-Policy 蒸馏** | 外部强 teacher 与 student 范式不同（AR-VLM / 连续流 → 离散扩散）时，怎么把分布对齐做对：上下文错配、teacher 分数能不能直接拷、refined target 怎么造 | 🔄 建设中 | [进入子专题 →](./opd/) |
+| **🔁 OPD：跨范式 On-Policy 蒸馏** | 外部强 teacher 与 student 范式不同（AR-VLM / 连续流 → 离散扩散）时，怎么把分布对齐做对：上下文错配、teacher 分数能不能直接拷、refined target 怎么造 | 🔄 建设中 | [进入子专题 →](/domains/rl-aigc/opd/) |
 | **🪞 OPSD：On-Policy 自蒸馏** | 没有更强 teacher 时，用同一模型的不同 view / 不同上下文互教：stop-grad 目标、双向 KL、上下文差异如何制造有效监督 | 📋 目录已建 | [进入子专题 →](./opsd/) |
 
 ---
@@ -53,7 +53,7 @@
 1. **OPD 原始工作** —— on-policy 蒸馏在语言模型上的提出与收敛性质（NLD-Uni §2.3 引 [29, 30]）
 2. **M-OPD** —— 多 teacher 设定下合并领域专家能力（[31]）
 3. **Diffusion-OPD** —— 把 OPD 搬到连续流模型的视觉生成任务（[16]）
-4. **OPD-LM** —— AR → DLLM 的同源转换式蒸馏，与本文的最大对照组（[34]，差异见 [NLD-Uni 笔记 §七](./opd/nld-uni.md)）
+4. **OPD-LM** —— AR → DLLM 的同源转换式蒸馏，与本文的最大对照组（[34]，差异见 [NLD-Uni 笔记 §七](/domains/rl-aigc/opd/nld-uni.md)）
 5. **多模态理解侧的 OPD** —— VLM 上用 on-policy 蒸馏提分的两组工作（[32, 33]）
 
 ---
@@ -61,4 +61,4 @@
 ## 关联笔记
 
 - [图像基模 RL 后训练专题](../vision/image-rl-posttraining/) —— 同属“后训练信号”一侧，对照 RL 与蒸馏两种信号来源
-- [NLD-Uni：统一理解与生成的离散扩散模型](./opd/nld-uni.md) —— 本专题第一篇，跨范式 OPD + 渐进自细化扩散
+- [NLD-Uni：统一理解与生成的离散扩散模型](/domains/rl-aigc/opd/nld-uni.md) —— 本专题第一篇，跨范式 OPD + 渐进自细化扩散

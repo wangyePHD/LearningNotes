@@ -32,7 +32,7 @@ On-Policy Distillation 的初衷是消除 **训练分布与推理分布的偏移
 
 ## 论文篇
 
-<NoteList folder="domains/distillation/opd" />
+论文笔记已统一归入后训练下的 [🔁 OPD 子专题](/domains/rl-aigc/opd/)，与 DPO 子专题同级。
 
 ---
 

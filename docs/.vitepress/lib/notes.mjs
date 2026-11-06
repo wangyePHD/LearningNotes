@@ -92,6 +92,7 @@ const DOMAIN_RULES = [
   ['domains/rl-aigc/preference-model', '🏅 偏好模型', 'domain-pm'],
   ['domains/rl-aigc/reward-hacking', '🚨 Reward Hacking', 'domain-rh'],
   ['domains/rl-aigc/dpo', '🎯 DPO', 'domain-rl'],
+  ['domains/rl-aigc/opd', '🔁 OPD', 'domain-opd'],
   ['domains/rl-aigc', '🎲 AIGC RL', 'domain-rl'],
   ['domains/agent', '🤖 智能体', 'domain-agent'],
   ['domains/distillation/opd', '🔁 OPD', 'domain-opd'],
