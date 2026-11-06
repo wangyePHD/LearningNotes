@@ -53,7 +53,11 @@ export default defineConfig({
   // 核心：启用数学公式渲染 (LaTeX KaTeX / MathJax)
   markdown: {
     math: true,
-    lineNumbers: true
+    lineNumbers: true,
+    theme: {
+      light: 'github-light-high-contrast',
+      dark: 'github-dark-high-contrast'
+    }
   },
 
   themeConfig: {

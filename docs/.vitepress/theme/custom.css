@@ -64,7 +64,8 @@
   --editorial-radius-sm: 7px;
   --editorial-radius: 12px;
   --editorial-radius-lg: 18px;
-  --vp-code-block-bg: #191b20;
+  /* 与 Shiki 的浅色高亮配套，避免浅色模式黑字叠黑底。 */
+  --vp-code-block-bg: #f6f8fa;
   --vp-code-color: #505aa8;
   --vp-code-bg: #efeff5;
   --vp-code-line-number-color: #696d7a;
@@ -114,7 +115,7 @@
   --vp-code-block-bg: #101114;
   --vp-code-color: #b2bae8;
   --vp-code-bg: #252733;
-  --vp-code-line-number-color: #5d606b;
+  --vp-code-line-number-color: #9296a3;
   --vp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18);
   --vp-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.2);
   --vp-shadow-3: 0 16px 40px rgba(0, 0, 0, 0.24);
@@ -389,13 +390,13 @@ body {
 /* 代码与公式 */
 .vp-doc div[class*="language-"] {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--vp-c-border);
   border-radius: var(--editorial-radius);
   box-shadow: var(--vp-shadow-1);
 }
 
 .vp-doc div[class*="language-"] .lang {
-  color: #858b9b;
+  color: var(--vp-c-text-2);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
