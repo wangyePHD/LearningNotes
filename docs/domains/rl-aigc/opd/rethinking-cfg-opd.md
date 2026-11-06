@@ -14,12 +14,11 @@ models: ['SD3.5-M', 'FLUX.2-klein-4B', 'Wan2.1-VACE-1.3B']
 
 蒸馏时只对齐 CFG 合成后的速度，正负两个分支的误差可以互相抵消。如果老师的负分支有学生拿不到的信息，学生会把这部分信息藏进「正 − 负」的差值里，靠 γ 放大来补。训练用的 γ 下看着对，换个 γ 就坏。作者提出 PDM：分开对齐正分支和 CFG 方向。
 
-| 项目 | 内容 |
-| --- | --- |
-| 论文 | Rethinking Classifier-Free Guidance in On-Policy Diffusion Distillation，arXiv 2607.24731，2026-07 |
-| 作者 | Bingnan Li 等，Qwen Business Unit of Alibaba |
-| 代码 | 本地：`/gpfs/wy/Projects/SeFi-Image-5B/DPO/refs/Rethinking-CFG-OPD-main.zip` |
-| 关键词 | OPD、CFG、负分支不对称（NBA）、PDM |
+- 论文：Rethinking Classifier-Free Guidance in On-Policy Diffusion Distillation，arXiv 2607.24731，2026-07
+- 作者：Bingnan Li 等，Qwen Business Unit of Alibaba
+- 论文 PDF（本地）：`/gpfs/wy/Projects/SeFi-Image-5B/DPO/refs/Rethinking-CFG-OPD_paper.pdf`
+- 代码（本地）：`/gpfs/wy/Projects/SeFi-Image-5B/DPO/refs/Rethinking-CFG-OPD-main.zip`
+- 关键词：OPD、CFG、负分支不对称（NBA）、PDM
 
 ![总览图：左 Naive 的问题，右 PDM 的做法和对 γ 的鲁棒性](/rethinking-cfg-opd-teaser.jpg)
 
@@ -29,29 +28,31 @@ models: ['SD3.5-M', 'FLUX.2-klein-4B', 'Wan2.1-VACE-1.3B']
 
 **OPD（on-policy 蒸馏）**：学生自己从噪声往下采样，在它自己走到的每个状态 x_t 上让老师给出速度，学生去逼近。
 
-**CFG**：每一步算两个分支，正分支 v⁺（带条件）和负分支 v⁻（空条件），再合成：
+**CFG**：每一步算两个分支，正分支 v⁺（带条件）和负分支 v⁻（空条件），再合成（论文 Eq. 3）：
 
-```
-ṽ = γ·v⁺ + (1−γ)·v⁻ = v⁻ + γ·(v⁺ − v⁻)
-```
+$$\tilde{v} = \gamma v^{+} + (1-\gamma) v^{-} = v^{-} + \gamma\,(v^{+} - v^{-})$$
 
-**Naive 做法**：只对齐合成后的速度。记两个分支的误差为 e₊ = v⁺_T − v⁺_S，e₋ = v⁻_T − v⁻_S：
+**Naive 做法**：只对齐合成后的速度。记两个分支的误差为（论文 Eq. 4）：
 
-```
-L_naive = ‖γ·e₊ + (1−γ)·e₋‖²
-```
+$$e_{+} = v^{+}_{T} - v^{+}_{S}, \qquad e_{-} = v^{-}_{T} - v^{-}_{S}$$
+
+则 Naive loss 为（论文 Eq. 5，省略时间权重 w(t)）：
+
+$$\mathcal{L}_{\text{naive}} = \left\| \gamma\, e_{+} + (1-\gamma)\, e_{-} \right\|_2^2$$
 
 ## 问题为什么会出现
 
-Naive loss 等于 0 只要求 γe₊ + (1−γ)e₋ = 0，满足这个条件的错误组合有无穷多个。论文把这叫「分支层面不可辨识」。
+Naive loss 等于 0 只要求（论文 Eq. 6、7）：
 
-数字例子（γ = 5，速度取一维）：
+$$\gamma\, e_{+} + (1-\gamma)\, e_{-} = 0 \quad\Longleftrightarrow\quad e_{+} = \frac{\gamma-1}{\gamma}\, e_{-}$$
 
-| | v⁺ | v⁻ | 合成 5v⁺ − 4v⁻ | γ = 1 时的输出（= v⁺） |
-| --- | --- | --- | --- | --- |
-| 老师 | 2.0 | 1.0 | 6.0 | 2.0 |
-| 学生 A（两个分支都对） | 2.0 | 1.0 | 6.0 | 2.0 |
-| 学生 B（两个分支都错） | 1.6 | 0.5 | 6.0 | 1.6（错） |
+满足这个条件的非零 (e₊, e₋) 有无穷多组。论文把这叫「分支层面不可辨识」。
+
+数字例子（γ = 5，速度取一维，合成 = 5v⁺ − 4v⁻）：
+
+- 老师：v⁺ = 2.0，v⁻ = 1.0，合成 6.0，γ = 1 时输出 v⁺ = 2.0
+- 学生 A（两个分支都对）：v⁺ = 2.0，v⁻ = 1.0，合成 6.0，γ = 1 时输出 2.0
+- 学生 B（两个分支都错）：v⁺ = 1.6，v⁻ = 0.5，合成 6.0，γ = 1 时输出 1.6（错）
 
 学生 B 的 Naive loss 也是 0，可推理时一换 γ 就错。
 
@@ -60,21 +61,23 @@ Naive loss 等于 0 只要求 γe₊ + (1−γ)e₋ = 0，满足这个条件的�
 - v⁺ 被往上推，系数是 γ
 - v⁻ 被往下推，系数是 γ−1（γ=5 时为 4）
 
-两个分支被推向相反的方向。如果学生缺的信息正分支学不来，它就会把 v⁻ 推偏，把缺口写进差值 d = v⁺ − v⁻，靠 γ 放大来补上。结果是 e₊ 下降、e₋ 上升，论文称为 **NBA（Negative Branch Asymmetry，负分支不对称）**。
+两个分支被推向相反的方向。如果学生缺的信息正分支学不来，它就会把 v⁻ 推偏，把缺口写进差值 d = v⁺ − v⁻，靠 γ 放大来补上。结果是 e₊ 下降、e₋ 上升，论文称为 **NBA（Negative Branch Asymmetry，负分支不对称）**。（这一段梯度推理是我自己的理解，论文给的是 Eq. 6、7 和训练曲线。）
 
 这也解释了为什么问题在训练 γ 下看不出来：信息只在「γ × 差值」这个组合里是对的。γ 变了放大量就不对；γ = 1 时差值完全不参与计算，信息全部丢失。
 
 ## 什么时候会出现
 
-判断标准只有一个：**老师负分支用到的条件，学生拿不拿得到**。拿得到（共享）时 e₊ 和 e₋ 会一起下降，Naive 就够用；拿不到（特权）时就会出现 NBA。
+判断标准只有一个：**老师负分支用到的条件，学生拿不拿得到**。拿得到（共享）时 e₊ 和 e₋ 会一起下降，Naive 就够用；拿不到（特权）时就会出现 NBA。三个实验的条件设置，论文原文如下：
 
-| 场景 | 老师正分支 | 学生正分支 | 老师负分支 | 学生负分支 | 结果 |
-| --- | --- | --- | --- | --- | --- |
-| 文字渲染，SD3.5-M OCR 老师 | 文本 y | 文本 y | 空文本 | 空文本 | 共享，没问题 |
-| 参考图风格，FLUX.2-klein-4B | y + 参考图 | y | 空 + 参考图 | 空 | 特权，出现 NBA |
-| 视频控制，Wan2.1-VACE-1.3B | y + 稠密控制 | y + 稀疏关键帧 | 空 + 稠密控制 | 空 + 稀疏关键帧 | 特权，出现 NBA |
+文字渲染（共享）和参考图风格（特权），论文 Eq. 13、14：
 
-视频这一行最好理解：老师的两个分支都知道姿态，学生的两个分支都不知道。缺的姿态信息只能靠把 v⁻ 推偏、用差值放大来补，于是 e₋ 越训越大。
+![论文 Eq. 13、14：文字渲染和参考图风格的正负分支条件](/rethinking-cfg-opd-eq13_14_setup_image.png)
+
+视频 dense→sparse（特权），论文 Eq. 15：
+
+![论文 Eq. 15：视频实验的正负分支条件](/rethinking-cfg-opd-eq15_setup_video.png)
+
+视频这一组最好理解：老师的两个分支都知道稠密姿态，学生的两个分支都只有稀疏关键帧。缺的姿态信息只能靠把 v⁻ 推偏、用差值放大来补，于是 e₋ 越训越大。
 
 论文 Figure 2 的训练曲线对应这两种情况：文字渲染下两条误差曲线一起下降；参考图风格下，Naive 和只对齐正分支的方法，都是 ‖e₊‖ 下降、‖e₋‖ 上升。
 
@@ -88,22 +91,18 @@ Naive loss 等于 0 只要求 γe₊ + (1−γ)e₋ = 0，满足这个条件的�
 
 ## 方法：PDM（Positive-Direction Matching）
 
-PDM 在合成之前就做监督，分两项：一项对齐正分支，一项对齐 CFG 方向 d = v⁺ − v⁻。
+PDM 在合成之前就做监督，分两项：一项对齐正分支，一项对齐 CFG 方向 d = v⁺ − v⁻（论文 Eq. 9、10）：
 
-```
-L_PDM = ‖e₊‖² + λ·‖d_T − d_S‖² = ‖e₊‖² + λ·‖e₊ − e₋‖²
-```
+$$\mathcal{L}_{\text{PDM}} = \left\| e_{+} \right\|_2^2 + \lambda \left\| d_T - d_S \right\|_2^2 = \left\| e_{+} \right\|_2^2 + \lambda \left\| e_{+} - e_{-} \right\|_2^2$$
 
 - 第一项强制 v⁺ 本身是对的，信息只能放进正分支。
 - 第二项保证在不同 γ 下的行为跟老师一致。
 - loss 为 0 时只能 e₊ = e₋ = 0，不存在互相抵消的解。
 - 取值：视频 λ = 1，文字渲染 λ = 2。
 
-对照方法 **IBM**：两个分支各自对齐，并去掉 Naive 展开式里的交叉项。
+对照方法 **IBM**：两个分支各自对齐，并去掉 Naive 展开式里的交叉项（论文 Eq. 11）：
 
-```
-L_IBM = γ²·‖e₊‖² + (γ−1)²·‖e₋‖²
-```
+$$\mathcal{L}_{\text{IBM}} = \gamma^2 \left\| e_{+} \right\|_2^2 + (\gamma-1)^2 \left\| e_{-} \right\|_2^2$$
 
 伪代码：
 
@@ -119,57 +118,53 @@ loss_pdm   = e_pos.pow(2).mean() + lam*(e_pos - e_neg).pow(2).mean()
 
 ## 实验结果
 
-在训练用的 γ 下，PDM 只比 Naive 略好；真正的差距出现在换 γ 之后。
+在训练用的 γ 下，PDM 只比 Naive 略好；真正的差距出现在换 γ 之后。以下表格均为论文原表截图。
 
-视频 dense→sparse 控制，600 个测试片段，γ = 5（论文 Table 2，联合训练）：
+**Table 1：文字渲染（共享负条件）。** Naive 和 PDM 基本没有差别，γ = 1 时的下降来自老师本身对 CFG 的依赖。
 
-| 方法 | Pose MPJPE ↓ | Pose PCK@0.1 ↑ | Depth SI-RMSE ↓ | Scribble F1 ↑ |
-| --- | --- | --- | --- | --- |
-| 老师（稠密控制） | 3.03 | 91.15 | 6.19 | 93.73 |
-| 学生（稀疏，未训练） | 5.92 | 69.97 | 14.36 | 64.70 |
-| SFT | 5.02 | 76.72 | 11.96 | 68.27 |
-| Off-policy 蒸馏 | 5.14 | 75.46 | 12.10 | 71.49 |
-| OPD Naive | 4.43 | 80.28 | 10.69 | 75.00 |
-| OPD IBM | 4.20 | 82.27 | 10.37 | 76.13 |
-| OPD PDM | 4.13 | 82.48 | 10.31 | 76.22 |
+![论文 Table 1](/rethinking-cfg-opd-table1_ocr_gamma.png)
+
+**Table 2：视频 dense→sparse 主结果。** 600 个测试片段，联合训练 pose / depth / scribble，γ = 5。
+
+![论文 Table 2](/rethinking-cfg-opd-table2_main_results.png)
+
+*Pose 控制定性结果（γ = 5）：*
 
 ![Pose 控制的定性结果](/rethinking-cfg-opd-qual_res_pose.jpg)
 
-*Pose 控制定性结果（γ = 5）。*
+*Depth 控制定性结果（γ = 5）：*
 
 ![Depth 控制的定性结果](/rethinking-cfg-opd-qual_res_depth.jpg)
 
-*Depth 控制定性结果（γ = 5）。*
+*Scribble 控制定性结果（γ = 5）：*
 
 ![Scribble 控制的定性结果](/rethinking-cfg-opd-qual_res_scribble.jpg)
 
-*Scribble 控制定性结果（γ = 5）。*
+**Table 3：换 γ 测试（pose-only，训练 γ = 5）。** 这张表是论文的核心证据：Naive 在 γ = 1 时 MPJPE 从 4.62 涨到 8.98、FVD 从 67.44 涨到 507.70，PDM 基本不动。
 
-换 γ 测试（论文 Table 3，pose-only，训练 γ = 5，MPJPE ↓）：
-
-| 方法 | 测试 γ = 5 | 测试 γ = 3 | 测试 γ = 1 |
-| --- | --- | --- | --- |
-| Naive | 4.62 | 4.94 | **8.98** |
-| IBM | 4.28 | 4.42 | 4.91 |
-| PDM | 4.27 | 4.17 | 4.48 |
+![论文 Table 3](/rethinking-cfg-opd-table3_gamma_generalization.png)
 
 ![两段视频，同一模型在三个 γ 下的关键帧](/rethinking-cfg-opd-NBA_pose.jpg)
 
 *Naive 与 PDM 在 CFG scale = 1 / 3 / 5 下的对比（关键帧 KF0 / 20 / 40 / 60，两段视频）。Naive 在 scale = 1 时画面糊成一团，PDM 三个 scale 下都稳定。*
 
-Naive 在 γ = 1 时 FVD 也从 67 涨到 508，PDM 只是 59 → 61。文字渲染（共享负条件）里 Naive 和 PDM 基本没有差别，γ = 4.5 时 OCR 为 94.11 vs 94.38。λ 消融：λ = 0 到 10 时 MPJPE 在 4.24 到 4.49 之间，作者选 λ = 1。
+**Table 4：方向项权重 λ 的消融。** λ = 0 时 PDM 退化为只对齐正分支；作者选 λ = 1。
+
+![论文 Table 4](/rethinking-cfg-opd-table4_lambda.png)
+
+**Table 5：监督步数 K 的消融。** 作者选 K = 8。
+
+![论文 Table 5](/rethinking-cfg-opd-table5_K.png)
 
 ## 官方代码要点
 
 三个子目录对应三个实验，都用 `loss_mode` 在 `naive / ibm / pdm` 之间切换。我只读了代码，没有跑。
 
-| 目录 | 实验 | loss 位置 | 与论文公式是否一致 |
-| --- | --- | --- | --- |
-| `DOPSD-flux/` | FLUX 参考图风格 | `train_dopsd.py:882-893` | 一致，最好读 |
-| `Dense2Sparse/` | Wan-VACE 视频（主实验） | `train_opd.py:1374-1466` | 方向项里的 v⁺ 被 detach，见下 |
-| `DiffusionOPD/` | SD3.5 文字渲染 | `scripts/train_sd3_opd.py:1515-1535` | 一致，但对齐的是 SDE 步均值 |
+- `DOPSD-flux/`：FLUX 参考图风格。loss 在 `train_dopsd.py:882-893`，与论文公式一致，最好读。
+- `Dense2Sparse/`：Wan-VACE 视频（主实验）。loss 在 `train_opd.py:1374-1466`，方向项里的 v⁺ 被 detach，见下。
+- `DiffusionOPD/`：SD3.5 文字渲染。loss 在 `scripts/train_sd3_opd.py:1515-1535`，与论文公式一致，但对齐的是 SDE 步均值。
 
-**视频版的 detach**：正负分支分两次前向、分两次 backward（省显存），方向项写成 `g_s = vs_c_val - vs_u`，其中 `vs_c_val` 已 detach。所以 v⁺ 只受 ‖e₊‖² 的梯度，v⁻ 只受方向项的梯度。论文公式里方向项也会把梯度传给 v⁺。表里的视频数字是用 detach 版本跑出来的。
+**视频版的 detach**：正负分支分两次前向、分两次 backward（省显存），方向项写成 `g_s = vs_c_val - vs_u`，其中 `vs_c_val` 已 detach。所以 v⁺ 只受 ‖e₊‖² 的梯度，v⁻ 只受方向项的梯度。论文公式里方向项也会把梯度传给 v⁺。论文 Table 2、3 的数字是否就是用这个版本跑出来的，我没法从代码确认。
 
 **视频版的 rollout**：从纯噪声出发，调度器设 50 步（`K_schedule=50`），只训练前 8 步（`K_rollout=8`）。下一步的 latent 用学生自己合成的速度推进，γ = 5。
 
