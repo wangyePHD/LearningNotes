@@ -104,7 +104,7 @@ sample_dict = {
 - `sample["next_latents"][:, j]`：当时实际采出的下一状态，包含随机噪声。
 - **整个 rollout 不保留反传图。** 后面在缓存状态上重新前向，不是把 loss 穿过整条生成链。
 
-### 2.3 同一个状态，分别计算学生和任务教师的预测
+### 2.3 同一个状态，分别计算学生和任务教师的速度预测
 
 默认开启 CFG。`embeds`、`pooled_embeds` 已按“负条件在前、正条件在后”拼接；模型输入也复制为两份。
 
@@ -141,11 +141,26 @@ with torch.no_grad():
 
 教师回答的是：“你已经走到这个状态了，如果是我，下一步会怎么走？”
 
-### 2.4 从速度转成下一步均值
+### 2.4 从速度算出下一步预测 latent，再加随机噪声
 
-学生的速度预测再进入[一步转移函数](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1544-L1551)。原调用摘录，仅将未使用的第一个返回值记为 `_`：
+上一段模型输出的是**速度**，还不是下一步 latent。采样时，采样器接着根据当前 latent、预测速度和当前时间步，算出下一步预测值，再加上本步随机噪声：
+
+```text
+当前 latent ＋ 模型预测的速度
+        ↓ 按当前时间步的 SDE 规则计算
+下一步预测 latent（加噪前）       ← prev_sample_mean
+        ↓ 加本步随机噪声
+实际采出的下一步 latent          ← 保存到 next_latents
+```
+
+**`prev_sample_mean` 就是“下一步预测 latent（加噪前）”，不是对一堆结果求平均。** 作者用 `mean` 命名，是因为它是这一步随机转移分布的均值参数；代码直接算出它，不需要先采样很多次，也没有在这里对 batch 求平均。下文统一称它为**下一步预测值（加噪前）**。
+
+它仍是 `[B, C, H, W]` 的完整 latent 张量，不是一个平均分数；也不是模型另一个输出头，而是采样器根据速度算出的结果。
+
+训练时，在缓存的当前状态上重新计算这个预测值。[原调用摘录](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1544-L1551)，补充一行注释，并将未使用的第一个返回值记为 `_`：
 
 ```python
+# prev_sample_mean：学生的下一步预测 latent，还没加本步随机噪声
 _, log_prob, prev_sample_mean, std_dev_t = _sde_step(
     pipeline.scheduler,
     noise_pred.float(),
@@ -156,33 +171,27 @@ _, log_prob, prev_sample_mean, std_dev_t = _sde_step(
 )
 ```
 
-任务教师也做同样转换，得到 `prev_sample_mean_ref_lora`；教师的前向与均值转换均在 `no_grad` 中完成。**这份脚本在训练阶段查询教师，不是在 rollout 阶段先缓存好所有教师标签。**
+任务教师也把自己的速度预测作同样转换，得到 `prev_sample_mean_ref_lora`，即教师的下一步预测值（加噪前）。教师的前向与转换均在 `no_grad` 中完成。**这份脚本在训练阶段查询教师，不是在 rollout 阶段先缓存好所有教师标签。**
 
-不要混淆三个对象：
-
-| 对象 | 含义 |
-|---|---|
-| 当前 latent | 学生已经走到的状态 |
-| 速度预测 | 模型建议如何变化 |
-| 下一步均值 | 求解器根据当前状态和速度算出的平均落点 |
-
-SDE 的均值包含漂移修正，不能直接拿 ODE 的 `当前状态 + dt × 速度` 替代。真正随机采样时，[源码还会加噪声](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/flow_grpo/diffusers_patch/sd3_sde_with_logprob.py#L49-L68)：
+上面的流程图描述采样时完整的一步。真正生成新的一步时，[源码加噪声的语句](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/flow_grpo/diffusers_patch/sd3_sde_with_logprob.py#L49-L68)是：
 
 ```python
 prev_sample = prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise
 ```
 
-**GKD 比较均值，不比较两个独立采样的随机落点。**
+训练调用已经传入保存的 `prev_sample`，不会再执行这次随机采样。并且，“加噪前”不等于“按 ODE 更新”：这里的预测值仍按 SDE 规则计算，不能直接拿 ODE 的 `当前状态 + dt × 速度` 替代。
+
+**所以 GKD 比较的就是师生各自算出的下一步预测 latent（加噪前），不比较两个独立采样的随机落点。**
 
 #### 为什么还保存 `next_latents`？
 
 ```text
 采样时：A → B，B 就是保存的 next_latents。
-训练时：学生在 A 处预测均值 C，教师在 A 处预测均值 D。
+训练时：从同一个 A 重算，学生下一步预测为 C，教师下一步预测为 D；C、D 都未加本步随机噪声。
 GKD 比较 C 和 D，不是拿 B 当教师标签。
 ```
 
-`next_latents` 被用于在当前模型的一步分布下，重算那次已采样转移的 `log_prob`；它不决定当前预测均值，也不是 GKD 的监督目标。若单独重构纯均值匹配训练器，可以移除这条不必要的概率计算依赖；不能据此说现有脚本已经没有这些计算。
+`next_latents` 被用于在当前模型的一步分布下，重算那次已采样转移的 `log_prob`；它不决定前面的加噪前预测值，也不是 GKD 的监督目标。若单独重构只做预测匹配的训练器，可以移除这条不必要的概率计算依赖；不能据此说现有脚本已经没有这些计算。
 
 ### 2.5 核心：两份预测差距，合成一个总 loss
 
@@ -191,25 +200,25 @@ GKD 比较 C 和 D，不是拿 B 当教师标签。
 - 配置了 `train.mar_lora`：使用额外的审美教师。
 - 未配置：临时禁用学生 LoRA，使用冻结基模。
 
-[参考前向](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1597-L1663)同样不反传。变量名 `prev_sample_mean_ref_base` 不代表它永远来自基模；配置了 MAR 后，它装的是审美参考教师的均值。
+[参考前向](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1597-L1663)同样不反传。变量名 `prev_sample_mean_ref_base` 不代表它永远来自基模；配置了 MAR 后，它装的是审美参考教师的下一步预测 latent（加噪前）。
 
-把源码变量缩短后：
+给源码变量取更直观的教学别名；三者都是**下一步预测值（加噪前）**，并没有增加新的计算：
 
 ```python
-mu_student = prev_sample_mean
-mu_task = prev_sample_mean_ref_lora
-mu_ref = prev_sample_mean_ref_base
+student_next_pred = prev_sample_mean
+task_next_pred = prev_sample_mean_ref_lora
+ref_next_pred = prev_sample_mean_ref_base
 ```
 
 下面是[原 GKD 损失](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1729-L1752)的**等价拆写**，假设任务教师已加载、参考约束已启用：
 
 ```python
-task_error = ((mu_student - mu_task) ** 2).mean(
+task_error = ((student_next_pred - task_next_pred) ** 2).mean(
     dim=(1, 2, 3), keepdim=True
 )
 gkd_loss = (task_error / (2 * std_dev_t ** 2)).mean()
 
-anchor_error = ((mu_student - mu_ref) ** 2).mean(
+anchor_error = ((student_next_pred - ref_next_pred) ** 2).mean(
     dim=(1, 2, 3), keepdim=True
 )
 kl_loss = (anchor_error / (2 * std_dev_t ** 2)).mean()
@@ -217,15 +226,15 @@ kl_loss = (anchor_error / (2 * std_dev_t ** 2)).mean()
 loss = gkd_loss + config.train.beta * kl_loss
 ```
 
-**两项采用相同的距离计算，只是参考对象不同。**
+**两项都在比较下一步预测 latent，只是参考对象不同。**
 
 - `gkd_loss`：向当前任务教师学习；这是与 DiffusionOPD 最相似的核心蒸馏项。
 - `kl_loss`：向审美教师或基模靠拢。本文称它为**参考约束损失**，不是额外的探索奖励。
 - `beta`：控制第二项的权重。两个目标可能存在分歧，不要求两项同时变成零。
 
-对 `[B, C, H, W]` 的预测，先在通道、空间维度求平均，再做噪声加权和 batch 平均。所谓密集监督，是每一步整块 latent 的预测提供监督，最终 loss 仍是标量。
+**这里的 `.mean()` 才是真正在求平均：平均的是预测误差，不是在生成下一步预测值。** 对 `[B, C, H, W]` 的平方误差，先在通道、空间维度平均，再做噪声加权和 batch 平均。`prev_sample_mean` 中的 `mean` 是变量命名，与这里的误差平均要分开。所谓密集监督，是每一步整块 latent 的预测提供监督，最终 loss 仍是标量。
 
-**实现边界：** 源码分母为 `2 * std_dev_t**2`，实际 SDE 步方差还包含 `(-dt)`，且源码用维度平均。因此这里准确描述的是代码的归一化均值误差，不能逐项冒称论文完整高维转移 KL。
+**实现边界：** 源码分母为 `2 * std_dev_t**2`，实际 SDE 步方差还包含 `(-dt)`，且源码用维度平均。因此这里准确描述的是加噪前下一步预测的归一化平方误差，不能逐项冒称论文完整高维转移 KL。
 
 ### 2.6 反传只更新学生
 
@@ -241,7 +250,7 @@ optimizer.step()
 optimizer.zero_grad()
 ```
 
-梯度只沿着“总 loss → 学生下一步均值 → 学生速度预测 → 学生 LoRA”传播。教师目标、采样轨迹、VAE 和文本编码器不更新；梯度累积下也不是每次调用 `step()` 都实际更新参数。
+梯度只沿着“总 loss → 学生下一步预测 latent（加噪前）→ 学生速度预测 → 学生 LoRA”传播。教师目标、采样轨迹、VAE 和文本编码器不更新；梯度累积下也不是每次调用 `step()` 都实际更新参数。
 
 示例的 `timestep_fraction=0.99` 对 10 步取整后，训练的是前 **9** 步，而不是随机挑 9 步。
 
@@ -304,7 +313,7 @@ elif reward_mode == "kl_only":
 
 ### 参考约束不等于必须用 SDE 探索
 
-与已学的 [DiffusionOPD](./diffusionopd.md) 相比，GKD 的核心仍是学生状态上的师生预测匹配；但采样器、均值转换和时间权重并不完全相同。
+与已学的 [DiffusionOPD](./diffusionopd.md) 相比，GKD 的核心仍是学生状态上的师生预测匹配；但采样器、从速度到下一步预测值的转换和时间权重并不完全相同。
 
 这里按官方 SDE 版 GKD 讲解。原则上可以为 ODE 设计“任务匹配＋参考匹配”的平方误差目标，但这是改写目标和实现：**当前两项损失都带噪声分母，不能直接把 `noise_level` 设零，也不是删掉参考约束就自动支持 ODE。**
 
