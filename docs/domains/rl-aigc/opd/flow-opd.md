@@ -1,401 +1,235 @@
 ---
 type: paper
 tags: ['Distillation', 'Flow Matching', 'T2I', 'GRPO', 'Fine-tuning']
-status: reading
+status: done
 summary: 'Flow-OPD reformulates multi-task alignment via dense supervision on self-generated trajectories.'
 models: ['Flow-OPD', 'SD3.5-Medium', 'Flow-GRPO']
 ---
 
-# Flow-OPD：把多个同源专家的能力合进一个图像生成模型
+# Flow-OPD：沿 GKD 核心代码理解任务蒸馏与参考约束
 
-- 论文：[Flow-OPD: On-Policy Distillation for Flow Matching Models](https://arxiv.org/abs/2605.08063)，本文核对 **arXiv v5**（2026-05-24）。
-- 官方代码：[CostaliyA/Flow-OPD](https://github.com/CostaliyA/Flow-OPD)。本文读取用户提供的 `/gpfs/wy/Projects/SeFi-Image-5B/DPO/refs/Flow-OPD-main.zip`，ZIP 标注的提交为 `434ab16911fc580f51e22107151915846222eb6a`。
-- 下文源码路径、行号均对应这份 ZIP。标为“原代码”的片段只摘取相关分支，不是独立可运行脚本；必要的换行与缩进调整不改变计算。伪代码单独标明。
-- **核验边界**：读过论文与源码，没有运行训练或复现指标。全部实验表格及配图均从原始 PDF 截取，不手工重画结果表。
+- 论文：[Flow-OPD: On-Policy Distillation for Flow Matching Models，arXiv:2605.08063v5](https://arxiv.org/abs/2605.08063v5)，Zhen Fang et al.。
+- 官方源码：[CostaliyA/Flow-OPD](https://github.com/CostaliyA/Flow-OPD)，固定提交 `434ab16911fc580f51e22107151915846222eb6a`；核心入口为 [`scripts/train_sd3_opd_mix.py`](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py)。
+- **阅读范围：只讲 `gkd` 模式，即任务蒸馏＋参考约束。** 不展开专家的 GRPO 训练、PPO 更新和分布式工程。源码片段均标注摘录或教学重排，不是独立运行脚本。
+- **核验边界：** 已核对论文、源码和原图表，没有运行训练或独立复现指标；论文结果不等于本文展示的代码配置的实测结果。
 
-## 一、通俗理解：学生自己走，专家分工指路
+## 1. 先把论文串起来：不是多奖励一起训，而是让专家分别教
 
-### 1.1 它想解决什么？
-
-希望一个文生图模型既能画对“三只猫、两只狗”的数量和位置，又能写对招牌上的文字，还要好看。
-
-直接用几个奖励一起训，容易出现“跷跷板”：字写好了，构图退步；更好看了，数量又不对。最终图片的一个分数，只告诉模型结果好不好，没有直接告诉它每一步该怎么改。
-
-**Flow-OPD 的做法：先分别练出专家，再让学生学专家“具体怎么画”，而不只是学“哪张图分数高”。**
-
-![论文原始 teaser：Figure 1，多任务训练曲线与指标对比，PDF 第 2 页](/flow-opd-fig01-teaser.png)
-
-*论文 Figure 1 原图截图。左图比较普通 GRPO、冷启动后继续 GRPO、Flow-OPD 的训练曲线；右图比较构图、文字和画质/偏好指标。它是结果总览，不是方法流程图。DeQA / PickScore 在图中经过归一化，不要和后面表格的原始分数直接比较。*
-
-### 1.2 用“咖啡店招牌写 HELLO”理解一轮训练
-
-1. **学生自己生成**：从噪声走向图片，保存途中还没画完的带噪 latent。latent 可以先理解成模型内部正在加工的画布。
-2. **请 OCR 老师看同一份画布**：把学生当前的 latent、时间步和 prompt 交给老师，问“如果是你，这一步准备往哪里改？”
-3. **学生学习这个方向**：比较双方预测，缩小差距。不是等到图片画完后，才给它一个 OCR 分数。
-4. **另外加一根画质安全绳**：在各类训练数据上加入参考模型的约束，避免学会功能后整体画质跑偏。论文把它叫 MAR。
-
-教学示意，非论文原图：
+希望一个模型同时具备构图、文字渲染和画面质量。直接混合多个最终图像奖励，可能顾此失彼；Flow-OPD 改为让各项专家在学生自己走过的中间状态上提供监督。
 
 ```text
-SD3.5-M → 分别训练构图 / OCR / 偏好等专家
-                         │
-             SFT 或专家权重合并，初始化学生
-                         │
-                 学生自己采样，保存 xₜ
-                         │
-            ┌────────────┴────────────┐
-            ▼                         ▼
-     学生预测这步怎么走        对应任务老师预测怎么走
-            └────────────┬────────────┘
-                         ▼
-                    缩小预测差距
-                ＋ 全数据上的 MAR 约束
-                         ▼
-                    更新学生 LoRA
+准备同源的 SD3.5-Medium 任务专家
+→ 用 SFT 或模型合并初始化学生
+→ 学生自己生成，保存途中状态
+→ 在同一状态上查询任务教师和全局参考模型
+→ 匹配两份目标，只更新学生 LoRA
 ```
 
-**On-policy 在哪里？** 监督状态来自当前学生自己走过的轨迹，不是固定的老师成品图数据集。
+**On-policy** 指监督状态来自当前学生自己的轨迹，而不是固定的教师成品图数据集。教师不需要重新生成一条完整轨迹；推理时也只部署学生。
 
-**推理需要几个模型？** 只用学生，不需要把老师一起部署。
+### 冷启动只决定起点，不替代后续蒸馏
 
-### 1.3 与 Any-OPD、NLD-Uni 编辑侧的根本差别
+论文研究 SFT 和 Model Merging 两种冷启动。这里只保留它在流程中的作用：**先初始化学生，再进行下文的在线蒸馏。** 训练循环不会自动替你完成这些准备工作。
 
-- **Flow-OPD**：主实验的老师和学生都来自 **SD3.5-Medium，约 2.5B**。师生使用兼容的 latent、调度和预测表示，可以在同一个中间状态直接比较更新方向。重点是**同源专家能力整合**，不是把大模型压成小模型。
-- **Any-OPD**：例如 SD3.5 学生与 FLUX 老师，VAE 和内部空间不同，需要经图片、老师精修及 DINO 特征搭桥。
-- **NLD-Uni 编辑侧**：离散 VQ 学生与连续 latent 老师，通过像素图像和精修目标连接。
+![Figure 4：冷启动消融，原论文第 9 页](./assets/flow-opd/figure-04-cold-start.png)
 
-这里说的是这些具体工作，不能泛化为“所有旧 OPD 方法都是异构”。
+*来源：Zhen Fang et al., Flow-OPD v5，Figure 4，[PDF 第 9 页](https://arxiv.org/pdf/2605.08063v5#page=9)，原 PDF 截图。*
 
-## 二、方法模块与核心源码
+图中不冷启动的 OPD，其 GenEval / OCR 分数为 81 / 85；经 SFT 或 Merge 冷启动、再进行 OPD 后，对应结果为 91 / 92、92 / 94。这支持冷启动在该实验中的作用，不表示“合并完权重就已经完成 Flow-OPD”。
 
-### 2.1 先获得单项专家：奖励负责练专长
+代码通过 `train.lora_path` 读取已有学生 LoRA；默认值为 `None`，不能把示例运行自动等同于论文完整的冷启动方案。
 
-论文 §6.1：GenEval、OCR、PickScore 使用 Flow-GRPO 的官方专家检查点；DeQA 老师另行训练，正文给出的 DeQA : PickScore 奖励比例为 4:6。
+## 2. 核心训练代码：从一批 OCR prompt 开始
 
-单项专家阶段的逻辑仍是：模型生成一组图片，任务评分区分好坏，再用 GRPO 式更新强化高奖励行为。**奖励模型负责评分，专家老师则是能预测去噪方向的生成模型，两者不是一回事。**
+本节选择 `config.train.reward_mode = "gkd"`，沿用多教师示例其余相关设置。教师权重路径需要实际配置；这不是一份开箱即用的复现命令。
 
-仓库 `scripts/train_sd3.py:1178–1206` 的 `task_only` 路径包含这类更新。原代码摘录，省略中间的其他 loss 分支：
+| 对象 | 作用 | 是否更新 |
+|---|---|---|
+| `transformer` | 学生，重新计算当前一步预测 | 更新学生 LoRA |
+| `current_ref_transformer` | 当前任务教师，例如 OCR 专家 | 不更新 |
+| `mar_transformer` 或冻结基模 | 各任务共用的参考目标 | 不更新 |
+
+任务教师分别加载到 `ref_transformers` 字典中，不是靠学生模型切换任务 adapter 来充当所有教师。
+
+### 2.1 数据桶决定任务教师
+
+[路由代码](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1119-L1130)与[教师选择](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1484-L1492)的关键语句，按逻辑并排摘录：
 
 ```python
-advantages = torch.clamp(
-    sample["advantages"][:, j],
-    -config.train.adv_clip_max,
-    config.train.adv_clip_max,
-)
+current_ds_idx = get_current_dataset_idx(epoch)
+current_ds_name = dataset_names[current_ds_idx]
+current_train_dataloader = train_dataloaders[current_ds_name]
+current_ref_transformer = ref_transformers.get(current_ds_name)
 ```
 
-```python
-ratio = torch.exp(log_prob - sample["log_probs"][:, j])
-unclipped_loss = -advantages * ratio
-clipped_loss = -advantages * torch.clamp(
-    ratio,
-    1.0 - config.train.clip_range,
-    1.0 + config.train.clip_range,
-)
-policy_loss = torch.mean(torch.maximum(unclipped_loss, clipped_loss))
-```
+当前用 OCR 数据，就调用 OCR 教师；用 GenEval 数据，就调用构图教师。**不是先对每个 prompt 做语义分类，再智能挑选教师。**
 
-- `sample["advantages"]`：来自最终图片任务奖励的优势值；不是每一步重新给图片评分。
-- `ratio`：新模型与采样时旧模型对这一步转移给出的概率密度之比。
-- `clip`：限制一次更新过大。
+[`mix_opd_8gpu()`](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/config/grpo.py#L128-L157) 的示例按 OCR 1 轮、GenEval 3 轮循环，PickScore 项被注释。这里的 `epoch` 是一次采样—更新外循环，不保证完整遍历数据集。
 
-这是通用训练器中的相关逻辑，**不是已经核实完所有专家正式训练超参的独立复现配方**。后续 OPD 可以直接加载已有专家，不必从头再练。
+### 2.2 学生先采样，保存真实走过的状态
 
-### 2.2 冷启动：先让学生站到较好的起点
-
-论文 §5.1 给两条路线：SFT 或 Model Merging。冷启动不是完整方法的终点，后面仍要做学生轨迹上的在线蒸馏。
-
-#### A. Model Merging：合并专家 LoRA
-
-`scripts/merge.py:66–79`，平均分支的原代码：
+[原调用的删减重排版](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1220-L1241)，省略外层 `autocast` 与可选的 `generator` 参数：
 
 ```python
-merged = OrderedDict()
-for key in all_weights[0].keys():
-    tensors = [w[key] for w in all_weights]
-    if merge_mode == "average":
-        merged[key] = torch.stack(tensors).mean(dim=0)
-```
-
-它对每个同名 LoRA 张量取平均；脚本还支持求和、加权。`scripts/single_node/merge.sh` 示例合并 GenEval、OCR、PickScore 三份 LoRA。
-
-**这不是把多个老师每一步的预测取平均，也不能直接当成完整模型参数增量平均的同义词。** 这里实际操作的是保存下来的 LoRA 张量。
-
-学生在 `scripts/train_sd3_opd_mix.py:762–767` 加载冷启动结果：
-
-```python
-if config.train.lora_path:
-    pipeline.transformer = PeftModel.from_pretrained(pipeline.transformer, config.train.lora_path)
-    pipeline.transformer.set_adapter("default")
-else:
-    pipeline.transformer = get_peft_model(pipeline.transformer, transformer_lora_config)
-```
-
-因此，**需要显式设置 `config.train.lora_path`，不能以为多教师示例默认已经加载合并后的学生**。
-
-#### B. SFT：把参考模型生成的结果作为学习目标
-
-论文描述用专家样本建立初始学生。仓库 `scripts/train_sd3_sft.py` 提供参考 adapter 采样、终态 latent 再加噪训练的实现。
-
-原代码分别位于 `:615–620`、`:815`、`:835–836`：
-
-```python
-if global_step>0 and global_step%config.train.ref_update_step==0:
-    copy_learner_to_ref(transformer)
-with autocast():
-    with torch.no_grad():
-        pipeline.transformer.set_adapter("ref")
-```
-
-```python
-noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
-```
-
-```python
-target = noise - model_input
-fm_loss = ((model_pred.float() - target.float()) ** 2).mean(dim=(1, 2, 3))
-```
-
-- `ref`：负责采样的参考 adapter；采样终态 latent 被存为后面的 `model_input`。
-- 给这个终态重新加噪，学生预测 flow 速度，目标是 `noise - model_input`。
-- 完整脚本还包含基于奖励的样本选择和基模约束，不只是上面两行裸 FM loss。
-
-**边界**：这里只确认脚本中的计算流程；默认配置如何装入各个正式专家、如何组成论文的多专家 SFT 冷启动，仍需另核对，不能把示例直接当论文完整冷启动配置。
-
-### 2.3 On-policy 采样：保存学生真正走过的状态
-
-入口为 `scripts/train_sd3_opd_mix.py:1220–1241`，内部调用 `flow_grpo/diffusers_patch/sd3_pipeline_with_logprob.py`。
-
-该函数在 `:10` 标有 `@torch.no_grad()`，整个 rollout 不保留反向计算图。每一步用学生预测，再进行随机 SDE 转移，保存状态。以下为该文件 `:163–173` 的原代码：
-
-```python
-latents, log_prob, prev_latents_mean, std_dev_t = sde_step_with_logprob(
-    self.scheduler,
-    noise_pred.float(),
-    t.unsqueeze(0),
-    latents.float(),
-    noise_level=noise_level,
-)
-
-all_latents.append(latents)
-all_log_probs.append(log_prob)
-all_prev_latents_mean.append(prev_latents_mean)
-```
-
-实际随机转移在 `flow_grpo/diffusers_patch/sd3_sde_with_logprob.py:62`：
-
-```python
-prev_sample = prev_sample_mean + std_dev_t * torch.sqrt(-1*dt) * variance_noise
-```
-
-先算平均落点，再加随机噪声。代码按噪声水平 `sigma` 从大到小走，所以这里 `dt < 0`，噪声项使用 `sqrt(-dt)`；不要直接把它和论文“从噪声到数据”的时间符号混用。
-
-采样轨迹最后拆成相邻状态对（主训练文件 `:1293–1295`）：
-
-```python
-"latents": latents[:, :-1],
-"next_latents": latents[:, 1:],
-"log_probs": log_probs,
-```
-
-**为什么不边生成边反传整条链？** 这里先把学生经历存下来，训练时重新计算当前一步的学生预测。它不需要像 Any-OPD 那样，为了最终图像特征 loss 带梯度重跑后半段去噪并穿过 VAE。
-
-### 2.4 任务路由：数据集决定老师，不是语义分类器选老师
-
-多教师示例是 `config/grpo.py:mix_opd_8gpu`：OCR 数据绑定 OCR LoRA，GenEval 数据绑定 GenEval LoRA。当前配置中 OCR 占 1 个 epoch，GenEval 占 3 个 epoch；PickScore 项被注释掉。
-
-`scripts/train_sd3_opd_mix.py:872–882` 的原代码：
-
-```python
-def get_current_dataset_idx(epoch):
-    """根据 epoch 返回当前应该训练的数据集索引"""
-    total_epochs_in_cycle = sum(ds["epochs_per_cycle"] for ds in alternate_datasets)
-    epoch_in_cycle = epoch % total_epochs_in_cycle
-
-    cumulative_epochs = 0
-    for idx, ds in enumerate(alternate_datasets):
-        if epoch_in_cycle < cumulative_epochs + ds["epochs_per_cycle"]:
-            return idx
-        cumulative_epochs += ds["epochs_per_cycle"]
-    return 0
-```
-
-进入当前数据集的训练后，在 `:1485–1486` 取出对应老师：
-
-```python
-if is_opd_mode and is_alternate_mode:
-    current_ref_transformer = ref_transformers.get(current_ds_name)
-```
-
-因此，“硬路由”的源码含义很直接：**这一轮在训 OCR 数据，就找 OCR 老师；下一轮训 GenEval 数据，就找构图老师。不是每条 prompt 先跑一遍智能分类器。**
-
-老师由同一 SD3.5 基模加载对应专家 LoRA，预测时位于 `torch.no_grad()` 中；老师不会跟着学生一起优化。
-
-### 2.5 密集监督：同一份带噪画布，比较师生建议的下一步
-
-#### A. 同状态、同时间、同条件
-
-主训练文件 `:1523–1535` 为学生前向；`:1565–1577` 为老师前向。默认开启 CFG，二者均计算正、负分支再合成。
-
-以下为老师前向的原代码：
-
-```python
-ref_noise_pred = ref_trans(
-    hidden_states=torch.cat([sample["latents"][:, j]] * 2),
-    timestep=torch.cat([sample["timesteps"][:, j]] * 2),
-    encoder_hidden_states=embeds,
-    pooled_projections=pooled_embeds,
-    return_dict=False,
-)[0]
-ref_noise_pred_uncond, ref_noise_pred_text = ref_noise_pred.chunk(2)
-ref_noise_pred = (
-    ref_noise_pred_uncond
-    + config.sample.guidance_scale
-    * (ref_noise_pred_text - ref_noise_pred_uncond)
-)
-```
-
-- `sample["latents"][:, j]`：学生实际走到的第 `j` 个状态。
-- `timestep`：对应噪声水平。
-- `embeds` / `pooled_embeds`：同一组文本条件。
-- `noise_pred` 名字沿用了扩散代码习惯；在这里承担的是 **flow 速度预测**，不能只看名字把它认作普通噪声回归。
-
-这里对齐的是 **CFG 合成后的预测**，不是 Rethinking CFG 里的 PDM 分支级监督。
-
-#### B. 从速度转为“平均落点”
-
-师生预测分别送进同一个 `_sde_step()`，得到 `prev_sample_mean` 与 `prev_sample_mean_ref_lora`。均值的原计算位于 `sd3_sde_with_logprob.py:53`：
-
-```python
-prev_sample_mean = sample*(1+std_dev_t**2/(2*sigma)*dt)+model_output*(1+std_dev_t**2*(1-sigma)/(2*sigma))*dt
-```
-
-不要被长度吓到，核心只有一件事：**当前状态固定后，下一步的平均落点由预测速度决定。**
-
-比较的是平均落点，而不是两个独立随机落点，这样不会把采样噪声本身当成学生的错误。
-
-在论文 §5.1.1、Eq.10–12 中，共享协方差的高斯转移 KL 可以写成均值差平方，再写成带时间权重的速度差平方。论文 Eq.15 的训练目标为：
-
-$$
-\mathcal L_{\mathrm{OPD}}
-=\mathbb E_{x_t\sim\rho_t^\theta}
-\left[w(t)\left\|v_\theta(x_t,t,c)-\operatorname{sg}\big(v_T(x_t,t,c)\big)\right\|_2^2\right].
-$$
-
-- $x_t$ 来自学生自己的采样。
-- $v_T$ 是本任务对应的老师预测。
-- $\operatorname{sg}$ 表示老师只提供目标，不接收梯度。
-- $w(t)$ 调整不同时间步的权重。
-
-#### C. `gkd` 分支：把差距直接当 loss
-
-`scripts/train_sd3_opd_mix.py:1729–1736`，原代码：
-
-```python
-elif reward_mode == "gkd":
-    # GKD: directly use mean(kl_reward) as loss, no policy loss / ratio
-    if prev_sample_mean_ref_lora is not None:
-        kl_reward_gkd = ((prev_sample_mean - prev_sample_mean_ref_lora) ** 2).mean(dim=(1, 2, 3), keepdim=True) / (2 * std_dev_t ** 2)
-    else:
-        kl_reward_gkd = torch.zeros_like(prev_sample_mean.mean(dim=(1, 2, 3), keepdim=True))
-    gkd_loss = torch.mean(kl_reward_gkd)
-    policy_loss = torch.tensor(0.0, device=gkd_loss.device, dtype=gkd_loss.dtype)
-```
-
-对于 `[B, C, H, W]` 的 latent：`mean(dim=(1, 2, 3))` 把一份预测里的空间/通道差距汇总，然后再对 batch 求平均。
-
-所以“密集”指**差距来自每一步整块 latent 的预测**；不是说最终 loss 不再是标量。这里最后仍然得到一个标量 loss。
-
-**实现口径提醒**：源码使用维度平均，并除以 `2 * std_dev_t**2`；实际 SDE 转移方差还包含 `|dt|`。因此不能不核对归约和步长因子，就把这行逐项称为论文 Eq.10 的完整、未缩放 KL。这里确认的是实际计算，而不是替代码补公式。
-
-### 2.6 MAR：再加一份全数据上的参考约束
-
-任务老师回答“字怎样写对 / 数量怎样画对”；MAR 参考模型约束“学功能时别把整体生成行为带坏”。论文 Eq.16 使用审美老师，在所有任务数据上额外提供监督。
-
-主训练文件 `:915–925`：配置了 `train.mar_lora` 才加载额外参考模型。原代码摘录：
-
-```python
-mar_transformer = None
-if config.train.get("mar_lora") and config.train.mar_lora != "":
-    mar_pipeline = StableDiffusion3Pipeline.from_pretrained(
-        config.pretrained.model
+with torch.no_grad():
+    images, latents, log_probs = pipeline_with_logprob(
+        pipeline,
+        prompt_embeds=prompt_embeds,
+        pooled_prompt_embeds=pooled_prompt_embeds,
+        negative_prompt_embeds=sample_neg_prompt_embeds,
+        negative_pooled_prompt_embeds=sample_neg_pooled_prompt_embeds,
+        num_inference_steps=config.sample.num_steps,
+        guidance_scale=config.sample.guidance_scale,
+        noise_level=config.sample.noise_level,
+        height=config.resolution,
+        width=config.resolution,
+        output_type="pt",
     )
-    mar_pipeline.transformer.requires_grad_(False)
-    mar_pipeline.transformer.to(accelerator.device)
-    mar_transformer = PeftModel.from_pretrained(mar_pipeline.transformer, config.train.mar_lora)
-    mar_transformer.set_adapter("default")
-    mar_transformer.eval()
+
+latents = torch.stack(latents, dim=1)
 ```
 
-若 `mar_lora` 留空，`:1633` 走 `with transformer.module.disable_adapter():`，用禁用学生 LoRA 后的基模预测作参考。**所以默认有基模约束，不等于默认已经启用论文的审美专家 MAR。**
+示例采样 10 步，轨迹形状为 `[B, 11, C, H, W]`：初始状态加 10 次转移。`noise_level=0.7`，每一步使用带随机噪声的 SDE 转移。
 
-`gkd` 路径的原损失计算位于 `:1745–1752`：
+[缓存的轨迹字段](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1288-L1302)如下；文本条件、时间步等字段不在这里重复列出：
 
 ```python
-if reward_mode == "gkd":
-    loss = gkd_loss
-    if config.train.beta > 0:
-        kl_loss = ((prev_sample_mean - prev_sample_mean_ref_base) ** 2).mean(dim=(1, 2, 3), keepdim=True) / (2 * std_dev_t ** 2)
-        kl_loss = torch.mean(kl_loss)
-        loss = gkd_loss + config.train.beta * kl_loss
-    else:
-        kl_loss = torch.tensor(0.0, device=gkd_loss.device, dtype=gkd_loss.dtype)
+sample_dict = {
+    "latents": latents[:, :-1],
+    "next_latents": latents[:, 1:],
+}
 ```
 
-`prev_sample_mean_ref_base` 这个变量名也容易误导：加载了 `mar_lora` 时，它装的是额外参考模型的均值；没有加载时，才是基模均值。
+- `sample["latents"][:, j]`：学生第 `j` 步的当前状态。
+- `sample["next_latents"][:, j]`：当时实际采出的下一状态，包含随机噪声。
+- **整个 rollout 不保留反传图。** 后面在缓存状态上重新前向，不是把 loss 穿过整条生成链。
 
-### 2.7 必须区分：示例默认是 `kl_only`，不是 `gkd`
+### 2.3 同一个状态，分别计算学生和任务教师的预测
 
-`config/grpo.py:mix_opd_8gpu` 默认设置：
+默认开启 CFG。`embeds`、`pooled_embeds` 已按“负条件在前、正条件在后”拼接；模型输入也复制为两份。
 
-```python
-config.train.beta = 0.04
-config.train.kl_reward_level = "step_wise"
-config.train.kl_scale = -1
-config.train.reward_mode = "kl_only"  # no outcome reward, pure KL-based OPD
-config.train.ema = True
-```
-
-这一分支不是直接令 `loss = gkd_loss`，而是把与老师的预测差距变成负的逐步优势值。原代码分别位于 `:1667–1690`、`:1754–1765`，摘录相关计算：
+为避免把师生完全相同的前向写两遍，下面将[原文件的重复逻辑](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1500-L1593)抽成一个**教学函数**；`predict_velocity` 不是作者原文件中的函数名。
 
 ```python
-kl_reward = ((prev_sample_mean - prev_sample_mean_ref_lora) ** 2).mean(dim=(1, 2, 3), keepdim=True) / (2 * std_dev_t ** 2)
+def predict_velocity(model, sample, j, embeds, pooled_embeds, scale):
+    pred = model(
+        hidden_states=torch.cat([sample["latents"][:, j]] * 2),
+        timestep=torch.cat([sample["timesteps"][:, j]] * 2),
+        encoder_hidden_states=embeds,
+        pooled_projections=pooled_embeds,
+        return_dict=False,
+    )[0]
+    uncond, cond = pred.chunk(2)
+    return uncond + scale * (cond - uncond)
 ```
 
 ```python
-advantages = config.train.kl_scale * kl_reward
-advantages = torch.clamp(
-    advantages,
-    -config.train.adv_clip_max,
-    config.train.adv_clip_max,
+# 学生：需要梯度
+noise_pred = predict_velocity(
+    transformer, sample, j, embeds, pooled_embeds, config.sample.guidance_scale
+)
+
+# 任务教师：只提供目标
+with torch.no_grad():
+    ref_noise_pred = predict_velocity(
+        current_ref_transformer, sample, j,
+        embeds, pooled_embeds, config.sample.guidance_scale
+    )
+```
+
+两者读取**同一个学生状态、同一个时间、同一个 prompt**。`noise_pred` 虽然沿用噪声预测的名字，在这里实际是 flow 速度预测；经过 CFG 后形状回到 `[B, C, H, W]`。
+
+教师回答的是：“你已经走到这个状态了，如果是我，下一步会怎么走？”
+
+### 2.4 从速度转成下一步均值
+
+学生的速度预测再进入[一步转移函数](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1544-L1551)。原调用摘录，仅将未使用的第一个返回值记为 `_`：
+
+```python
+_, log_prob, prev_sample_mean, std_dev_t = _sde_step(
+    pipeline.scheduler,
+    noise_pred.float(),
+    sample["timesteps"][:, j],
+    sample["latents"][:, j].float(),
+    prev_sample=sample["next_latents"][:, j].float(),
+    noise_level=config.sample.noise_level,
 )
 ```
 
+任务教师也做同样转换，得到 `prev_sample_mean_ref_lora`；教师的前向与均值转换均在 `no_grad` 中完成。**这份脚本在训练阶段查询教师，不是在 rollout 阶段先缓存好所有教师标签。**
+
+不要混淆三个对象：
+
+| 对象 | 含义 |
+|---|---|
+| 当前 latent | 学生已经走到的状态 |
+| 速度预测 | 模型建议如何变化 |
+| 下一步均值 | 求解器根据当前状态和速度算出的平均落点 |
+
+SDE 的均值包含漂移修正，不能直接拿 ODE 的 `当前状态 + dt × 速度` 替代。真正随机采样时，[源码还会加噪声](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/flow_grpo/diffusers_patch/sd3_sde_with_logprob.py#L49-L68)：
+
 ```python
-ratio = torch.exp(log_prob - sample["log_probs"][:, j])
-unclipped_loss = -advantages * ratio
-clipped_loss = -advantages * torch.clamp(
-    ratio,
-    1.0 - config.train.clip_range,
-    1.0 + config.train.clip_range,
-)
-policy_loss = torch.mean(torch.maximum(unclipped_loss, clipped_loss))
+prev_sample = prev_sample_mean + std_dev_t * torch.sqrt(-1 * dt) * variance_noise
 ```
 
-可以把两条路径记成：
+**GKD 比较均值，不比较两个独立采样的随机落点。**
 
-- **`gkd`**：老师差距直接进入回归 loss；对应前面讲论文时使用的直观主线。
-- **`kl_only`**：老师差距形成负奖励/优势，仍通过概率比和 clipping 更新；这是当前示例的默认路径。
+#### 为什么还保存 `next_latents`？
 
-源码里 `kl_only` 的这份 `advantages` 没有显式 `detach()`，不能直接把它当成“固定优势值”的教科书 PPO 实现。本文不据此宣称两个分支梯度严格等价。
+```text
+采样时：A → B，B 就是保存的 next_latents。
+训练时：学生在 A 处预测均值 C，教师在 A 处预测均值 D。
+GKD 比较 C 和 D，不是拿 B 当教师标签。
+```
 
-另外，即使选 `gkd`，这个通用训练器仍会生成 `log_probs`，并调用任务 reward 服务。**“回归 loss 不使用 PPO ratio”不等于“现有代码已经移除了所有 logprob 和 reward 计算开销”。**
+`next_latents` 被用于在当前模型的一步分布下，重算那次已采样转移的 `log_prob`；它不决定当前预测均值，也不是 GKD 的监督目标。若单独重构纯均值匹配训练器，可以移除这条不必要的概率计算依赖；不能据此说现有脚本已经没有这些计算。
 
-### 2.8 更新什么？只更新学生的可训练参数
+### 2.5 核心：两份预测差距，合成一个总 loss
 
-主训练文件 `:756–767` 的 LoRA 为 `r=32`、`lora_alpha=64`，加在 transformer 的注意力投影上；VAE 和三个文本编码器不训练。
+除了任务教师，还要在**同一个状态、时间和文本条件**上计算第二份参考预测：
 
-`optimizer` 接收的是 `transformer_trainable_parameters`。在 `:1803–1809` 执行：
+- 配置了 `train.mar_lora`：使用额外的审美教师。
+- 未配置：临时禁用学生 LoRA，使用冻结基模。
+
+[参考前向](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1597-L1663)同样不反传。变量名 `prev_sample_mean_ref_base` 不代表它永远来自基模；配置了 MAR 后，它装的是审美参考教师的均值。
+
+把源码变量缩短后：
+
+```python
+mu_student = prev_sample_mean
+mu_task = prev_sample_mean_ref_lora
+mu_ref = prev_sample_mean_ref_base
+```
+
+下面是[原 GKD 损失](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1729-L1752)的**等价拆写**，假设任务教师已加载、参考约束已启用：
+
+```python
+task_error = ((mu_student - mu_task) ** 2).mean(
+    dim=(1, 2, 3), keepdim=True
+)
+gkd_loss = (task_error / (2 * std_dev_t ** 2)).mean()
+
+anchor_error = ((mu_student - mu_ref) ** 2).mean(
+    dim=(1, 2, 3), keepdim=True
+)
+kl_loss = (anchor_error / (2 * std_dev_t ** 2)).mean()
+
+loss = gkd_loss + config.train.beta * kl_loss
+```
+
+**两项采用相同的距离计算，只是参考对象不同。**
+
+- `gkd_loss`：向当前任务教师学习；这是与 DiffusionOPD 最相似的核心蒸馏项。
+- `kl_loss`：向审美教师或基模靠拢。本文称它为**参考约束损失**，不是额外的探索奖励。
+- `beta`：控制第二项的权重。两个目标可能存在分歧，不要求两项同时变成零。
+
+对 `[B, C, H, W]` 的预测，先在通道、空间维度求平均，再做噪声加权和 batch 平均。所谓密集监督，是每一步整块 latent 的预测提供监督，最终 loss 仍是标量。
+
+**实现边界：** 源码分母为 `2 * std_dev_t**2`，实际 SDE 步方差还包含 `(-dt)`，且源码用维度平均。因此这里准确描述的是代码的归一化均值误差，不能逐项冒称论文完整高维转移 KL。
+
+### 2.6 反传只更新学生
+
+学生前向、loss 和更新都放在 `accelerator.accumulate(transformer)` 内。[实际更新代码](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/scripts/train_sd3_opd_mix.py#L1803-L1809)：
 
 ```python
 accelerator.backward(loss)
@@ -407,109 +241,85 @@ optimizer.step()
 optimizer.zero_grad()
 ```
 
-**梯度路径**：当前一步的 loss → 学生这一轮前向 → 学生 LoRA。老师预测不反传，rollout 不反传，也不靠最终图片的 VAE/DINO 特征反传。
+梯度只沿着“总 loss → 学生下一步均值 → 学生速度预测 → 学生 LoRA”传播。教师目标、采样轨迹、VAE 和文本编码器不更新；梯度累积下也不是每次调用 `step()` 都实际更新参数。
 
-多教师示例用 10 步采样，`timestep_fraction=0.99`；代码用 `int(10 * 0.99)`，实际训练前 **9** 个时间位置，不是笼统的“10 步全监督”。每个 epoch 采样后再用这些轨迹训练，不能把每一次优化都描述成即时重新采样。
+示例的 `timestep_fraction=0.99` 对 10 步取整后，训练的是前 **9** 步，而不是随机挑 9 步。
 
-### 2.9 阅读源码后保留的边界
+## 3. 为什么加参考约束？看 MAR 的原始消融
 
-- 多教师示例当前只启用 OCR / GenEval；不能直接当成论文四项能力的完整正式配置。
-- 冷启动 `lora_path`、审美参考 `mar_lora` 都需要显式指定。留空时的行为和论文最完整方案不同。
-- 论文 Eq.15 的局部回归形式、代码 `gkd`、默认 `kl_only` 需要分别看，不能混写成同一条实现。
-- DeQA 老师的奖励混合比例在正文 §6.1 写 DeQA : PickScore = 4:6，附录 A 又描述 1:1 的奖励相加口径；不能在未进一步核对时当成同一套明确配方。
-- 论文对“严格等价”“消除梯度干扰”等论述，不等于本文已经做了数学证明或独立复现；这里能确认的是监督对象、数据流和代码计算路径。
+OCR 教师擅长把字写对，但它的整体画质不一定最好。只学任务教师，可能连不希望继承的生成行为也一起学过来。第二个参考目标希望在吸收任务能力时，约束学生不要偏离较好的生成行为太远。
 
-## 三、结果、实验表格与消融
+**关键不是多了一个新任务数据桶，而是在 OCR、GenEval 等各类任务数据上，始终加入同一份参考约束。** 论文的 MAR 使用审美教师；代码 `mar_lora` 留空时则是基模参考，不能混为一谈。
 
-### 3.1 为什么多奖励混训不够：Figure 2 与 Table 1
+![Figure 5：有无 MAR 参考约束的定性消融，原论文第 9 页](./assets/flow-opd/figure-05-mar-ablation.png)
 
-![Figure 2：单奖励专家在其他任务上可能退化，PDF 第 4 页](/flow-opd-fig02-single-reward.png)
+*来源：Zhen Fang et al., Flow-OPD v5，Figure 5，[PDF 第 9 页](https://arxiv.org/pdf/2605.08063v5#page=9)，原 PDF 截图。*
 
-*Figure 2 原图。训练单项专家能提升专长，但其他任务的生成可能退化，这是作者希望通过能力整合缓解的问题。*
+图中的 **“w.o KL Loss / w. KL Loss”是在比较有无 MAR**。作者展示背景、物体外观和视觉质量的变化；它不是 `kl_only` 与 `gkd` 两种模式的对比。
 
-![Table 1：逐步加入奖励后的能力退化，PDF 第 4 页](/flow-opd-tab01-reward-mixing.png)
+![Table 4：包含 MAR 消融的质量与对齐评估，原论文第 10 页](./assets/flow-opd/table-04-mar-quality.png)
 
-*Table 1 原表截图。重点看 GenEval：加入其他奖励后，构图指标逐步下降。它支持本论文实验设置中的多任务冲突，不等于证明所有多奖励方法都必然失败。*
+*来源：Zhen Fang et al., Flow-OPD v5，Table 4，[PDF 第 10 页](https://arxiv.org/pdf/2605.08063v5#page=10)，原表截图。*
 
-### 3.2 主结果：Figure 3 与 Table 2
+`w.o. MAR → Ours (Merge)`：Aesthetic 从 **5.89 → 6.23**，QwenVL Score 从 **3.82 → 4.05**。这是该设置下的质量/对齐评分收益，不是真人偏好胜率，也不保证从此不会出现画质退化。
 
-实验基座为 SD3.5-Medium。论文 §6.1 使用 4 节点、每节点 8 张 H800 训练，评估为单节点 8 张 H800；附录 A 给采样 10 步、评估 40 步、512 分辨率、LoRA r32 / α64，以及 group size 24、noise level 0.7、MAR 系数 β=0.02。
+## 4. 主结果：多项能力的折中，不是每项都超过最强教师
 
-仓库多教师示例则是 8 卡、`num_image_per_prompt=16`、`beta=0.04`。不要与论文的正式设置混为一谈；附录 A 的约 50 小时训练描述紧接在 GRPO-mix 设置之后，也不要直接当作独立核实过的 Flow-OPD 耗时。
+![Table 2：构图、文字、画质与偏好主结果，原论文第 8 页](./assets/flow-opd/table-02-main-results.png)
 
-![Figure 3：多任务生成的定性对比，PDF 第 8 页](/flow-opd-fig03-main-qualitative.png)
+*来源：Zhen Fang et al., Flow-OPD v5，Table 2，[PDF 第 8 页](https://arxiv.org/pdf/2605.08063v5#page=8)，原表截图。*
 
-*Figure 3 原图。列为基模、各项 GRPO 专家、GRPO-Mix、Merge、Ours；行覆盖文字、物体、数量、复杂指令等例子。Merge 不是终点，后续学生轨迹蒸馏仍带来变化。*
+按这张表读取：
 
-![Table 2：构图、文字、质量与偏好主结果，PDF 第 8 页](/flow-opd-tab02-main-results.png)
+- `Ours (Merge)` 的 GenEval / OCR score 为 **0.93 / 0.93**，GRPO-Mix 为 **0.73 / 0.83**。
+- Avg 为 **0.9021 vs 0.8165**，它是四项归一化指标的平均，不是准确率或人类胜率。
+- 不能说每项都超过教师：GenEval 教师为 0.94，PickScore 教师为 23.19；Ours 对应为 0.93、23.05。
 
-按这张 **v5 Table 2** 原表读：
+Figure 4 的 `Ours (Merge)` 柱值为 92 / 94，按 0–1 表示为 0.92 / 0.94，与 Table 2 的 0.93 / 0.93 不一致。这里指冷启动后继续 OPD 的结果，不是仅做权重合并的初始模型；分别按原图原表引用，不猜测差异原因，也不手工改成一致。
 
-- Ours (Merge) 的 GenEval / OCR 都是 **0.93**；GRPO-Mix 为 0.73 / 0.83。
-- Avg 为 **0.9021**，GRPO-Mix 为 0.8165；Avg 是四项归一化指标的平均，不是单项指标，也不是人类胜率。
-- **不能说所有单项都超过每个专家**：GenEval 专家是 0.94，GRPO-Mix 的 DeQA 是 4.33，PickScore 专家是 23.19；Ours (Merge) 对应为 0.93、4.31、23.05。
-- 论文强调的收益是兼顾多项能力。Teacher-surpassing 的定性例子，不能改写成“学生在所有任务上必然超过最强老师”。
+![Figure 3：文字、计数与组合指令的定性结果，原论文第 8 页](./assets/flow-opd/figure-03-qualitative.png)
 
-**版本口径**：摘要 / 仓库 README 给过 GenEval 0.92、OCR 0.94；v5 Table 2 写 0.93 / 0.93，Figure 4 又显示 0.92 / 0.94。这里保留原图原表，按各自出处解释，不自行把数字改成一致。
+*来源：Zhen Fang et al., Flow-OPD v5，Figure 3，[PDF 第 8 页](https://arxiv.org/pdf/2605.08063v5#page=8)，原 PDF 截图。*
 
-### 3.3 冷启动消融：Figure 4
+对照单项专家、GRPO-Mix、Merge 和 Ours，理解论文追求的是文字、数量、属性与画面质量的综合折中。精选样例不能证明所有 prompt 都更好，也不能据海报小字直接统计 OCR 正确率。
 
-![Figure 4：不冷启动、SFT 冷启动与 Merge 冷启动，PDF 第 9 页](/flow-opd-fig04-cold-start.png)
+**这些是论文主方法的结果，不是本文替 `gkd` 单独跑出的成绩，更不是 `gkd` 胜过 `kl_only` 的证据。**
 
-*Figure 4 原图。比较 Base、GRPO-Mix、无冷启动 OPD、SFT 冷启动、Merge 冷启动。两种冷启动都改善构图/文字，Merge 在图中的整体表现更好。图中 Merge 的 GenEval / OCR 为 92 / 94，与 Table 2 的 93 / 93 存在原文数值不一致。*
+## 5. 学完后保留的几个边界
 
-这张图回答的是：**OPD 之前先把学生初始化好，有没有用？** 不要把全部收益归给冷启动；Table 2 的 `Merge+GRPO-Mix` 与 `Ours (Merge)` 还比较了相同类型起点之后的不同训练方式。
+### 不是三个损失，也没有两模式优劣的直接实验证据
 
-### 3.4 泛化结果：Table 3
+`kl_only` 是另一种模式名，不是第三个 loss。参考约束开启时，分支关系的教学简写是：
 
-![Table 3：T2I-CompBench++ 结果，PDF 第 10 页](/flow-opd-tab03-compbench.png)
+```python
+if reward_mode == "gkd":
+    loss = gkd_loss + beta * kl_loss
+elif reward_mode == "kl_only":
+    loss = policy_loss + beta * kl_loss
+```
 
-*Table 3 原表。覆盖颜色、形状、纹理、复杂组合、3D 空间、数量和非空间关系。重点对照 Cold Start、Cold Start+GRPO、Ours (Merge)：冷启动后继续 GRPO 并不保证每项继续进步；OPD 在表中取得更好的综合组合能力。*
+二者互斥，不是三项一起相加。本文只解释第一条；[仓库 `mix_opd_8gpu()` 示例](https://github.com/CostaliyA/Flow-OPD/blob/434ab16911fc580f51e22107151915846222eb6a/config/grpo.py#L107-L110)默认选第二条，“默认”不表示最优，也不能据此认定论文所有实验的运行配置。
 
-例如 3D-Spatial：Cold Start 0.4249，Cold Start+GRPO 0.4017，Ours (Merge) 0.4565。这是论文中的泛化证据，不是新增奖励直接优化出来的同一项训练成绩。
+核对 v5 正文、附录、图 1–11 和表 1–5，**未找到这两条代码分支的一对一实验对比**。论文的理论论述、MAR 消融、Flow-OPD 与任务奖励 GRPO-Mix 的比较，都不能替代这种对照。
 
-### 3.5 MAR 消融：Figure 5 与 Table 4
+### 参考约束不等于必须用 SDE 探索
 
-![Figure 5：有无 MAR 的定性消融，PDF 第 9 页](/flow-opd-fig05-mar-ablation.png)
+与已学的 [DiffusionOPD](./diffusionopd.md) 相比，GKD 的核心仍是学生状态上的师生预测匹配；但采样器、均值转换和时间权重并不完全相同。
 
-*Figure 5 原图。作者用“w.o KL Loss / w. KL Loss”比较去掉和加入 MAR 后的生成，展示功能学习之外的画面质量与结构差异。*
+这里按官方 SDE 版 GKD 讲解。原则上可以为 ODE 设计“任务匹配＋参考匹配”的平方误差目标，但这是改写目标和实现：**当前两项损失都带噪声分母，不能直接把 `noise_level` 设零，也不是删掉参考约束就自动支持 ODE。**
 
-![Table 4：画质与偏好评估，包含去掉 MAR 的消融，PDF 第 10 页](/flow-opd-tab04-quality-mar.png)
+### 通用脚本不等于已经精简好的纯 GKD 训练器
 
-*Table 4 原表。`w.o. MAR` 与 `Ours (Merge)` 的比较中，Aesthetic 从 5.89 到 6.23，QwenVL Score 从 3.82 到 4.05，其余列也改善。这支持 MAR 在该实验中的帮助，不是“不可能再出现 reward hacking”的保证。*
+- `gkd_loss` 不使用最终图像奖励，但完整脚本仍计算任务奖励、任务优势，并据非零优势筛选样本；不能把整份脚本称为 reward-free，也不能承诺删除这些计算仍保持原行为。
+- 本版本任务教师的加载也受 `beta > 0` 控制，教师查询还受 `step_wise` 和 `kl_scale != 0` 控制。不能把 `beta=0` 当作无副作用的“只关 MAR”操作；`kl_scale` 本身并不乘进 `gkd_loss`。
+- 示例 `beta=0.04`、`mar_lora=""`；论文附录的 MAR 系数为 0.02，并使用审美参考教师。代码示例不等于论文完整实验配置。
 
-### 3.6 与 DiffusionNFT 对比：Table 5 与 Figure 10
+## 来源与图表说明
 
-![Table 5：Qwen-VL 评估下与 DiffusionNFT 的对比，PDF 第 15 页](/flow-opd-tab05-diffusionnft.png)
+图表均沿用本仓库已有的五张原 PDF 截图，仅调整为笔记相邻资源路径，未改图内数值或重绘表格；每张紧邻对应的学习解读。原论文由 Zhen Fang 等作者署名，来源统一为 [arXiv:2605.08063v5](https://arxiv.org/abs/2605.08063v5)。
 
-*Table 5 原表。作者使用的 Qwen-VL 评分为 3.74 vs 4.05；这是特定评估器下的作者报告，不是真人偏好胜率。评估 prompt 见论文 Figure 6，本文没有独立运行。*
+论文版本页采用 [arXiv 非独占分发许可](https://arxiv.org/licenses/nonexclusive-distrib/1.0/license.html)，**不是 CC-BY，也不据此声称取得第三方通用转载授权**。图表权利归原权利人；此处保留来源及学术评论语境，进一步复用需另行确认授权或适用的法定引用例外。
 
-![Figure 10：与 DiffusionNFT 的定性比较，PDF 第 17 页](/flow-opd-fig10-diffusionnft.png)
+代码片段依据上述固定提交作摘录或教学改写。仓库源码采用 MIT，Copyright (c) 2025 Jie Liu；[原始代码许可](./assets/flow-opd/CODE-LICENSE.txt)随笔记保留。代码许可不替代论文图表、模型权重及上游依赖各自的许可。
 
-*Figure 10 原图。论文用这些例子讨论局部结构、纹理及指令遵循。不能仅凭这些示例就推断所有任务、预算和超参下都优于 DiffusionNFT。*
-
-### 3.7 附录更多结果：Figure 7–9
-
-![Figure 7：PickScore 测试集上的更多生成对比，PDF 第 16 页](/flow-opd-fig07-pickscore.png)
-
-*Figure 7 原图，比较 SD3.5-M、GRPO-mix、Ours。*
-
-![Figure 8：GenEval 测试集上的更多生成对比，PDF 第 16 页](/flow-opd-fig08-geneval.png)
-
-*Figure 8 原图，展示属性、空间关系、数量等例子。*
-
-![Figure 9：OCR 测试集上的更多生成对比，PDF 第 17 页](/flow-opd-fig09-ocr.png)
-
-*Figure 9 原图，展示招牌、封面、场记板、机场屏幕等文字渲染。原文图注称“quantitative comparisons”，图中实际是生成样例，不是新增数值表。*
-
-### 3.8 失败案例与适用边界
-
-![Figure 11：专家错误可能传到学生，PDF 第 17 页](/flow-opd-fig11-failures.png)
-
-*按论文附录 B.3 的失败案例段落解读：当专家给出语义错误的监督时，学生也可能继承错误。图中列标题是 Flow-GRPO-GenEval 与 Flow-OPD；原图图注仍写着“comparisons with DiffusionNFT”，属于原文图注与内容口径不一致，本文未改图。*
-
-- **老师有上限**：密集监督也可能密集传递错误；不能保证学生自行修正所有老师失误。
-- **主方法依赖同源、兼容的表示**：论文把师生架构同质性列为限制，不是现成的跨 VAE 异构蒸馏方案。
-- **没有独立复现**：结果是作者报告，当前公开示例的 loss 模式和参考配置与论文完整描述并不完全相同。
-
-一句话收束：**Flow-OPD 把“多奖励一起打分”换成“同源专家在学生自己的中间状态上分别教下一步”，再用 MAR 约束整体生成行为；源码里要分清直接回归的 `gkd` 与默认 PPO 式的 `kl_only`。**
+**一句话收束：沿 GKD 路线看，Flow-OPD 就是在学生自己走到的状态上，向任务教师学习，再用一份跨任务持续生效的参考约束控制偏离。**
