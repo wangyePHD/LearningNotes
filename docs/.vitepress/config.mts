@@ -28,6 +28,7 @@ const sections = [
     },
   },
   { dir: 'domains/agent', title: '🤖 智能体系统与工具编排', overview: '领域概览与 12 课路线图' },
+  { dir: 'domains/rsi', title: '🔄 RSI：递归自我改进', overview: 'RSI 笔记专区' },
   {
     dir: 'domains/distillation',
     title: '🔁 蒸馏专题：OPD / OPSD',
@@ -102,6 +103,7 @@ export default defineConfig({
           { text: '🎲 AIGC 强化学习 (RL for AIGC)', link: '/domains/rl-aigc/' },
           { text: '🔁 OPD 子专题', link: '/domains/rl-aigc/opd/' },
           { text: '🤖 智能体与工具编排 (Agent Systems)', link: '/domains/agent/' },
+          { text: '🔄 RSI：递归自我改进', link: '/domains/rsi/' },
           { text: '🔁 蒸馏专题 (OPD / OPSD)', link: '/domains/distillation/' }
         ]
       },

@@ -95,6 +95,7 @@ const DOMAIN_RULES = [
   ['domains/rl-aigc/opd', '🔁 OPD', 'domain-opd'],
   ['domains/rl-aigc', '🎲 AIGC RL', 'domain-rl'],
   ['domains/agent', '🤖 智能体', 'domain-agent'],
+  ['domains/rsi', '🔄 RSI', 'domain-agent'],
   ['domains/distillation/opd', '🔁 OPD', 'domain-opd'],
   ['domains/distillation/opsd', '🪞 OPSD', 'domain-opd'],
   ['domains/distillation', '🔁 蒸馏', 'domain-opd'],

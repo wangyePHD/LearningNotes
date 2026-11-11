@@ -37,6 +37,7 @@ const researchAreas = [
   { title: '多模态与对齐 (Multimodal)', href: '/domains/multimodal/', description: 'CLIP 跨模态双塔对比学习、InfoNCE 对称损失推导、统一理解与生成表征对齐。' },
   { title: 'AIGC 强化学习后训练 (RL for AIGC)', href: '/domains/rl-aigc/', description: '扩散/流模型后训练全闭环：Reward 覆盖率与鲁棒性、Rubric checklist 自动生产、one-sided veto 反 hacking、LoRA soup 权重集成、Prompt 过滤与评测协议。' },
   { title: '智能体系统与工具编排 (Agent)', href: '/domains/agent/', description: 'Agent Loop 形式化为受控马尔可夫链、结构化输出 q^n 可靠性契约、AoT 依赖图拓扑调度与关键路径分析。' },
+  { title: 'RSI：递归自我改进', href: '/domains/rsi/', description: 'RSI 论文笔记：通俗理解、方法模块与代码、实验结果和消融分析。' },
   { title: '蒸馏专题 (OPD / OPSD)', href: '/domains/distillation/', description: 'On-Policy Distillation 与 On-Policy Self-Distillation：跨范式 teacher（AR-VLM / 连续流）到离散扩散 student 的分布对齐、teacher-refined on-policy 目标、同权重不同 view 的 stop-grad 自蒸馏。' },
   { title: '通用理论基石 (Foundations)', href: '/foundations/', description: 'Transformer 点积注意力方差推导、Flow Matching 连续流生成动力学 ODE 求解。' },
   { title: '算力基建与系统 (Infra)', href: '/infra/', description: 'CUDA 显存层级带宽延迟分析、Roofline 瓶颈判定、vLLM PagedAttention 高并发吞吐优化。' },
